@@ -508,33 +508,49 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateEmailSettings = (settings: Partial<EmailSettings>) => {
-    setState(prev => ({
-      ...prev,
-      emailSettings: { ...prev.emailSettings, ...settings }
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        emailSettings: { ...prev.emailSettings, ...settings }
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const updateReportSettings = (settings: Partial<ReportSettings>) => {
-    setState(prev => ({
-      ...prev,
-      reportSettings: { ...prev.reportSettings, ...settings } as ReportSettings
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        reportSettings: { ...prev.reportSettings, ...settings } as ReportSettings
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const updateGeneralSettings = (settings: Partial<GeneralSettings>) => {
-    setState(prev => ({
-      ...prev,
-      generalSettings: { ...prev.generalSettings, ...settings }
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        generalSettings: { ...prev.generalSettings, ...settings }
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const updateAiRecognitionSettings = (settings: Partial<AiRecognitionSettings>) => {
-    setState(prev => ({
-      ...prev,
-      aiRecognitionSettings: prev.aiRecognitionSettings 
-        ? { ...prev.aiRecognitionSettings, ...settings }
-        : { ...defaultState.aiRecognitionSettings!, ...settings }
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        aiRecognitionSettings: prev.aiRecognitionSettings 
+          ? { ...prev.aiRecognitionSettings, ...settings }
+          : { ...defaultState.aiRecognitionSettings!, ...settings }
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const addAiRecognitionHistory = (history: Omit<AiRecognitionHistory, 'id'>) => {
@@ -542,10 +558,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...history,
       id: crypto.randomUUID(),
     };
-    setState(prev => ({ 
-      ...prev, 
-      aiRecognitionHistory: [newHistory, ...(prev.aiRecognitionHistory || [])] 
-    }));
+    setState(prev => {
+      const next = { 
+        ...prev, 
+        aiRecognitionHistory: [newHistory, ...(prev.aiRecognitionHistory || [])] 
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const addPosterTemplate = (template: Omit<PosterTemplate, 'id'>) => {
@@ -553,34 +573,50 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...template,
       id: crypto.randomUUID(),
     };
-    setState(prev => ({
-      ...prev,
-      posterTemplates: [...(prev.posterTemplates || []), newTemplate]
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        posterTemplates: [...(prev.posterTemplates || []), newTemplate]
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const updatePosterTemplate = (id: string, template: Partial<Omit<PosterTemplate, 'id'>>) => {
-    setState(prev => ({
-      ...prev,
-      posterTemplates: (prev.posterTemplates || []).map(t => t.id === id ? { ...t, ...template } : t)
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        posterTemplates: (prev.posterTemplates || []).map(t => t.id === id ? { ...t, ...template } : t)
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const deletePosterTemplate = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      posterTemplates: (prev.posterTemplates || []).filter(t => t.id !== id)
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        posterTemplates: (prev.posterTemplates || []).filter(t => t.id !== id)
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const setDefaultPosterTemplate = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      posterTemplates: (prev.posterTemplates || []).map(t => ({
-        ...t,
-        isDefault: t.id === id
-      }))
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        posterTemplates: (prev.posterTemplates || []).map(t => ({
+          ...t,
+          isDefault: t.id === id
+        }))
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const addEmailHistoryLog = (log: Omit<EmailHistoryLog, 'id'>) => {
@@ -588,22 +624,34 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...log,
       id: crypto.randomUUID(),
     };
-    setState(prev => ({ ...prev, emailHistory: [newLog, ...(prev.emailHistory || [])] }));
+    setState(prev => {
+      const next = { ...prev, emailHistory: [newLog, ...(prev.emailHistory || [])] };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const deleteEmailHistoryLog = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      emailHistory: (prev.emailHistory || []).filter(log => log.id !== id)
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        emailHistory: (prev.emailHistory || []).filter(log => log.id !== id)
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const addGeneratedReport = (report: Omit<GeneratedReport, 'id'>) => {
     const newReport = { ...report, id: Date.now().toString() } as GeneratedReport;
-    setState(prev => ({
-      ...prev,
-      generatedReports: [newReport, ...(prev.generatedReports || [])]
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        generatedReports: [newReport, ...(prev.generatedReports || [])]
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
     createNotification({
       title: 'Monthly Report Generated',
       message: `Generated report for ${report.month || 'selected period'}`,
@@ -613,10 +661,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteGeneratedReport = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      generatedReports: (prev.generatedReports || []).filter(report => report.id !== id)
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        generatedReports: (prev.generatedReports || []).filter(report => report.id !== id)
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const setStartingBalance = async (amount: number) => {
@@ -635,21 +687,33 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString()
     };
-    setState(prev => ({ ...prev, customers: [...(prev.customers || []), newCustomer] }));
+    setState(prev => {
+      const next = { ...prev, customers: [...(prev.customers || []), newCustomer] };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const updateCustomer = (id: string, customer: Partial<Omit<Customer, 'id' | 'createdAt'>>) => {
-    setState(prev => ({
-      ...prev,
-      customers: (prev.customers || []).map(c => c.id === id ? { ...c, ...customer } : c)
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        customers: (prev.customers || []).map(c => c.id === id ? { ...c, ...customer } : c)
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const deleteCustomer = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      customers: (prev.customers || []).filter(c => c.id !== id)
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        customers: (prev.customers || []).filter(c => c.id !== id)
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const addReceivedMoney = async (entry: Omit<ReceivedMoney, 'id' | 'type'>) => {
@@ -980,53 +1044,89 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const addSecurityLog = (log: Omit<SecurityLog, 'id'>) => {
     const newLog: SecurityLog = { ...log, id: crypto.randomUUID() };
-    setState(prev => ({ ...prev, securityLogs: [newLog, ...(prev.securityLogs || [])] }));
+    setState(prev => {
+      const next = { ...prev, securityLogs: [newLog, ...(prev.securityLogs || [])] };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const addAutomationRule = (rule: Omit<AutomationRule, 'id'>) => {
     const newRule: AutomationRule = { ...rule, id: crypto.randomUUID() };
-    setState(prev => ({ ...prev, automationRules: [...(prev.automationRules || []), newRule] }));
+    setState(prev => {
+      const next = { ...prev, automationRules: [...(prev.automationRules || []), newRule] };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const updateAutomationRule = (id: string, rule: Partial<Omit<AutomationRule, 'id'>>) => {
-    setState(prev => ({
+    setState(prev => {
+      const next = {
         ...prev,
         automationRules: (prev.automationRules || []).map(r => r.id === id ? { ...r, ...rule } : r)
-    }));
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const deleteAutomationRule = (id: string) => {
-    setState(prev => ({ ...prev, automationRules: (prev.automationRules || []).filter(r => r.id !== id) }));
+    setState(prev => {
+      const next = { ...prev, automationRules: (prev.automationRules || []).filter(r => r.id !== id) };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const addInvestment = (investment: Omit<Investment, 'id'>) => {
     const newInv: Investment = { ...investment, id: crypto.randomUUID() };
-    setState(prev => ({ ...prev, investments: [...(prev.investments || []), newInv] }));
+    setState(prev => {
+      const next = { ...prev, investments: [...(prev.investments || []), newInv] };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const updateInvestment = (id: string, investment: Partial<Omit<Investment, 'id'>>) => {
-      setState(prev => ({
-          ...prev,
-          investments: (prev.investments || []).map(i => i.id === id ? { ...i, ...investment } : i)
-      }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        investments: (prev.investments || []).map(i => i.id === id ? { ...i, ...investment } : i)
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const deleteInvestment = (id: string) => {
-      setState(prev => ({ ...prev, investments: (prev.investments || []).filter(i => i.id !== id) }));
+    setState(prev => {
+      const next = { ...prev, investments: (prev.investments || []).filter(i => i.id !== id) };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const updateFinanceHabit = (habit: FinanceHabit) => {
-      setState(prev => ({
-          ...prev,
-          financeHabits: (prev.financeHabits || []).map(h => h.id === habit.id ? habit : h)
-      }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        financeHabits: (prev.financeHabits || []).map(h => h.id === habit.id ? habit : h)
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const updateGullakSettings = (settings: Partial<GullakSettings>) => {
-    setState(prev => ({
-      ...prev,
-      gullakSettings: { ...(prev.gullakSettings || defaultState.gullakSettings), ...settings }
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        gullakSettings: { ...(prev.gullakSettings || defaultState.gullakSettings), ...settings }
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const addReminderHistoryLog = (log: Omit<ReminderHistoryLog, 'id'>) => {
@@ -1034,10 +1134,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...log,
       id: crypto.randomUUID()
     };
-    setState(prev => ({
-      ...prev,
-      reminderHistory: [newLog, ...(prev.reminderHistory || [])]
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        reminderHistory: [newLog, ...(prev.reminderHistory || [])]
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
     createNotification({
       title: 'Reminder Sent Successfully',
       message: `Payment reminder sent to ${log.customerName || 'recipient'}`,
@@ -1047,10 +1151,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateCustomReminderTemplate = (template: string) => {
-    setState(prev => ({
-      ...prev,
-      customReminderTemplate: template
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        customReminderTemplate: template
+      };
+      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
+      return next;
+    });
   };
 
   const updateUserProfile = (profile: Partial<UserProfile>) => {

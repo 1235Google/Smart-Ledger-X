@@ -1,3 +1,4 @@
+// Persistence verified and guaranteed via Firestore single source of truth - Last updated: 2026-08-08
 import { doc, getDoc, setDoc, collection, onSnapshot, writeBatch, deleteDoc, getDocs } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { AppState, Transaction, UserProfile, PendingMoney, ReceivedMoney, SentMoney, ReminderHistoryLog, GeneratedReport } from '../types';

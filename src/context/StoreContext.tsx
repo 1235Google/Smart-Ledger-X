@@ -6,7 +6,7 @@ import { DEFAULT_REMINDER_TEMPLATE } from '../lib/utils';
 import { auth, db } from '../lib/firebase';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { subscribeToState, syncStateToCloud, saveTransactionToFirestore, deleteTransactionFromFirestore, saveUserProfileToFirestore, saveAppStateToFirestore } from "../lib/cloudSync";
+import { subscribeToState, syncStateToCloud } from "../lib/cloudSync";
 import { createNotification } from '../lib/notificationService';
 
 const SECRET_KEY = 'smart-ledger-secure-key-2026';
@@ -101,7 +101,7 @@ export const defaultState: AppState = {
   investments: [],
   financeHabits: [],
   gullakSettings: {
-    monthlyGoal: 10000,
+    monthlyGoal: 0,
   },
   securitySettings: {
     pinEnabled: false,
@@ -181,94 +181,62 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   });
   const prevStateRef = React.useRef<AppState>(defaultState);
-  const isSnapshotUpdateRef = React.useRef<boolean>(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   useEffect(() => {
-    console.log('[AUTH] Auth initialized');
     let unsubscribeFirestore: (() => void) | undefined;
-    let safetyTimeout: NodeJS.Timeout | null = null;
-
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log('[AUTH] User UID:', user ? user.uid : 'None');
       setCurrentUser(user);
 
-      if (unsubscribeFirestore) {
-        unsubscribeFirestore();
-        unsubscribeFirestore = undefined;
-      }
-
-      if (safetyTimeout) {
-        clearTimeout(safetyTimeout);
-        safetyTimeout = null;
-      }
-
+      if (unsubscribeFirestore) unsubscribeFirestore();
+      
       if (user) {
         setIsAuthenticated(true);
-        setIsLoading(true);
         try {
           localStorage.setItem('smartledger_authenticated', 'true');
         } catch (e) {}
-
-        console.log('[Lifecycle] Fetching Firestore data for user:', user.uid);
-
-        // Safety timeout to guarantee loader hiding after 5s max
-        safetyTimeout = setTimeout(() => {
-          console.warn('[Lifecycle] Safety timeout reached - hiding loader and showing workspace');
-          setIsLoading(false);
-          setIsDataLoaded(true);
-        }, 5000);
-
-        unsubscribeFirestore = subscribeToState(user.uid, user, defaultState, (newState, isFromCloud) => {
-          if (safetyTimeout) {
-            clearTimeout(safetyTimeout);
-            safetyTimeout = null;
-          }
-          if (isFromCloud) {
-            isSnapshotUpdateRef.current = true;
-            setIsDataLoaded(true);
-            setIsLoading(false);
-          } else {
-            // If local cache has data, we can unhide loading spinner immediately
-            if (newState.transactions && newState.transactions.length > 0) {
-              setIsDataLoaded(true);
-              setIsLoading(false);
-            }
-          }
-          console.log('[Lifecycle] Firestore Snapshot Sync - UID:', user.uid, '| Transactions count:', newState.transactions?.length || 0);
+        setIsLoading(true);
+        
+        unsubscribeFirestore = subscribeToState(user.uid, (newState) => {
           setState(newState);
           prevStateRef.current = newState;
+          setIsDataLoaded(true);
+          setIsLoading(false);
         });
       } else {
-        setIsAuthenticated(false);
+        const isLocallyAuth = localStorage.getItem('smartledger_authenticated') === 'true';
+        setIsAuthenticated(isLocallyAuth);
+        
+        // Load from local if not authenticated
         try {
-          localStorage.removeItem('smartledger_authenticated');
-          localStorage.removeItem('smart-ledger-data');
+          const saved = localStorage.getItem('smart-ledger-data');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            setState(parsed);
+            prevStateRef.current = parsed;
+          }
         } catch (e) {}
 
-        setState(defaultState);
-        prevStateRef.current = defaultState;
         setIsDataLoaded(true);
         setIsLoading(false);
-        console.log('[Lifecycle] User logged out - Resetting workspace state');
       }
     });
-
     return () => {
       unsubscribe();
-      if (safetyTimeout) clearTimeout(safetyTimeout);
       if (unsubscribeFirestore) unsubscribeFirestore();
     };
   }, []);
 
-  // Offline local fallback when unauthenticated
   useEffect(() => {
-    if (!isAuthenticated) {
-      try {
+    if (isDataLoaded) {
+      if (isAuthenticated && currentUser) {
+        syncStateToCloud(currentUser.uid, prevStateRef.current, state).catch(e => console.error(e));
+      } else {
         localStorage.setItem('smart-ledger-data', JSON.stringify(state));
-      } catch (e) {}
+      }
+      prevStateRef.current = state;
     }
-  }, [state, isAuthenticated]);
+  }, [state, isAuthenticated, currentUser, isDataLoaded]);
 
   const loginWithPin = (pin: string): boolean => {
     if (!pin || pin.length !== 4) return false;
@@ -508,49 +476,33 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateEmailSettings = (settings: Partial<EmailSettings>) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        emailSettings: { ...prev.emailSettings, ...settings }
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      emailSettings: { ...prev.emailSettings, ...settings }
+    }));
   };
 
   const updateReportSettings = (settings: Partial<ReportSettings>) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        reportSettings: { ...prev.reportSettings, ...settings } as ReportSettings
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      reportSettings: { ...prev.reportSettings, ...settings } as ReportSettings
+    }));
   };
 
   const updateGeneralSettings = (settings: Partial<GeneralSettings>) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        generalSettings: { ...prev.generalSettings, ...settings }
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      generalSettings: { ...prev.generalSettings, ...settings }
+    }));
   };
 
   const updateAiRecognitionSettings = (settings: Partial<AiRecognitionSettings>) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        aiRecognitionSettings: prev.aiRecognitionSettings 
-          ? { ...prev.aiRecognitionSettings, ...settings }
-          : { ...defaultState.aiRecognitionSettings!, ...settings }
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      aiRecognitionSettings: prev.aiRecognitionSettings 
+        ? { ...prev.aiRecognitionSettings, ...settings }
+        : { ...defaultState.aiRecognitionSettings!, ...settings }
+    }));
   };
 
   const addAiRecognitionHistory = (history: Omit<AiRecognitionHistory, 'id'>) => {
@@ -558,14 +510,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...history,
       id: crypto.randomUUID(),
     };
-    setState(prev => {
-      const next = { 
-        ...prev, 
-        aiRecognitionHistory: [newHistory, ...(prev.aiRecognitionHistory || [])] 
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({ 
+      ...prev, 
+      aiRecognitionHistory: [newHistory, ...(prev.aiRecognitionHistory || [])] 
+    }));
   };
 
   const addPosterTemplate = (template: Omit<PosterTemplate, 'id'>) => {
@@ -573,50 +521,34 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...template,
       id: crypto.randomUUID(),
     };
-    setState(prev => {
-      const next = {
-        ...prev,
-        posterTemplates: [...(prev.posterTemplates || []), newTemplate]
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      posterTemplates: [...(prev.posterTemplates || []), newTemplate]
+    }));
   };
 
   const updatePosterTemplate = (id: string, template: Partial<Omit<PosterTemplate, 'id'>>) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        posterTemplates: (prev.posterTemplates || []).map(t => t.id === id ? { ...t, ...template } : t)
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      posterTemplates: (prev.posterTemplates || []).map(t => t.id === id ? { ...t, ...template } : t)
+    }));
   };
 
   const deletePosterTemplate = (id: string) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        posterTemplates: (prev.posterTemplates || []).filter(t => t.id !== id)
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      posterTemplates: (prev.posterTemplates || []).filter(t => t.id !== id)
+    }));
   };
 
   const setDefaultPosterTemplate = (id: string) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        posterTemplates: (prev.posterTemplates || []).map(t => ({
-          ...t,
-          isDefault: t.id === id
-        }))
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      posterTemplates: (prev.posterTemplates || []).map(t => ({
+        ...t,
+        isDefault: t.id === id
+      }))
+    }));
   };
 
   const addEmailHistoryLog = (log: Omit<EmailHistoryLog, 'id'>) => {
@@ -624,34 +556,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...log,
       id: crypto.randomUUID(),
     };
-    setState(prev => {
-      const next = { ...prev, emailHistory: [newLog, ...(prev.emailHistory || [])] };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({ ...prev, emailHistory: [newLog, ...(prev.emailHistory || [])] }));
   };
 
   const deleteEmailHistoryLog = (id: string) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        emailHistory: (prev.emailHistory || []).filter(log => log.id !== id)
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      emailHistory: (prev.emailHistory || []).filter(log => log.id !== id)
+    }));
   };
 
   const addGeneratedReport = (report: Omit<GeneratedReport, 'id'>) => {
     const newReport = { ...report, id: Date.now().toString() } as GeneratedReport;
-    setState(prev => {
-      const next = {
-        ...prev,
-        generatedReports: [newReport, ...(prev.generatedReports || [])]
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      generatedReports: [newReport, ...(prev.generatedReports || [])]
+    }));
     createNotification({
       title: 'Monthly Report Generated',
       message: `Generated report for ${report.month || 'selected period'}`,
@@ -661,24 +581,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteGeneratedReport = (id: string) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        generatedReports: (prev.generatedReports || []).filter(report => report.id !== id)
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      generatedReports: (prev.generatedReports || []).filter(report => report.id !== id)
+    }));
   };
 
-  const setStartingBalance = async (amount: number) => {
-    setState(prev => {
-      const nextState = { ...prev, startingBalance: amount, isSetupComplete: true };
-      if (currentUser?.uid) {
-        saveAppStateToFirestore(currentUser.uid, nextState).catch(e => console.error(e));
-      }
-      return nextState;
-    });
+  const setStartingBalance = (amount: number) => {
+    setState(prev => ({ ...prev, startingBalance: amount, isSetupComplete: true }));
   };
 
   const addCustomer = (customer: Omit<Customer, 'id' | 'createdAt'>) => {
@@ -687,56 +597,30 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString()
     };
-    setState(prev => {
-      const next = { ...prev, customers: [...(prev.customers || []), newCustomer] };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({ ...prev, customers: [...(prev.customers || []), newCustomer] }));
   };
 
   const updateCustomer = (id: string, customer: Partial<Omit<Customer, 'id' | 'createdAt'>>) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        customers: (prev.customers || []).map(c => c.id === id ? { ...c, ...customer } : c)
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      customers: (prev.customers || []).map(c => c.id === id ? { ...c, ...customer } : c)
+    }));
   };
 
   const deleteCustomer = (id: string) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        customers: (prev.customers || []).filter(c => c.id !== id)
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      customers: (prev.customers || []).filter(c => c.id !== id)
+    }));
   };
 
-  const addReceivedMoney = async (entry: Omit<ReceivedMoney, 'id' | 'type'>) => {
+  const addReceivedMoney = (entry: Omit<ReceivedMoney, 'id' | 'type'>) => {
     const newTx: ReceivedMoney = {
       ...entry,
       id: crypto.randomUUID(),
       type: 'received',
     };
-    let updatedTransactions: Transaction[] = [];
-    setState(prev => {
-      updatedTransactions = [newTx, ...prev.transactions];
-      return { ...prev, transactions: updatedTransactions };
-    });
-    if (currentUser?.uid) {
-      try {
-        console.log('[SAVE] Saving received transaction...', newTx.id);
-        await saveTransactionToFirestore(currentUser.uid, newTx);
-        await saveAppStateToFirestore(currentUser.uid, { ...state, transactions: updatedTransactions });
-        console.log('[SAVE] Firestore write successful for received transaction');
-      } catch (err) {
-        console.error("[SAVE ERROR] Error writing income to Firestore:", err);
-      }
-    }
+    setState(prev => ({ ...prev, transactions: [newTx, ...prev.transactions] }));
     createNotification({
       title: 'Income Added',
       message: `Received ₹${Number(entry.amount).toLocaleString()} from ${entry.personName}`,
@@ -751,27 +635,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const addSentMoney = async (entry: Omit<SentMoney, 'id' | 'type'>) => {
+  const addSentMoney = (entry: Omit<SentMoney, 'id' | 'type'>) => {
     const newTx: SentMoney = {
       ...entry,
       id: crypto.randomUUID(),
       type: 'sent',
     };
-    let updatedTransactions: Transaction[] = [];
-    setState(prev => {
-      updatedTransactions = [newTx, ...prev.transactions];
-      return { ...prev, transactions: updatedTransactions };
-    });
-    if (currentUser?.uid) {
-      try {
-        console.log('[SAVE] Saving sent transaction...', newTx.id);
-        await saveTransactionToFirestore(currentUser.uid, newTx);
-        await saveAppStateToFirestore(currentUser.uid, { ...state, transactions: updatedTransactions });
-        console.log('[SAVE] Firestore write successful for sent transaction');
-      } catch (err) {
-        console.error("[SAVE ERROR] Error writing expense to Firestore:", err);
-      }
-    }
+    setState(prev => ({ ...prev, transactions: [newTx, ...prev.transactions] }));
     createNotification({
       title: 'Expense Added',
       message: `Sent ₹${Number(entry.amount).toLocaleString()} to ${entry.personName}`,
@@ -786,7 +656,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const addPendingMoney = async (entry: Omit<PendingMoney, 'id' | 'type' | 'status' | 'nextReminderDate' | 'reminderStatus'>) => {
+  const addPendingMoney = (entry: Omit<PendingMoney, 'id' | 'type' | 'status' | 'nextReminderDate' | 'reminderStatus'>) => {
     const newTx: PendingMoney = {
       ...entry,
       id: crypto.randomUUID(),
@@ -795,21 +665,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       reminderStatus: 'active',
       nextReminderDate: entry.dueDate || new Date().toISOString().split('T')[0],
     };
-    let updatedTransactions: Transaction[] = [];
-    setState(prev => {
-      updatedTransactions = [newTx, ...prev.transactions];
-      return { ...prev, transactions: updatedTransactions };
-    });
-    if (currentUser?.uid) {
-      try {
-        console.log('[SAVE] Saving pending transaction...', newTx.id);
-        await saveTransactionToFirestore(currentUser.uid, newTx);
-        await saveAppStateToFirestore(currentUser.uid, { ...state, transactions: updatedTransactions });
-        console.log('[SAVE] Firestore write successful for pending transaction');
-      } catch (err) {
-        console.error("[SAVE ERROR] Error writing pending money to Firestore:", err);
-      }
-    }
+    setState(prev => ({ ...prev, transactions: [newTx, ...prev.transactions] }));
     createNotification({
       title: 'Pending Payment Created',
       message: `Pending payment of ₹${Number(entry.amount).toLocaleString()} created for ${entry.personName}`,
@@ -819,60 +675,51 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleReminderStatus = (id: string) => {
-    setState(prev => {
-      const updatedTransactions = prev.transactions.map(t => {
+    setState(prev => ({
+      ...prev,
+      transactions: prev.transactions.map(t => {
         if (t.id === id && t.type === 'pending') {
-          const updated = { ...t, reminderStatus: t.reminderStatus === 'active' ? 'paused' : 'active' } as PendingMoney;
-          if (currentUser?.uid) saveTransactionToFirestore(currentUser.uid, updated).catch(e => console.error(e));
-          return updated;
+          return { ...t, reminderStatus: t.reminderStatus === 'active' ? 'paused' : 'active' };
         }
         return t;
-      });
-      return { ...prev, transactions: updatedTransactions };
-    });
+      })
+    }));
   };
 
   const updateReminderFrequency = (id: string, frequency: PendingMoney['reminderFrequency']) => {
-    setState(prev => {
-      const updatedTransactions = prev.transactions.map(t => {
+    setState(prev => ({
+      ...prev,
+      transactions: prev.transactions.map(t => {
         if (t.id === id && t.type === 'pending') {
-          const updated = { ...t, reminderFrequency: frequency } as PendingMoney;
-          if (currentUser?.uid) saveTransactionToFirestore(currentUser.uid, updated).catch(e => console.error(e));
-          return updated;
+          return { ...t, reminderFrequency: frequency };
         }
         return t;
-      });
-      return { ...prev, transactions: updatedTransactions };
-    });
+      })
+    }));
   };
 
   const advanceReminderDate = (id: string) => {
-    setState(prev => {
-      const updatedTransactions = prev.transactions.map(t => {
+    setState(prev => ({
+      ...prev,
+      transactions: prev.transactions.map(t => {
         if (t.id === id && t.type === 'pending') {
-          const updated = { ...t, nextReminderDate: calculateNextDate(t.nextReminderDate, t.reminderFrequency) } as PendingMoney;
-          if (currentUser?.uid) saveTransactionToFirestore(currentUser.uid, updated).catch(e => console.error(e));
-          return updated;
+          return { ...t, nextReminderDate: calculateNextDate(t.nextReminderDate, t.reminderFrequency) };
         }
         return t;
-      });
-      return { ...prev, transactions: updatedTransactions };
-    });
+      })
+    }));
   };
 
-  const markAsReceived = async (id: string) => {
+  const markAsReceived = (id: string) => {
     let targetTx: PendingMoney | undefined;
-    let newReceived: ReceivedMoney | undefined;
-    let updatedPending: PendingMoney | undefined;
-    let updatedTransactions: Transaction[] = [];
-
     setState(prev => {
       const tx = prev.transactions.find(t => t.id === id);
       if (!tx || tx.type !== 'pending') return prev;
       targetTx = tx;
 
-      updatedPending = { ...tx, status: 'completed' };
-      newReceived = {
+      const updatedTx: PendingMoney = { ...tx, status: 'completed' };
+      
+      const newReceived: ReceivedMoney = {
         id: crypto.randomUUID(),
         type: 'received',
         personName: tx.personName,
@@ -881,28 +728,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         purpose: `Settled: ${tx.reason}`,
       };
 
-      updatedTransactions = [
-        newReceived!,
-        ...prev.transactions.map(t => t.id === id ? updatedPending! : t)
-      ];
-
       return {
         ...prev,
-        transactions: updatedTransactions
+        transactions: [
+          newReceived,
+          ...prev.transactions.map(t => t.id === id ? updatedTx : t)
+        ]
       };
     });
-
-    if (currentUser?.uid && updatedPending && newReceived) {
-      try {
-        console.log('[SAVE] Settling pending transaction in Firestore...');
-        await saveTransactionToFirestore(currentUser.uid, updatedPending);
-        await saveTransactionToFirestore(currentUser.uid, newReceived);
-        await saveAppStateToFirestore(currentUser.uid, { ...state, transactions: updatedTransactions });
-      } catch (err) {
-        console.error("[SAVE ERROR] Error settling transaction in Firestore:", err);
-      }
-    }
-
     if (targetTx) {
       createNotification({
         title: 'Pending Payment Marked as Paid',
@@ -913,24 +746,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const deleteTransaction = async (id: string) => {
-    let targetTx: Transaction | undefined;
-    let updatedTransactions: Transaction[] = [];
-    setState(prev => {
-      targetTx = prev.transactions.find(t => t.id === id);
-      updatedTransactions = prev.transactions.filter(t => t.id !== id);
-      return { ...prev, transactions: updatedTransactions };
-    });
-    if (currentUser?.uid) {
-      try {
-        console.log('[DELETE] Deleting transaction...', id);
-        await deleteTransactionFromFirestore(currentUser.uid, id, targetTx?.type);
-        await saveAppStateToFirestore(currentUser.uid, { ...state, transactions: updatedTransactions });
-        console.log('[DELETE] Successfully deleted transaction from Firestore');
-      } catch (err) {
-        console.error("[DELETE ERROR] Error deleting transaction from Firestore:", err);
-      }
-    }
+  const deleteTransaction = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      transactions: prev.transactions.filter(t => t.id !== id)
+    }));
     createNotification({
       title: 'Transaction Deleted',
       message: 'Transaction removed from ledger',
@@ -939,29 +759,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const updateTransaction = async (id: string, updated: Partial<Transaction>) => {
-    let updatedTx: Transaction | undefined;
-    let updatedTransactions: Transaction[] = [];
-    setState(prev => {
-      updatedTransactions = prev.transactions.map(t => {
-        if (t.id === id) {
-          updatedTx = { ...t, ...updated } as Transaction;
-          return updatedTx;
-        }
-        return t;
-      });
-      return { ...prev, transactions: updatedTransactions };
-    });
-    if (currentUser?.uid && updatedTx) {
-      try {
-        console.log('[SAVE] Updating transaction...', id);
-        await saveTransactionToFirestore(currentUser.uid, updatedTx);
-        await saveAppStateToFirestore(currentUser.uid, { ...state, transactions: updatedTransactions });
-        console.log('[SAVE] Successfully updated transaction in Firestore');
-      } catch (err) {
-        console.error("[SAVE ERROR] Error updating transaction in Firestore:", err);
-      }
-    }
+  const updateTransaction = (id: string, updated: Partial<Transaction>) => {
+    setState(prev => ({
+      ...prev,
+      transactions: prev.transactions.map(t => t.id === id ? { ...t, ...updated } as Transaction : t)
+    }));
     createNotification({
       title: 'Transaction Edited',
       message: 'Transaction details updated in ledger',
@@ -970,7 +772,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-
   const addGullakEntry = (entry: Omit<GullakEntry, 'id' | 'createdAt' | 'updatedAt'>) => {
     const newEntry: GullakEntry = {
       ...entry,
@@ -978,33 +779,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    setState(prev => {
-      const next = { ...prev, gullakEntries: [newEntry, ...(prev.gullakEntries || [])] };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({ ...prev, gullakEntries: [newEntry, ...(prev.gullakEntries || [])] }));
   };
 
   const updateGullakEntry = (id: string, entry: Partial<Omit<GullakEntry, 'id' | 'createdAt' | 'updatedAt'>>) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        gullakEntries: (prev.gullakEntries || []).map(e => e.id === id ? { ...e, ...entry, updatedAt: new Date().toISOString() } : e)
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      gullakEntries: (prev.gullakEntries || []).map(e => e.id === id ? { ...e, ...entry, updatedAt: new Date().toISOString() } : e)
+    }));
   };
 
   const deleteGullakEntry = (id: string) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        gullakEntries: (prev.gullakEntries || []).filter(e => e.id !== id)
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      gullakEntries: (prev.gullakEntries || []).filter(e => e.id !== id)
+    }));
   };
 
   const addSavingsGoal = (goal: Omit<SavingsGoal, 'id' | 'createdAt'>) => {
@@ -1013,120 +802,72 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
     };
-    setState(prev => {
-      const next = { ...prev, savingsGoals: [...(prev.savingsGoals || []), newGoal] };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({ ...prev, savingsGoals: [...(prev.savingsGoals || []), newGoal] }));
   };
 
   const updateSavingsGoal = (id: string, goal: Partial<Omit<SavingsGoal, 'id' | 'createdAt'>>) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        savingsGoals: (prev.savingsGoals || []).map(g => g.id === id ? { ...g, ...goal } : g)
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      savingsGoals: (prev.savingsGoals || []).map(g => g.id === id ? { ...g, ...goal } : g)
+    }));
   };
 
   const deleteSavingsGoal = (id: string) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        savingsGoals: (prev.savingsGoals || []).filter(g => g.id !== id)
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      savingsGoals: (prev.savingsGoals || []).filter(g => g.id !== id)
+    }));
   };
 
   const addSecurityLog = (log: Omit<SecurityLog, 'id'>) => {
     const newLog: SecurityLog = { ...log, id: crypto.randomUUID() };
-    setState(prev => {
-      const next = { ...prev, securityLogs: [newLog, ...(prev.securityLogs || [])] };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({ ...prev, securityLogs: [newLog, ...(prev.securityLogs || [])] }));
   };
 
   const addAutomationRule = (rule: Omit<AutomationRule, 'id'>) => {
     const newRule: AutomationRule = { ...rule, id: crypto.randomUUID() };
-    setState(prev => {
-      const next = { ...prev, automationRules: [...(prev.automationRules || []), newRule] };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({ ...prev, automationRules: [...(prev.automationRules || []), newRule] }));
   };
 
   const updateAutomationRule = (id: string, rule: Partial<Omit<AutomationRule, 'id'>>) => {
-    setState(prev => {
-      const next = {
+    setState(prev => ({
         ...prev,
         automationRules: (prev.automationRules || []).map(r => r.id === id ? { ...r, ...rule } : r)
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    }));
   };
 
   const deleteAutomationRule = (id: string) => {
-    setState(prev => {
-      const next = { ...prev, automationRules: (prev.automationRules || []).filter(r => r.id !== id) };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({ ...prev, automationRules: (prev.automationRules || []).filter(r => r.id !== id) }));
   };
 
   const addInvestment = (investment: Omit<Investment, 'id'>) => {
     const newInv: Investment = { ...investment, id: crypto.randomUUID() };
-    setState(prev => {
-      const next = { ...prev, investments: [...(prev.investments || []), newInv] };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({ ...prev, investments: [...(prev.investments || []), newInv] }));
   };
 
   const updateInvestment = (id: string, investment: Partial<Omit<Investment, 'id'>>) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        investments: (prev.investments || []).map(i => i.id === id ? { ...i, ...investment } : i)
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+      setState(prev => ({
+          ...prev,
+          investments: (prev.investments || []).map(i => i.id === id ? { ...i, ...investment } : i)
+      }));
   };
 
   const deleteInvestment = (id: string) => {
-    setState(prev => {
-      const next = { ...prev, investments: (prev.investments || []).filter(i => i.id !== id) };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+      setState(prev => ({ ...prev, investments: (prev.investments || []).filter(i => i.id !== id) }));
   };
 
   const updateFinanceHabit = (habit: FinanceHabit) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        financeHabits: (prev.financeHabits || []).map(h => h.id === habit.id ? habit : h)
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+      setState(prev => ({
+          ...prev,
+          financeHabits: (prev.financeHabits || []).map(h => h.id === habit.id ? habit : h)
+      }));
   };
 
   const updateGullakSettings = (settings: Partial<GullakSettings>) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        gullakSettings: { ...(prev.gullakSettings || defaultState.gullakSettings), ...settings }
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      gullakSettings: { ...(prev.gullakSettings || defaultState.gullakSettings), ...settings }
+    }));
   };
 
   const addReminderHistoryLog = (log: Omit<ReminderHistoryLog, 'id'>) => {
@@ -1134,14 +875,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...log,
       id: crypto.randomUUID()
     };
-    setState(prev => {
-      const next = {
-        ...prev,
-        reminderHistory: [newLog, ...(prev.reminderHistory || [])]
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      reminderHistory: [newLog, ...(prev.reminderHistory || [])]
+    }));
     createNotification({
       title: 'Reminder Sent Successfully',
       message: `Payment reminder sent to ${log.customerName || 'recipient'}`,
@@ -1151,25 +888,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateCustomReminderTemplate = (template: string) => {
-    setState(prev => {
-      const next = {
-        ...prev,
-        customReminderTemplate: template
-      };
-      if (currentUser?.uid) saveAppStateToFirestore(currentUser.uid, next).catch(e => console.error(e));
-      return next;
-    });
+    setState(prev => ({
+      ...prev,
+      customReminderTemplate: template
+    }));
   };
 
   const updateUserProfile = (profile: Partial<UserProfile>) => {
-    let updatedProfile: UserProfile | undefined;
-    setState(prev => {
-      updatedProfile = { ...(prev.userProfile || defaultState.userProfile!), ...profile };
-      return { ...prev, userProfile: updatedProfile };
-    });
-    if (currentUser?.uid && updatedProfile) {
-      saveUserProfileToFirestore(currentUser.uid, updatedProfile).catch(e => console.error(e));
-    }
+    setState(prev => ({
+      ...prev,
+      userProfile: { ...(prev.userProfile || defaultState.userProfile!), ...profile }
+    }));
     createNotification({
       title: 'Profile Updated Successfully',
       message: 'Your profile information has been updated',
@@ -1186,22 +915,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const importData = async (data: AppState) => {
+  const importData = (data: AppState) => {
     setState(data);
-    if (currentUser?.uid) {
-      try {
-        console.log('[IMPORT] Saving imported transactions to Firestore...');
-        if (data.transactions && Array.isArray(data.transactions)) {
-          for (const tx of data.transactions) {
-            await saveTransactionToFirestore(currentUser.uid, tx);
-          }
-        }
-        await saveAppStateToFirestore(currentUser.uid, data);
-        console.log('[IMPORT] Successfully synced imported data to Firestore.');
-      } catch (err) {
-        console.error('[IMPORT ERROR] Error saving imported data to Firestore:', err);
-      }
-    }
     createNotification({
       title: 'Import Completed',
       message: 'Ledger data imported successfully',

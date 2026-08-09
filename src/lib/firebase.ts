@@ -1,16 +1,11 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
-import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import config from '../../firebase-applet-config.json';
 
 const app = initializeApp(config);
-const db = config.firestoreDatabaseId ? getFirestore(app, config.firestoreDatabaseId) : getFirestore(app);
+const db = getFirestore(app, config.firestoreDatabaseId);
 const auth = getAuth(app);
-
-// Enable Auth persistence across browser restarts
-setPersistence(auth, browserLocalPersistence).catch((err) => {
-    console.warn('Firebase Auth persistence setup warning:', err);
-});
 
 // Enable Firestore offline persistence
 enableIndexedDbPersistence(db).catch((err) => {
@@ -22,4 +17,3 @@ enableIndexedDbPersistence(db).catch((err) => {
 });
 
 export { app, db, auth };
-

@@ -5,6 +5,8 @@ import {
   deleteDoc, 
   doc, 
   query, 
+  where, 
+  orderBy, 
   limit, 
   onSnapshot, 
   getDocs, 
@@ -13,6 +15,56 @@ import {
 import { db, auth } from './firebase';
 import { AppNotification, NotificationType } from '../types';
 
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  };
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Notification Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+/**
+ * Creates a real notification in Firestore.
+ */
 export async function createNotification(params: {
   title: string;
   message: string;
@@ -20,105 +72,141 @@ export async function createNotification(params: {
   userId?: string;
   referenceId?: string;
 }): Promise<string | null> {
-  const currentUid = auth.currentUser?.uid;
-  const targetUserId = params.userId || currentUid;
-  
+  const targetUserId = params.userId || auth.currentUser?.uid || 'all';
   const newNotif = {
     title: params.title,
     message: params.message,
     type: params.type,
     createdAt: new Date().toISOString(),
     read: false,
-    userId: targetUserId || '',
+    userId: targetUserId,
     referenceId: params.referenceId || ''
   };
 
+  const collectionPath = 'notifications';
   try {
-    if (targetUserId) {
-      const userNotifRef = collection(db, 'users', targetUserId, 'notifications');
-      const docRef = await addDoc(userNotifRef, newNotif);
-      return docRef.id;
-    }
-    return null;
+    const docRef = await addDoc(collection(db, collectionPath), newNotif);
+    return docRef.id;
   } catch (err) {
     console.warn('Could not save notification to Firestore:', err);
     return null;
   }
 }
 
+/**
+ * Subscribes to real-time notification updates for a user.
+ */
 export function subscribeNotifications(
   userId: string,
   onData: (notifications: AppNotification[]) => void
 ): () => void {
-  if (!userId) {
+  if (!userId || !auth.currentUser) {
     onData([]);
     return () => {};
   }
 
+  const collectionPath = 'notifications';
+  let unsubscribePrimary: (() => void) | null = null;
+  let unsubscribeFallback: (() => void) | null = null;
+
   try {
-    const userNotifRef = collection(db, 'users', userId, 'notifications');
-    const notifQuery = query(userNotifRef, limit(50));
+    const primaryQuery = query(
+      collection(db, collectionPath),
+      where('userId', 'in', [userId, 'all']),
+      limit(50)
+    );
 
-    const unsubscribe = onSnapshot(
-      notifQuery,
-      (snapshot) => {
-        const notifs: AppNotification[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          notifs.push({
-            id: docSnap.id,
-            title: data.title || '',
-            message: data.message || '',
-            type: data.type as NotificationType,
-            createdAt: data.createdAt || new Date().toISOString(),
-            read: !!data.read,
-            userId: data.userId || userId,
-            referenceId: data.referenceId || ''
-          });
+    const processSnapshot = (snapshot: any) => {
+      const notifs: AppNotification[] = [];
+      const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
+
+      snapshot.forEach((docSnap: any) => {
+        const data = docSnap.data();
+        const createdAtMillis = new Date(data.createdAt).getTime();
+
+        if (createdAtMillis > 0 && createdAtMillis < ninetyDaysAgo) {
+          deleteNotification(docSnap.id).catch(() => {});
+          return;
+        }
+
+        notifs.push({
+          id: docSnap.id,
+          title: data.title || '',
+          message: data.message || '',
+          type: data.type as NotificationType,
+          createdAt: data.createdAt || new Date().toISOString(),
+          read: !!data.read,
+          userId: data.userId || userId,
+          referenceId: data.referenceId || ''
         });
+      });
 
-        notifs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        onData(notifs);
-      },
+      notifs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      onData(notifs);
+    };
+
+    unsubscribePrimary = onSnapshot(
+      primaryQuery,
+      processSnapshot,
       (error) => {
-        console.warn('User notification listener notice:', error);
-        onData([]);
+        if (!auth.currentUser) return;
+        console.warn('Notification primary listener issue, trying simple fallback:', error);
+        const fallbackQuery = query(
+          collection(db, collectionPath),
+          where('userId', '==', userId),
+          limit(50)
+        );
+        unsubscribeFallback = onSnapshot(
+          fallbackQuery,
+          processSnapshot,
+          (fallbackError) => {
+            if (auth.currentUser) {
+              console.warn('Notification fallback listener notice:', fallbackError);
+            }
+          }
+        );
       }
     );
 
-    return unsubscribe;
+    return () => {
+      if (unsubscribePrimary) unsubscribePrimary();
+      if (unsubscribeFallback) unsubscribeFallback();
+    };
   } catch (error) {
-    console.warn('Failed to subscribe to notifications:', error);
-    onData([]);
+    console.error('Failed to subscribe to notifications:', error);
     return () => {};
   }
 }
 
+/**
+ * Marks a single notification as read.
+ */
 export async function markNotificationAsRead(notificationId: string): Promise<void> {
-  const currentUid = auth.currentUser?.uid;
-  if (!currentUid) return;
-
+  const docPath = `notifications/${notificationId}`;
   try {
-    await updateDoc(doc(db, 'users', currentUid, 'notifications', notificationId), { read: true });
+    await updateDoc(doc(db, 'notifications', notificationId), { read: true });
   } catch (error) {
     console.warn('Could not mark notification as read:', error);
   }
 }
 
+/**
+ * Marks all notifications for a user as read.
+ */
 export async function markAllNotificationsAsRead(userId: string): Promise<void> {
-  const currentUid = userId || auth.currentUser?.uid;
-  if (!currentUid) return;
-
+  const collectionPath = 'notifications';
   try {
-    const userNotifRef = collection(db, 'users', currentUid, 'notifications');
-    const snap = await getDocs(userNotifRef);
+    const q = query(
+      collection(db, collectionPath),
+      where('userId', 'in', [userId, 'all']),
+      where('read', '==', false)
+    );
+    const snap = await getDocs(q);
     if (snap.empty) return;
 
     const batch = writeBatch(db);
     snap.forEach((docSnap) => {
-      if (!docSnap.data().read) {
-        batch.update(docSnap.ref, { read: true });
-      }
+      batch.update(docSnap.ref, { read: true });
     });
     await batch.commit();
   } catch (error) {
@@ -126,12 +214,13 @@ export async function markAllNotificationsAsRead(userId: string): Promise<void> 
   }
 }
 
+/**
+ * Deletes a notification from Firestore.
+ */
 export async function deleteNotification(notificationId: string): Promise<void> {
-  const currentUid = auth.currentUser?.uid;
-  if (!currentUid) return;
-
+  const docPath = `notifications/${notificationId}`;
   try {
-    await deleteDoc(doc(db, 'users', currentUid, 'notifications', notificationId));
+    await deleteDoc(doc(db, 'notifications', notificationId));
   } catch (error) {
     console.warn('Could not delete notification:', error);
   }

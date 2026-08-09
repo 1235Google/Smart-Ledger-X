@@ -418,18 +418,18 @@ export default function Profile() {
                     strokeWidth="8" 
                     className="text-white/10 fill-none" 
                   />
-                  <motion.circle 
+                  <circle 
                     cx="50" 
                     cy="50" 
                     r="40" 
                     stroke="currentColor" 
                     strokeWidth="8" 
                     strokeLinecap="round"
-                    className="text-emerald-400 fill-none" 
-                    strokeDasharray={251.32}
-                    initial={false}
-                    animate={{ strokeDashoffset: 251.32 - (251.32 * progressPercentage) / 100 }}
-                    transition={{ duration: 1, ease: "easeInOut" }}
+                    className="text-emerald-400 fill-none transition-all duration-1000 ease-out" 
+                    style={{
+                      strokeDasharray: 251.32,
+                      strokeDashoffset: 251.32 - (251.32 * progressPercentage) / 100
+                    }}
                   />
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">

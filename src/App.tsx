@@ -38,53 +38,9 @@ import AdminGullak from './pages/admin/AdminGullak';
 import Login from './pages/Login';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, logout } = useStore();
-  const [showTimeout, setShowTimeout] = React.useState(false);
-
-  React.useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (isLoading) {
-      timer = setTimeout(() => {
-        setShowTimeout(true);
-      }, 7000);
-    } else {
-      setShowTimeout(false);
-    }
-    return () => clearTimeout(timer);
-  }, [isLoading]);
-
+  const { isAuthenticated, isLoading } = useStore();
+  
   if (isLoading) {
-    if (showTimeout) {
-      return (
-        <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center p-6 text-center text-slate-200">
-          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-4">
-            <svg className="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          </div>
-          <h2 className="text-xl font-bold mb-2 text-white">Loading is taking longer than expected</h2>
-          <p className="text-sm text-slate-400 max-w-md mb-6">
-            Connecting to your SmartLedger workspace. Please check your internet connection or try refreshing.
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm transition-all"
-            >
-              Refresh
-            </button>
-            <button
-              onClick={() => logout()}
-              className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 font-medium text-sm transition-all"
-            >
-              Sign Out
-            </button>
-          </div>
-        </div>
-      );
-    }
-
     return (
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
         <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>

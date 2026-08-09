@@ -6,7 +6,7 @@ import {
   Calendar as CalendarIcon, Target, TrendingUp, Trophy, X, CheckCircle2,
   Medal, Coins, Banknote, Gem, Crown, Building, Diamond, Flame, FileText,
   Files, Layers, BookOpen, Archive, User, Users, Star, Zap, Award, Sparkles,
-  Activity, IndianRupee
+  Activity
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { format, parseISO, startOfMonth, endOfMonth, isSameMonth, isToday, isThisWeek, isThisYear, differenceInDays } from 'date-fns';
@@ -29,78 +29,30 @@ const iconMap: Record<string, React.ReactNode> = {
   zap: <Zap size={24} />, award: <Award size={24} />, trophy: <Trophy size={24} />
 };
 
-const AnimatedCounter = ({ value, prefix = '', suffix = '', duration = 1000 }: { value: number, prefix?: string, suffix?: string, duration?: number }) => {
-  const [displayValue, setDisplayValue] = useState(value);
-  const prevValueRef = React.useRef(value);
-
+const AnimatedCounter = ({ value, prefix = '', suffix = '' }: { value: number, prefix?: string, suffix?: string }) => {
+  const [displayValue, setDisplayValue] = useState(0);
+  
   useEffect(() => {
-    const start = prevValueRef.current;
-    const end = value;
-    if (start === end) {
-      setDisplayValue(end);
-      return;
-    }
-    const startTime = performance.now();
-
-    const animate = (now: number) => {
-      const elapsed = now - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const easeInOut = progress < 0.5 
-        ? 4 * progress * progress * progress 
-        : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-
-      const current = Math.round(start + (end - start) * easeInOut);
-      setDisplayValue(current);
-
-      if (progress < 1) {
-        requestAnimationFrame(animate);
+    let start = 0;
+    if (start === value) return;
+    const duration = 1000;
+    const incrementTime = 20;
+    const steps = duration / incrementTime;
+    const increment = (value - start) / steps;
+    
+    const timer = setInterval(() => {
+      start += increment;
+      if (start >= value) {
+        setDisplayValue(value);
+        clearInterval(timer);
       } else {
-        prevValueRef.current = end;
+        setDisplayValue(Math.floor(start));
       }
-    };
-
-    const handle = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(handle);
-  }, [value, duration]);
+    }, incrementTime);
+    return () => clearInterval(timer);
+  }, [value]);
 
   return <span>{prefix}{displayValue.toLocaleString('en-IN')}{suffix}</span>;
-};
-
-const AnimatedPercentage = ({ value, duration = 1000 }: { value: number; duration?: number }) => {
-  const [displayValue, setDisplayValue] = useState(value);
-  const prevValueRef = React.useRef(value);
-
-  useEffect(() => {
-    const start = prevValueRef.current;
-    const end = value;
-    if (start === end) {
-      setDisplayValue(end);
-      return;
-    }
-    const startTime = performance.now();
-
-    const animate = (now: number) => {
-      const elapsed = now - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const easeInOut = progress < 0.5 
-        ? 4 * progress * progress * progress 
-        : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-
-      const current = start + (end - start) * easeInOut;
-      setDisplayValue(current);
-
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      } else {
-        prevValueRef.current = end;
-      }
-    };
-
-    const handle = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(handle);
-  }, [value, duration]);
-
-  return <span>{displayValue.toFixed(0)}%</span>;
 };
 
 export default function Gullak() {
@@ -140,26 +92,9 @@ export default function Gullak() {
     return Math.round(totalSavings / gullakEntries.length);
   }, [gullakEntries, totalSavings]);
 
-  const rawGoal = gullakSettings?.monthlyGoal;
-  const goal = (rawGoal !== undefined && rawGoal !== null) ? rawGoal : 10000;
-  const safeGoal = Math.max(goal, 1);
-  const percentage = goal > 0 ? Math.min((thisMonthSavings / safeGoal) * 100, 100) : 0;
-  const progress = percentage;
-  const remainingGoal = goal > 0 ? Math.max(goal - thisMonthSavings, 0) : 0;
-
-  const prevSavingsRef = React.useRef(thisMonthSavings);
-  const [rupeeRotation, setRupeeRotation] = useState(0);
-
-  useEffect(() => {
-    if (thisMonthSavings > prevSavingsRef.current) {
-      setRupeeRotation((prev) => prev + 360);
-    }
-    prevSavingsRef.current = thisMonthSavings;
-  }, [thisMonthSavings]);
-
-  const radius = 44;
-  const circumference = 2 * Math.PI * radius;
-  const progressOffset = circumference - (progress / 100) * circumference;
+  const goal = gullakSettings?.monthlyGoal || 1;
+  const progress = Math.min((thisMonthSavings / goal) * 100, 100);
+  const remainingGoal = Math.max(goal - thisMonthSavings, 0);
 
   const daysLeftInMonth = useMemo(() => {
     const now = new Date();
@@ -403,40 +338,23 @@ export default function Gullak() {
 
           <div className="relative w-full lg:w-96 aspect-square max-w-[280px] mx-auto lg:mx-0 flex items-center justify-center">
              <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/20 to-pink-500/20 rounded-full blur-3xl animate-pulse" />
-             <div className="relative w-full h-full bg-black/40 border border-white/10 rounded-full backdrop-blur-xl flex flex-col items-center justify-center shadow-2xl p-5">
-                <div className="text-slate-400 text-xs font-semibold tracking-wider uppercase mb-1">Goal Progress</div>
-                
-                {/* Rotating Bold ₹ Rupee Symbol */}
-                <motion.div 
-                  className="w-11 h-11 rounded-full bg-gradient-to-tr from-purple-500/20 via-pink-500/20 to-indigo-500/20 border border-pink-500/30 flex items-center justify-center shadow-[0_0_18px_rgba(236,72,153,0.35)] my-1 z-10"
-                  animate={{ rotate: rupeeRotation }}
-                  transition={{ duration: 1, ease: "easeInOut" }}
-                  style={{ willChange: "transform" }}
-                >
-                  <IndianRupee className="w-5 h-5 text-pink-400 stroke-[3] drop-shadow-[0_0_8px_rgba(236,72,153,0.8)]" />
-                </motion.div>
-
-                <div className="text-4xl font-black text-white mb-1">
-                  <AnimatedPercentage value={progress} duration={1000} />
-                </div>
-                <div className="text-xs text-slate-400 text-center font-medium">
-                  {goal > 0 ? (
-                    `₹${thisMonthSavings.toLocaleString('en-IN')} / ₹${goal.toLocaleString('en-IN')}`
-                  ) : (
-                    'Goal not set'
-                  )}
+             <div className="relative w-full h-full bg-black/40 border border-white/10 rounded-full backdrop-blur-xl flex flex-col items-center justify-center shadow-2xl p-6">
+                <div className="text-slate-400 text-sm font-semibold tracking-wider uppercase mb-2">Goal Progress</div>
+                <div className="text-5xl font-black text-white mb-2">{progress.toFixed(0)}%</div>
+                <div className="text-sm text-slate-400 text-center">
+                  ₹{thisMonthSavings.toLocaleString('en-IN')} / ₹{goal.toLocaleString('en-IN')}
                 </div>
                 
                 {/* SVG Progress Circle */}
-                <svg className="absolute inset-0 w-full h-full transform -rotate-90 pointer-events-none" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r={radius} fill="transparent" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
+                <svg className="absolute inset-0 w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="46" fill="transparent" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
                   <motion.circle 
-                    cx="50" cy="50" r={radius} fill="transparent" 
+                    cx="50" cy="50" r="46" fill="transparent" 
                     stroke="url(#gradient)" strokeWidth="8" strokeLinecap="round"
-                    strokeDasharray={circumference}
-                    initial={false}
-                    animate={{ strokeDashoffset: progressOffset }}
-                    transition={{ duration: 1, ease: "easeInOut" }}
+                    strokeDasharray="289.02"
+                    initial={{ strokeDashoffset: 289.02 }}
+                    animate={{ strokeDashoffset: 289.02 - (289.02 * progress) / 100 }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
                   />
                   <defs>
                     <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -524,9 +442,7 @@ export default function Gullak() {
                     <p className="text-slate-400 text-sm">Target: ₹{goal.toLocaleString('en-IN')}</p>
                   </div>
                   <div className="text-right">
-                    <div className="text-2xl font-bold text-purple-400">
-                      <AnimatedPercentage value={progress} duration={1000} />
-                    </div>
+                    <div className="text-2xl font-bold text-purple-400">{progress.toFixed(0)}%</div>
                   </div>
                 </div>
                 
@@ -538,9 +454,9 @@ export default function Gullak() {
                   <div className="h-3 bg-black/50 rounded-full overflow-hidden border border-white/5">
                     <motion.div 
                       className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"
-                      initial={false}
+                      initial={{ width: 0 }}
                       animate={{ width: `${progress}%` }}
-                      transition={{ duration: 1, ease: "easeInOut" }}
+                      transition={{ duration: 1, delay: 0.2 }}
                     />
                   </div>
                 </div>

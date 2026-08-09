@@ -1,10 +1,12 @@
 {
-  "projectId": "smart-ledger-x",
-  "appId": "1:338463684328:web:5a201b094480858749bb5d",
-  "apiKey": "AIzaSyDKzXQ6HCuvoAkr2DMulewH6mm_nPdHZ74",
-  "authDomain": "smart-ledger-x.firebaseapp.com",
-  "storageBucket": "smart-ledger-x.firebasestorage.app",
-  "messagingSenderId": "338463684328",
-  "measurementId": "G-G7WVXXSEHV",
-  "firestoreDatabaseId": ""
+  "projectId": "sound-plane-6f4nj",
+  "appId": "1:344948542072:web:a23bc2b9d416cf748bbb8d",
+  "apiKey": "AIzaSyBG6K_bapxBVBbH10jh7qBoRImGiIii--E",
+  "authDomain": "sound-plane-6f4nj.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-remixsmartledger-203e7f93-0745-42a5-b0bc-6dd0e2dc9049",
+  "storageBucket": "sound-plane-6f4nj.firebasestorage.app",
+  "messagingSenderId": "344948542072",
+  "measurementId": "",
+  "oAuthClientId": "344948542072-f22ar7cnbv2o5kvdlij0mutsifnm7l63.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
 }

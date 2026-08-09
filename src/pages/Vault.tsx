@@ -83,7 +83,7 @@ function CircularProgress({ value }: { value: number }) {
     <div className="relative w-[88px] h-[88px] flex items-center justify-center">
       <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
         <circle cx="50" cy="50" r={radius} stroke="currentColor" strokeWidth="6" fill="none" className="text-white/5" />
-        <motion.circle 
+        <circle 
           cx="50" 
           cy="50" 
           r={radius} 
@@ -91,11 +91,9 @@ function CircularProgress({ value }: { value: number }) {
           strokeWidth="6" 
           fill="none" 
           strokeDasharray={circumference} 
-          initial={false}
-          animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 1, ease: "easeInOut" }}
+          strokeDashoffset={offset} 
           strokeLinecap="round" 
-          className="drop-shadow-[0_0_8px_rgba(168,85,247,0.6)]" 
+          className="drop-shadow-[0_0_8px_rgba(168,85,247,0.6)] transition-all duration-1000 ease-out" 
         />
         <defs>
           <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">

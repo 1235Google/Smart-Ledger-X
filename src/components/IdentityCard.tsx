@@ -53,7 +53,6 @@ export default function IdentityCard() {
         try {
           await updateProfile(currentUser, { photoURL: base64Data });
           await setDoc(doc(db, 'users', currentUser.uid), { photoURL: base64Data }, { merge: true });
-          await setDoc(doc(db, 'users', currentUser.uid, 'profile', 'data'), { profilePhoto: base64Data, photoURL: base64Data }, { merge: true });
           updateUserProfile({ profilePhoto: base64Data });
         } catch (err) {
           console.error("Failed to upload photo", err);

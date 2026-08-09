@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { BarChart3, TrendingUp, IndianRupee, Users, Activity } from 'lucide-react';
+import { BarChart3, TrendingUp, DollarSign, Users, Activity } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 export default function AdminAnalytics() {

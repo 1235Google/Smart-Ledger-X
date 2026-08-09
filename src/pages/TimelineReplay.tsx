@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useStore } from '../context/StoreContext';
-import { Clock, Calendar, ArrowUpRight, ArrowDownLeft, ShieldAlert, IndianRupee } from 'lucide-react';
+import { Clock, Calendar, ArrowUpRight, ArrowDownLeft, ShieldAlert } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { endOfDay, startOfDay, format } from 'date-fns';
@@ -186,10 +186,13 @@ export default function TimelineReplay() {
               <div className="absolute -bottom-32 -right-32 w-64 h-64 bg-blue-500/30 rounded-full blur-[80px] pointer-events-none"></div>
               <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.65%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }}></div>
               <div className="absolute inset-0 bg-gradient-to-tr from-white/5 via-transparent to-white/5 pointer-events-none"></div>
-              {/* Glass orb decoration */}
-              <div className="absolute top-8 right-8 w-32 h-32 rounded-full bg-gradient-to-tr from-white/10 to-white/30 backdrop-blur-2xl border border-white/20 shadow-[0_8px_32px_rgba(255,255,255,0.1),inset_0_4px_16px_rgba(255,255,255,0.2)] flex items-center justify-center opacity-80 pointer-events-none">
-                <IndianRupee className="w-14 h-14 text-white/40 stroke-[2.5] drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]" />
-              </div>
+              <motion.div 
+                animate={{ rotate: 360 }}
+                transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
+                className="absolute top-8 right-8 w-32 h-32 rounded-full bg-gradient-to-tr from-white/10 to-white/30 backdrop-blur-2xl border border-white/20 shadow-[0_8px_32px_rgba(255,255,255,0.1),inset_0_4px_16px_rgba(255,255,255,0.2)] flex items-center justify-center opacity-80 pointer-events-none"
+              >
+                <svg className="w-16 h-16 text-white/30" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05.82 1.87 2.65 1.87 1.96 0 2.4-.98 2.4-1.59 0-.83-.44-1.61-2.67-2.14-2.48-.6-4.18-1.62-4.18-3.97 0-1.72 1.39-2.84 3.11-3.21V4h2.67v1.95c1.86.45 2.79 1.86 2.85 3.39H14.3c-.05-1.11-.64-1.87-2.22-1.87-1.5 0-2.4.61-2.4 1.61 0 .93.61 1.47 2.69 1.95 2.62.61 4.16 1.71 4.16 4.11 0 1.91-1.35 3.09-3.13 3.48z"/></svg>
+              </motion.div>
               
               <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
                 <div>

@@ -1,27 +1,29 @@
 import React, { useState, useMemo } from 'react';
 import { useStore } from '../context/StoreContext';
-import { BarChart3, Activity, Download, FileText, ArrowUpRight, ArrowDownLeft, Target, Clock, Sparkles } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell, LineChart, Line, ComposedChart } from 'recharts';
+import { BarChart3, Sparkles } from 'lucide-react';
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatCurrency, cn } from '../lib/utils';
 import { motion } from 'motion/react';
 import { startOfDay, startOfWeek, startOfMonth, startOfYear, subMonths, isWithinInterval, parseISO, format, endOfDay, endOfMonth } from 'date-fns';
+import GlassCard from '../components/ui/GlassCard';
+import CountUp from '../components/ui/CountUp';
+import AnimatedButton from '../components/ui/AnimatedButton';
 
 type DateFilter = 'today' | 'week' | 'month' | 'lastMonth' | 'year' | 'all';
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
 
 export default function Analytics() {
-  const { transactions, startingBalance, currentBalance, savingsGoals } = useStore();
+  const { transactions } = useStore();
   const [filter, setFilter] = useState<DateFilter>('month');
 
   // AI Insights
   const [aiInsights, setAiInsights] = useState<string[]>([]);
   const generateInsights = async () => {
-    // Dummy integration for this example
     setAiInsights([
       "Your expenses decreased by 12% compared to last month.",
-      "Food is your highest spending category this month.",
-      "You can save ₹2,500 more by reducing unnecessary expenses.",
-      "Your current saving habit is excellent."
+      "Food & Utilities is your highest spending category this month.",
+      "You can save ₹2,500 more by reducing unnecessary impulse purchases.",
+      "Your savings habit is excellent and on track for your financial goals."
     ]);
   };
 
@@ -65,7 +67,6 @@ export default function Analytics() {
     expenses,
     netSavings,
     pendingAmount,
-    totalTxCount
   } = useMemo(() => {
     let income = 0;
     let expenses = 0;
@@ -85,8 +86,6 @@ export default function Analytics() {
       totalTxCount: filteredTransactions.length
     };
   }, [filteredTransactions]);
-
-  const savingsRate = income > 0 ? ((netSavings / income) * 100).toFixed(1) : '0.0';
 
   // Chart Data Processing
   const { timelineData, categoryData } = useMemo(() => {
@@ -120,15 +119,20 @@ export default function Analytics() {
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-neutral-900 border border-white/10 p-4 rounded-2xl shadow-xl backdrop-blur-xl">
-          <p className="text-neutral-400 text-sm mb-2">{label}</p>
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9, y: 4 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.15 }}
+          className="bg-neutral-900/95 border border-white/15 p-4 rounded-2xl shadow-2xl backdrop-blur-xl pointer-events-none"
+        >
+          <p className="text-slate-400 text-xs font-semibold uppercase mb-2 tracking-wider">{label}</p>
           {payload.map((entry: any, index: number) => (
-            <p key={index} className="text-sm font-medium flex items-center gap-2" style={{ color: entry.color || entry.payload.fill }}>
+            <p key={index} className="text-xs font-bold flex items-center gap-2 my-1" style={{ color: entry.color || entry.payload.fill }}>
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color || entry.payload.fill }}></span>
               {entry.name}: {formatCurrency(entry.value)}
             </p>
           ))}
-        </div>
+        </motion.div>
       );
     }
     return null;
@@ -136,7 +140,7 @@ export default function Analytics() {
 
   // Net Worth Calculation
   const netWorth = useMemo(() => {
-    const assets = income; // Simplified for this example based on available variables
+    const assets = income;
     const liabilities = pendingAmount;
     return {
         assets,
@@ -169,7 +173,6 @@ export default function Analytics() {
     return prevNetWorth !== 0 ? ((currentNetWorth - prevNetWorth) / Math.abs(prevNetWorth)) * 100 : 0;
   }, [transactions]);
 
-
   const healthScore = useMemo(() => {
     let score = 100;
     if (pendingAmount > income * 0.3) score -= 20;
@@ -181,91 +184,177 @@ export default function Analytics() {
   const forecast = Math.round(income * 1.1);
 
   return (
-    <div className="w-full space-y-8 print:text-black">
+    <motion.div 
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      className="w-full space-y-8"
+    >
       <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
-            <BarChart3 className="text-blue-400" />
-            Wealth Management
+          <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
+            <BarChart3 className="text-blue-400" size={32} />
+            Analytics & Insights
           </h1>
-          <p className="text-neutral-400 mt-1">Advanced financial overview.</p>
+          <p className="text-slate-400 mt-1 text-sm font-medium">Deep financial intelligence and real-time visualization.</p>
         </div>
         
-        <select value={filter} onChange={(e) => setFilter(e.target.value as DateFilter)} className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-sm">
-            <option value="today">Today</option>
-            <option value="month">This Month</option>
-            <option value="year">This Year</option>
-            <option value="all">All Time</option>
+        <select 
+          value={filter} 
+          onChange={(e) => setFilter(e.target.value as DateFilter)} 
+          className="bg-white/[0.05] border border-white/10 hover:border-white/20 rounded-2xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 backdrop-blur-md transition-all cursor-pointer font-semibold"
+        >
+            <option value="today" className="bg-neutral-900">Today</option>
+            <option value="week" className="bg-neutral-900">This Week</option>
+            <option value="month" className="bg-neutral-900">This Month</option>
+            <option value="lastMonth" className="bg-neutral-900">Last Month</option>
+            <option value="year" className="bg-neutral-900">This Year</option>
+            <option value="all" className="bg-neutral-900">All Time</option>
         </select>
       </header>
       
-      {/* 1. Net Worth Tracker */}
-      <div className="bg-gradient-to-br from-indigo-900/40 to-purple-900/40 border border-white/10 rounded-3xl p-8 backdrop-blur-xl">
-        <h2 className="text-xl font-bold text-white mb-6">Net Worth</h2>
+      {/* 1. Net Worth Tracker Glass Card */}
+      <GlassCard delay={0.05} glowColor="rgba(99, 102, 241, 0.25)" className="p-8 bg-gradient-to-br from-indigo-950/40 via-purple-950/20 to-blue-950/40">
+        <h2 className="text-lg font-bold text-white mb-6 uppercase tracking-wider text-indigo-300">Net Worth Overview</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div>
-                <p className="text-neutral-400 text-sm">Total Net Worth</p>
-                <p className="text-4xl font-bold text-white mt-1">{formatCurrency(netWorth.netWorth)}</p>
-                <p className={cn("text-sm mt-2", netWorthTrend >= 0 ? "text-emerald-400" : "text-red-400")}>
-                    {netWorthTrend >= 0 ? '↑' : '↓'} {Math.abs(Math.round(netWorthTrend))}% vs last month
+                <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Total Net Worth</p>
+                <p className="text-4xl font-extrabold text-white mt-1">
+                  <CountUp value={netWorth.netWorth} formatter={(v) => formatCurrency(v)} />
+                </p>
+                <p className={cn("text-xs font-bold mt-2 flex items-center gap-1", netWorthTrend >= 0 ? "text-emerald-400" : "text-rose-400")}>
+                    {netWorthTrend >= 0 ? '↑' : '↓'} {Math.abs(Math.round(netWorthTrend))}% vs last period
                 </p>
             </div>
             <div>
-                <p className="text-neutral-400 text-sm">Assets</p>
-                <p className="text-2xl font-bold text-emerald-400 mt-1">{formatCurrency(netWorth.assets)}</p>
+                <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Assets (Income)</p>
+                <p className="text-2xl font-bold text-emerald-400 mt-1">
+                  <CountUp value={netWorth.assets} formatter={(v) => formatCurrency(v)} />
+                </p>
             </div>
             <div>
-                <p className="text-neutral-400 text-sm">Liabilities</p>
-                <p className="text-2xl font-bold text-red-400 mt-1">{formatCurrency(netWorth.liabilities)}</p>
+                <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Liabilities (Pending)</p>
+                <p className="text-2xl font-bold text-rose-400 mt-1">
+                  <CountUp value={netWorth.liabilities} formatter={(v) => formatCurrency(v)} />
+                </p>
             </div>
         </div>
-      </div>
+      </GlassCard>
 
-      {/* 1. Insights & Warning System */}
-      <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-xl">
+      {/* 2. Insights & Warnings */}
+      <GlassCard delay={0.12} glowColor="rgba(168, 85, 247, 0.2)">
         <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 rounded-xl bg-purple-500/10"><Sparkles className="text-purple-400" size={20}/></div>
-          <h2 className="text-lg font-bold text-white">Smart Insights & Warnings</h2>
+          <div className="p-2.5 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400">
+            <Sparkles size={20}/>
+          </div>
+          <h2 className="text-lg font-bold text-white">Smart AI Insights</h2>
         </div>
-        <ul className="space-y-2 text-sm text-neutral-300">
-          {aiInsights.length > 0 ? aiInsights.map((i, idx) => <li key={idx} className="flex gap-2"><span>•</span>{i}</li>) : <button onClick={generateInsights} className="px-4 py-2 bg-purple-600 rounded-lg text-white">Generate Insights</button>}
-          <li className="text-red-400 mt-2">⚠ Spending Alert: You spent 40% more on shopping this month.</li>
-        </ul>
-      </div>
+        <div className="space-y-3">
+          {aiInsights.length > 0 ? (
+            <ul className="space-y-2 text-sm text-slate-300 font-medium">
+              {aiInsights.map((i, idx) => (
+                <motion.li 
+                  key={idx} 
+                  initial={{ opacity: 0, x: -10 }} 
+                  animate={{ opacity: 1, x: 0 }} 
+                  transition={{ delay: idx * 0.08 }}
+                  className="flex gap-2.5 items-start bg-white/[0.03] p-3 rounded-xl border border-white/5"
+                >
+                  <span className="text-purple-400 font-bold">•</span>
+                  <span>{i}</span>
+                </motion.li>
+              ))}
+            </ul>
+          ) : (
+            <AnimatedButton onClick={generateInsights} variant="primary" icon={<Sparkles size={16} />}>
+              Generate Smart Insights
+            </AnimatedButton>
+          )}
+        </div>
+      </GlassCard>
 
-      {/* 2. Financial Health Score & Forecast */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-xl">
-            <h2 className="text-lg font-bold text-white mb-4">Financial Health Score</h2>
+      {/* 3. Financial Health & Forecast */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <GlassCard delay={0.18}>
+            <h2 className="text-base font-bold text-white mb-4">Financial Health Score</h2>
             <div className="flex items-center gap-6">
-            <div className={cn("w-24 h-24 rounded-full border-4 flex items-center justify-center font-bold text-2xl text-white", healthScore > 75 ? "border-emerald-500" : healthScore > 50 ? "border-amber-500" : "border-red-500")}>{Math.round(healthScore)}</div>
-            <div>
-                <p className="font-bold text-white">{healthScore > 75 ? 'Excellent' : healthScore > 50 ? 'Good' : 'Needs Attention'}</p>
-                <p className="text-sm text-neutral-400">{healthScore > 75 ? 'Excellent financial management' : healthScore > 50 ? 'Good progress' : 'Improvement needed'}</p>
+              <motion.div 
+                initial={{ scale: 0.5, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                className={cn(
+                  "w-24 h-24 rounded-full border-4 flex items-center justify-center font-black text-3xl text-white shadow-xl shrink-0", 
+                  healthScore > 75 ? "border-emerald-500 bg-emerald-500/10 text-emerald-300" : 
+                  healthScore > 50 ? "border-amber-500 bg-amber-500/10 text-amber-300" : 
+                  "border-rose-500 bg-rose-500/10 text-rose-300"
+                )}
+              >
+                <CountUp value={Math.round(healthScore)} />
+              </motion.div>
+              <div>
+                  <p className="font-bold text-lg text-white">{healthScore > 75 ? 'Excellent' : healthScore > 50 ? 'Good' : 'Needs Attention'}</p>
+                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">{healthScore > 75 ? 'Optimal expense control and savings ratio.' : healthScore > 50 ? 'Healthy baseline, watch pending dues.' : 'Expenses or pending liabilities exceed safe limits.'}</p>
+              </div>
             </div>
-            </div>
-        </div>
-        <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-xl">
-            <h2 className="text-lg font-bold text-white mb-4">Financial Forecast</h2>
-            <p className="text-neutral-300">Based on your saving pattern, 30-day forecast: <span className="font-bold text-white">{formatCurrency(forecast)}</span></p>
-        </div>
+        </GlassCard>
+
+        <GlassCard delay={0.24}>
+            <h2 className="text-base font-bold text-white mb-4">30-Day Financial Forecast</h2>
+            <p className="text-slate-300 text-sm leading-relaxed">
+              Based on active incoming/outgoing cash flow:
+            </p>
+            <p className="text-3xl font-extrabold text-blue-400 mt-3">
+              <CountUp value={forecast} formatter={(v) => formatCurrency(v)} />
+            </p>
+        </GlassCard>
       </div>
 
-      {/* 3. Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-6 backdrop-blur-xl h-[400px]">
-          <h3 className="text-lg font-bold text-white mb-4">Income vs Expenses</h3>
-          <ResponsiveContainer width="100%" height="90%">
-            <BarChart data={timelineData}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)"/><XAxis dataKey="date" stroke="rgba(255,255,255,0.4)"/><YAxis stroke="rgba(255,255,255,0.4)"/><Tooltip content={<CustomTooltip/>}/><Bar dataKey="income" fill="#10b981"/><Bar dataKey="expenses" fill="#ef4444"/></BarChart>
+      {/* 4. Progressive Animated Charts Grid */}
+      <motion.div 
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3, duration: 0.5 }}
+        className="grid grid-cols-1 lg:grid-cols-2 gap-8"
+      >
+        <GlassCard hoverEffect={false} className="h-[420px] p-6 flex flex-col justify-between">
+          <h3 className="text-base font-bold text-white mb-4">Income vs Expenses</h3>
+          <ResponsiveContainer width="100%" height="88%">
+            <BarChart data={timelineData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)"/>
+              <XAxis dataKey="date" stroke="rgba(255,255,255,0.4)" tick={{ fontSize: 12 }} />
+              <YAxis stroke="rgba(255,255,255,0.4)" tick={{ fontSize: 12 }} />
+              <Tooltip content={<CustomTooltip/>}/>
+              <Bar dataKey="income" name="Income" fill="#10b981" radius={[8, 8, 0, 0]} isAnimationActive={true} animationDuration={1200} />
+              <Bar dataKey="expenses" name="Expenses" fill="#ef4444" radius={[8, 8, 0, 0]} isAnimationActive={true} animationDuration={1200} />
+            </BarChart>
           </ResponsiveContainer>
-        </div>
-        <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-6 backdrop-blur-xl h-[400px]">
-          <h3 className="text-lg font-bold text-white mb-4">Expense Categories</h3>
-          <ResponsiveContainer width="100%" height="90%">
-            <PieChart><Pie data={categoryData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={80}><Cell fill={COLORS[0]} /><Cell fill={COLORS[1]} /></Pie><Tooltip content={<CustomTooltip/>}/></PieChart>
+        </GlassCard>
+
+        <GlassCard hoverEffect={false} className="h-[420px] p-6 flex flex-col justify-between">
+          <h3 className="text-base font-bold text-white mb-4">Expense Categories</h3>
+          <ResponsiveContainer width="100%" height="88%">
+            <PieChart>
+              <Pie 
+                data={categoryData.length > 0 ? categoryData : [{ name: 'No Expenses', value: 1 }]} 
+                dataKey="value" 
+                nameKey="name" 
+                cx="50%" 
+                cy="50%" 
+                innerRadius={65} 
+                outerRadius={95}
+                paddingAngle={4}
+                isAnimationActive={true}
+                animationDuration={1200}
+              >
+                {categoryData.map((_, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip content={<CustomTooltip/>}/>
+            </PieChart>
           </ResponsiveContainer>
-        </div>
-      </div>
-    </div>
+        </GlassCard>
+      </motion.div>
+    </motion.div>
   );
 }

@@ -209,11 +209,11 @@ export default function Layout() {
                     <div className="absolute inset-0 rounded-xl bg-blue-500/0 group-hover:bg-white/5 transition-colors duration-200" />
                   )}
 
-                  {/* Icon with Spring Hover & Tap Bounce */}
+                  {/* Icon with Spring Hover & Rotation Bounce */}
                   <motion.div 
-                    whileHover={{ scale: 1.08 }} 
-                    whileTap={{ scale: 0.95 }}
-                    transition={{ type: 'spring', stiffness: 450, damping: 22 }}
+                    whileHover={{ scale: 1.12, rotate: 6 }} 
+                    whileTap={{ scale: 0.92 }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 22 }}
                     className="relative z-10 flex items-center justify-center"
                   >
                     {isActive ? (

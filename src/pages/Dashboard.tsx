@@ -1,13 +1,16 @@
 import React from 'react';
 import { useStore } from '../context/StoreContext';
-import { motion } from 'motion/react';
-import { Wallet, ArrowDownLeft, Clock, Users, ArrowUpRight, Bell, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { ArrowDownLeft, Clock, Users, ArrowUpRight, Bell, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { formatCurrency, formatDate, cn, calculateReminderDetails } from '../lib/utils';
 import { Link } from 'react-router-dom';
 import { PendingMoney, SentMoney, ReceivedMoney } from '../types';
+import BalanceCard from '../components/BalanceCard';
+import GlassCard from '../components/ui/GlassCard';
+import CountUp from '../components/ui/CountUp';
 
 export default function Dashboard() {
-  const { startingBalance, currentBalance, totalReceived, totalPending, transactions, generalSettings } = useStore();
+  const { startingBalance, currentBalance, totalReceived, totalPending, totalSent, transactions, generalSettings } = useStore();
 
   const recentTransactions = transactions.slice(0, 5);
 
@@ -43,8 +46,13 @@ export default function Dashboard() {
   const duplicateInvoices = Array.from(invoiceNumberMap.values()).filter(group => group.length > 1);
 
   return (
-    <div className="w-full space-y-8">
-      <header className="mb-10">
+    <motion.div 
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      className="w-full space-y-8"
+    >
+      <header className="mb-8">
         <h1 className="text-3xl font-[800] tracking-[-0.03em] text-white mb-2">Dashboard</h1>
         
         <motion.div
@@ -53,7 +61,7 @@ export default function Dashboard() {
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="relative mt-2"
         >
-          <div className="text-lg md:text-xl tracking-tight mb-5 flex items-baseline gap-[6px] flex-nowrap">
+          <div className="text-lg md:text-xl tracking-tight mb-4 flex items-baseline gap-[6px] flex-nowrap">
             <span className="font-[500] text-[rgba(255,255,255,0.72)] text-inherit leading-[1.2]">Welcome back,</span>
             <span 
               style={{
@@ -66,7 +74,7 @@ export default function Dashboard() {
           </div>
           
           {/* Premium Divider */}
-          <div className="flex items-center gap-3 w-full max-w-[280px] mb-5 opacity-80">
+          <div className="flex items-center gap-3 w-full max-w-[280px] mb-4 opacity-80">
             <div className="h-[1px] w-8 bg-gradient-to-r from-transparent to-[#2D4DFF]/60"></div>
             <div className="w-1.5 h-1.5 rotate-45 bg-[#2D4DFF] shadow-[0_0_10px_rgba(45,77,255,0.8)] ring-1 ring-white/20"></div>
             <div className="h-[1px] flex-1 bg-gradient-to-r from-[#2D4DFF]/60 to-transparent"></div>
@@ -177,142 +185,108 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Main Balance Card */}
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="relative bg-gradient-to-br from-[#0B1026] via-[#1a1b4b] to-[#2D4DFF] p-8 rounded-[2rem] border border-white/10 overflow-hidden shadow-[0_20px_40px_-15px_rgba(45,77,255,0.4)] backdrop-blur-xl"
-      >
-        <div className="absolute -bottom-32 -right-32 w-64 h-64 bg-blue-500/30 rounded-full blur-[80px] pointer-events-none"></div>
-        
-        {/* Subtle premium noise texture */}
-        <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.65%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }}></div>
+      {/* Main Balance Card Component */}
+      <BalanceCard
+        currentBalance={currentBalance}
+        startingBalance={startingBalance}
+        totalReceived={totalReceived}
+        totalSent={totalSent}
+      />
 
-        {/* Elegant light reflections */}
-        <div className="absolute inset-0 bg-gradient-to-tr from-white/5 via-transparent to-white/5 pointer-events-none"></div>
-
-        {/* Glass orb decoration */}
-        <motion.div 
-          animate={{ rotate: 360 }}
-          transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
-          className="absolute top-8 right-8 w-32 h-32 rounded-full bg-gradient-to-tr from-white/10 to-white/30 backdrop-blur-2xl border border-white/20 shadow-[0_8px_32px_rgba(255,255,255,0.1),inset_0_4px_16px_rgba(255,255,255,0.2)] flex items-center justify-center opacity-80 pointer-events-none"
-        >
-          <svg className="w-16 h-16 text-white/30" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05.82 1.87 2.65 1.87 1.96 0 2.4-.98 2.4-1.59 0-.83-.44-1.61-2.67-2.14-2.48-.6-4.18-1.62-4.18-3.97 0-1.72 1.39-2.84 3.11-3.21V4h2.67v1.95c1.86.45 2.79 1.86 2.85 3.39H14.3c-.05-1.11-.64-1.87-2.22-1.87-1.5 0-2.4.61-2.4 1.61 0 .93.61 1.47 2.69 1.95 2.62.61 4.16 1.71 4.16 4.11 0 1.91-1.35 3.09-3.13 3.48z"/></svg>
-        </motion.div>
-        
-        <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div>
-            <div className="flex items-center gap-2 text-white/60 text-[11px] font-semibold mb-1 uppercase tracking-widest">
-              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse"></span>
-              Available Balance
-            </div>
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-              className="text-5xl md:text-6xl font-[800] tracking-tight bg-gradient-to-b from-white to-white/70 bg-clip-text text-transparent mb-6"
-            >
-              {formatCurrency(currentBalance)}
-            </motion.div>
-            <div className="flex gap-4">
-              <div className="bg-white/[0.03] backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                <p className="text-[10px] text-white/50 uppercase tracking-widest font-semibold">Starting Balance</p>
-                <p className="text-lg font-bold text-white/90">{formatCurrency(startingBalance)}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Stats Grid */}
+      {/* Stats Grid with Staggered Glass Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className="bg-white/5 border border-white/10 rounded-[2.5rem] p-6 backdrop-blur-xl relative overflow-hidden group"
-        >
+        <GlassCard delay={0.08} glowColor="rgba(16, 185, 129, 0.25)">
           <div className="absolute top-0 right-0 p-6 opacity-20 group-hover:opacity-40 transition-opacity">
-            <ArrowDownLeft size={48} className="text-green-500" />
+            <ArrowDownLeft size={48} className="text-emerald-500" />
           </div>
-          <div className="text-slate-400 text-sm font-medium mb-1 uppercase tracking-wider">Total Received</div>
-          <div className="text-3xl font-bold text-white mb-4">{formatCurrency(totalReceived)}</div>
-          <div className="flex items-center gap-2 text-xs text-slate-500 bg-black/20 w-fit px-3 py-1.5 rounded-lg border border-white/5">
-            <Users size={14} /> Received from {receivedCount} {receivedCount === 1 ? 'person' : 'people'}
+          <div className="text-slate-400 text-xs font-bold mb-1 uppercase tracking-wider">Total Received</div>
+          <div className="text-3xl font-extrabold text-white mb-4">
+            <CountUp value={totalReceived} formatter={(v) => formatCurrency(v)} />
           </div>
-        </motion.div>
+          <div className="flex items-center gap-2 text-xs text-slate-400 bg-black/30 w-fit px-3 py-1.5 rounded-xl border border-white/5">
+            <Users size={14} className="text-emerald-400" /> Received from {receivedCount} {receivedCount === 1 ? 'person' : 'people'}
+          </div>
+        </GlassCard>
 
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className="bg-white/5 border border-white/10 rounded-[2.5rem] p-6 backdrop-blur-xl relative overflow-hidden group"
-        >
+        <GlassCard delay={0.16} glowColor="rgba(245, 158, 11, 0.25)">
           <div className="absolute top-0 right-0 p-6 opacity-20 group-hover:opacity-40 transition-opacity">
             <Clock size={48} className="text-amber-500" />
           </div>
-          <div className="text-slate-400 text-sm font-medium mb-1 uppercase tracking-wider">Total Pending</div>
-          <div className="text-3xl font-bold text-white mb-4">{formatCurrency(totalPending)}</div>
-          <div className="flex items-center gap-2 text-xs text-slate-500 bg-black/20 w-fit px-3 py-1.5 rounded-lg border border-white/5">
-            <Users size={14} /> Pending from {pendingCount} {pendingCount === 1 ? 'person' : 'people'}
+          <div className="text-slate-400 text-xs font-bold mb-1 uppercase tracking-wider">Total Pending</div>
+          <div className="text-3xl font-extrabold text-white mb-4">
+            <CountUp value={totalPending} formatter={(v) => formatCurrency(v)} />
           </div>
-        </motion.div>
+          <div className="flex items-center gap-2 text-xs text-slate-400 bg-black/30 w-fit px-3 py-1.5 rounded-xl border border-white/5">
+            <Users size={14} className="text-amber-400" /> Pending from {pendingCount} {pendingCount === 1 ? 'person' : 'people'}
+          </div>
+        </GlassCard>
       </div>
 
-      {/* Recent Activity */}
+      {/* Recent Activity List with Slide-in and Staggered Transitions */}
       <div>
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-white">Recent Activity</h2>
-          <Link to="/analytics" className="text-xs text-blue-400 font-semibold hover:underline">View All</Link>
+          <h2 className="text-xl font-bold text-white tracking-tight">Recent Activity</h2>
+          <Link to="/analytics" className="text-xs text-blue-400 font-bold hover:underline transition-all">
+            View All →
+          </Link>
         </div>
 
         <div className="space-y-3">
           {recentTransactions.length === 0 ? (
-            <div className="text-center py-12 border-2 border-dashed border-white/5 rounded-2xl h-16 flex items-center justify-center text-slate-600 text-sm">
+            <div className="text-center py-12 border-2 border-dashed border-white/10 rounded-3xl flex items-center justify-center text-slate-500 text-sm">
               <p>No recent transactions</p>
             </div>
           ) : (
-            recentTransactions.map((tx, idx) => (
-              <motion.div
-                key={tx.id}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.4 + 0.1 * idx, duration: 0.5, ease: 'easeOut' }}
-                className="group bg-white/5 hover:bg-white/[0.08] border border-white/5 hover:border-white/10 p-4 rounded-2xl flex items-center gap-4 transition-all"
-              >
-                <div className={cn(
-                  "w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0",
-                  tx.type === 'received' ? "bg-green-500/20 text-green-400" :
-                  tx.type === 'sent' ? "bg-red-500/20 text-red-400" :
-                  "bg-amber-500/20 text-amber-400"
-                )}>
-                  {tx.type === 'received' ? <ArrowDownLeft size={24} /> :
-                   tx.type === 'sent' ? <ArrowUpRight size={24} /> :
-                   <Clock size={24} />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-sm text-white truncate">{tx.personName}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">
-                    {tx.type === 'received' || tx.type === 'sent' ? tx.purpose : (tx as any).reason} • {formatDate(tx.type === 'received' || tx.type === 'sent' ? tx.date : (tx as any).dueDate, generalSettings?.timezone)}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className={cn(
-                    "text-sm font-bold",
-                    tx.type === 'received' ? "text-green-400" :
-                    tx.type === 'sent' ? "text-red-400" :
-                    "text-amber-500"
+            <AnimatePresence mode="popLayout">
+              {recentTransactions.map((tx, idx) => (
+                <motion.div
+                  key={tx.id}
+                  layout
+                  initial={{ opacity: 0, x: 24, scale: 0.98 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.92, height: 0, marginTop: 0, marginBottom: 0, padding: 0 }}
+                  transition={{
+                    type: 'spring',
+                    stiffness: 380,
+                    damping: 26,
+                    delay: idx * 0.05,
+                  }}
+                  whileHover={{ scale: 1.01, x: 2 }}
+                  className="group bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 p-4 rounded-2xl flex items-center gap-4 transition-all shadow-md"
+                >
+                  <div className={cn(
+                    "w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-inner",
+                    tx.type === 'received' ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" :
+                    tx.type === 'sent' ? "bg-rose-500/20 text-rose-400 border border-rose-500/30" :
+                    "bg-amber-500/20 text-amber-400 border border-amber-500/30"
                   )}>
-                    {tx.type === 'received' ? '+' : tx.type === 'sent' ? '-' : '⏳'} {formatCurrency(tx.amount)}
-                  </p>
-                  <p className="text-[10px] text-slate-500 uppercase">{tx.type}</p>
-                </div>
-              </motion.div>
-            ))
+                    {tx.type === 'received' ? <ArrowDownLeft size={22} /> :
+                     tx.type === 'sent' ? <ArrowUpRight size={22} /> :
+                     <Clock size={22} />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-sm text-white truncate">{tx.personName}</div>
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      {tx.type === 'received' || tx.type === 'sent' ? tx.purpose : (tx as any).reason} • {formatDate(tx.type === 'received' || tx.type === 'sent' ? tx.date : (tx as any).dueDate, generalSettings?.timezone)}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={cn(
+                      "text-sm font-bold tracking-tight",
+                      tx.type === 'received' ? "text-emerald-400" :
+                      tx.type === 'sent' ? "text-rose-400" :
+                      "text-amber-400"
+                    )}>
+                      {tx.type === 'received' ? '+' : tx.type === 'sent' ? '-' : '⏳'} {formatCurrency(tx.amount)}
+                    </p>
+                    <p className="text-[10px] text-slate-500 font-semibold uppercase">{tx.type}</p>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

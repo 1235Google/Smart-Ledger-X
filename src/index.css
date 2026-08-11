@@ -17,6 +17,22 @@
 }
 .animate-spin-slow { animation: spin 10s linear infinite; }
 
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes pulseGlowGreen {
+  0%, 100% { box-shadow: 0 0 15px rgba(16, 185, 129, 0.2); }
+  50% { box-shadow: 0 0 35px rgba(16, 185, 129, 0.6); }
+}
+
+@keyframes pulseGlowRed {
+  0%, 100% { box-shadow: 0 0 15px rgba(244, 63, 94, 0.2); }
+  50% { box-shadow: 0 0 35px rgba(244, 63, 94, 0.6); }
+}
+
 body {
   font-family: var(--font-sans);
   background-color: #05060a;

@@ -71,6 +71,10 @@ function LoginRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+import ErrorBoundary from './components/ErrorBoundary';
+import { ToastProvider } from './context/ToastContext';
+import ToastContainer from './components/ui/ToastContainer';
+
 function AppRoutes() {
   return (
     <Routes>
@@ -117,19 +121,25 @@ function AppRoutes() {
         <Route path="help" element={<Help />} />
         <Route path="about" element={<About />} />
       </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
 
 export default function App() {
   return (
-    <StoreProvider>
-      <BrowserRouter>
-        <SecurityWrapper>
-          <AppRoutes />
-        </SecurityWrapper>
-      </BrowserRouter>
-    </StoreProvider>
+    <ErrorBoundary>
+      <StoreProvider>
+        <ToastProvider>
+          <BrowserRouter>
+            <SecurityWrapper>
+              <AppRoutes />
+              <ToastContainer />
+            </SecurityWrapper>
+          </BrowserRouter>
+        </ToastProvider>
+      </StoreProvider>
+    </ErrorBoundary>
   );
 }
 

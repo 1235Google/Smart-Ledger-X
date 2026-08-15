@@ -72,10 +72,15 @@ export async function syncUserProfile(user: User, profileData?: Partial<AppState
  */
 export const subscribeToState = (
   userId: string, 
-  onUpdate: (state: AppState) => void,
+  onUpdate: (state: Partial<AppState>) => void,
   onError?: (err: any) => void
 ) => {
-  if (!userId) return () => {};
+  if (!userId) {
+    console.warn('[CloudSync] subscribeToState called without userId');
+    return () => {};
+  }
+
+  console.log('[CloudSync] Subscribing to Firestore state and transactions for user:', userId);
 
   const stateDocRef = doc(db, 'users', userId, 'app', 'state');
   const txCollectionRef = collection(db, 'users', userId, 'transactions');
@@ -88,13 +93,21 @@ export const subscribeToState = (
   setSyncStatus('syncing');
 
   const notifyUpdate = () => {
-    if (currentState) {
-      onUpdate({ ...currentState, transactions: currentTransactions });
-      if (!navigator.onLine) {
-        setSyncStatus('offline');
-      } else {
-        setSyncStatus('synced');
-      }
+    console.log('[CloudSync] State update ready. State exists:', !!currentState, 'Tx count:', currentTransactions.length);
+    const stateToSend = currentState 
+      ? { ...currentState, transactions: currentTransactions } 
+      : ({ transactions: currentTransactions } as Partial<AppState>);
+    
+    try {
+      onUpdate(stateToSend);
+    } catch (err) {
+      console.error('[CloudSync] Error inside onUpdate handler:', err);
+    }
+
+    if (!navigator.onLine) {
+      setSyncStatus('offline');
+    } else {
+      setSyncStatus('synced');
     }
   };
 
@@ -102,21 +115,25 @@ export const subscribeToState = (
     stateDocRef,
     { includeMetadataChanges: true },
     (docSnap) => {
+      console.log('[Firestore Read] User state doc received. Exists:', docSnap.exists(), 'fromCache:', docSnap.metadata.fromCache);
       if (docSnap.exists()) {
         currentState = docSnap.data() as AppState;
-        isInitialStateLoaded = true;
-        if (isInitialTxLoaded) {
-          notifyUpdate();
-        }
-      } else {
-        isInitialStateLoaded = true;
+      }
+      isInitialStateLoaded = true;
+      if (isInitialTxLoaded) {
+        notifyUpdate();
       }
     },
     (error) => {
-      console.warn('Firestore state subscription error:', error);
+      console.warn('[Firestore Read Error] State subscription error:', error);
       setSyncStatus(navigator.onLine ? 'error' : 'offline');
-      if (onError) onError(error);
-      handleFirestoreError(error, OperationType.GET, `users/${userId}/app/state`);
+      isInitialStateLoaded = true;
+      if (onError) {
+        try { onError(error); } catch (e) { console.error(e); }
+      }
+      if (isInitialTxLoaded) {
+        notifyUpdate();
+      }
     }
   );
 
@@ -124,6 +141,7 @@ export const subscribeToState = (
     txCollectionRef,
     { includeMetadataChanges: true },
     (snapshot) => {
+      console.log('[Firestore Read] Transactions collection snapshot received. Count:', snapshot.docs.length, 'fromCache:', snapshot.metadata.fromCache);
       currentTransactions = snapshot.docs.map((d) => d.data() as Transaction);
       // Sort newest first by default if date/createdAt exists
       currentTransactions.sort((a, b) => {
@@ -132,19 +150,25 @@ export const subscribeToState = (
         return new Date(dateB || 0).getTime() - new Date(dateA || 0).getTime();
       });
       isInitialTxLoaded = true;
-      if (isInitialStateLoaded && currentState) {
+      if (isInitialStateLoaded) {
         notifyUpdate();
       }
     },
     (error) => {
-      console.warn('Firestore transactions subscription error:', error);
+      console.warn('[Firestore Read Error] Transactions subscription error:', error);
       setSyncStatus(navigator.onLine ? 'error' : 'offline');
-      if (onError) onError(error);
-      handleFirestoreError(error, OperationType.LIST, `users/${userId}/transactions`);
+      isInitialTxLoaded = true;
+      if (onError) {
+        try { onError(error); } catch (e) { console.error(e); }
+      }
+      if (isInitialStateLoaded) {
+        notifyUpdate();
+      }
     }
   );
 
   return () => {
+    console.log('[CloudSync] Unsubscribing listeners for user:', userId);
     unsubState();
     unsubTx();
   };

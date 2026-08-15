@@ -10,6 +10,7 @@ import GlassCard from '../components/ui/GlassCard';
 import CountUp from '../components/ui/CountUp';
 
 export default function Dashboard() {
+  console.log('[Dashboard] Rendering dashboard view');
   const { startingBalance, currentBalance, totalReceived, totalPending, totalSent, transactions, generalSettings } = useStore();
 
   const recentTransactions = transactions.slice(0, 5);

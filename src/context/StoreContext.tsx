@@ -187,47 +187,98 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     testConnection().catch(() => {});
   }, []);
 
+  // 10-second timeout safeguard to ensure loading screen never hangs indefinitely
   useEffect(() => {
-    let unsubscribeFirestore: (() => void) | undefined;
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
+    const timeout = setTimeout(() => {
+      setIsLoading((loading) => {
+        if (loading) {
+          console.warn('[StoreContext] 10s timeout safeguard triggered: Clearing loading screen to prevent hang.');
+          setIsDataLoaded(true);
+          return false;
+        }
+        return false;
+      });
+    }, 10000);
+    return () => clearTimeout(timeout);
+  }, []);
 
-      if (unsubscribeFirestore) unsubscribeFirestore();
+  useEffect(() => {
+    console.log('[Auth] Attaching onAuthStateChanged listener');
+    let unsubscribeFirestore: (() => void) | undefined;
+    let isSubscribed = true;
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log('[Auth State Changed] Current user:', user ? `${user.uid} (${user.email})` : 'None (Signed Out)');
+      if (!isSubscribed) return;
+
+      if (unsubscribeFirestore) {
+        unsubscribeFirestore();
+        unsubscribeFirestore = undefined;
+      }
       
       if (user) {
+        setCurrentUser(user);
         setIsAuthenticated(true);
         try {
           localStorage.setItem('smartledger_authenticated', 'true');
         } catch (e) {}
         setIsLoading(true);
 
-        // Safe initial migration of local storage data if user is signing in for the first time
-        await migrateLocalDataToCloud(user.uid, defaultState);
-
-        // Sync user profile data to /users/{uid}/profile
-        await syncUserProfile(user, {
-          fullName: user.displayName || undefined,
-          email: user.email || undefined,
-          profilePhoto: user.photoURL || undefined,
-        });
-        
-        unsubscribeFirestore = subscribeToState(user.uid, (newState) => {
-          setState((prev) => {
-            // Keep userProfile email/name synchronized if coming from Auth
-            const updatedProfile = {
-              ...newState.userProfile,
-              email: user.email || newState.userProfile?.email || prev.userProfile?.email,
-              fullName: newState.userProfile?.fullName || user.displayName || prev.userProfile?.fullName,
-              profilePhoto: newState.userProfile?.profilePhoto || user.photoURL || prev.userProfile?.profilePhoto,
-            };
-            const merged = { ...newState, userProfile: updatedProfile };
-            prevStateRef.current = merged;
-            return merged;
+        try {
+          // Non-blocking background migration & profile sync with timeout safety
+          Promise.allSettled([
+            migrateLocalDataToCloud(user.uid, defaultState),
+            syncUserProfile(user, {
+              fullName: user.displayName || undefined,
+              email: user.email || undefined,
+              profilePhoto: user.photoURL || undefined,
+            })
+          ]).then(() => {
+            console.log('[Auth] User profile and initial migration sync completed');
+          }).catch((err) => {
+            console.warn('[Auth] Background sync warning:', err);
           });
-          setIsDataLoaded(true);
-          setIsLoading(false);
-        });
+        } catch (e) {
+          console.warn('[Auth] Sync initiation exception:', e);
+        }
+
+        try {
+          unsubscribeFirestore = subscribeToState(
+            user.uid, 
+            (newState) => {
+              console.log('[StoreContext] Firestore state dispatched to StoreContext');
+              if (!isSubscribed) return;
+              setState((prev) => {
+                const base = { ...defaultState, ...prev, ...newState };
+                const updatedProfile = {
+                  ...base.userProfile,
+                  email: user.email || newState.userProfile?.email || prev.userProfile?.email || '',
+                  fullName: newState.userProfile?.fullName || user.displayName || prev.userProfile?.fullName || '',
+                  profilePhoto: newState.userProfile?.profilePhoto || user.photoURL || prev.userProfile?.profilePhoto || '',
+                };
+                const merged: AppState = { ...base, userProfile: updatedProfile };
+                prevStateRef.current = merged;
+                return merged;
+              });
+              setIsDataLoaded(true);
+              setIsLoading(false);
+            },
+            (err) => {
+              console.error('[StoreContext] Firestore error callback received:', err);
+              if (!isSubscribed) return;
+              setIsDataLoaded(true);
+              setIsLoading(false);
+            }
+          );
+        } catch (err) {
+          console.error('[StoreContext] Failed to subscribe to Firestore:', err);
+          if (isSubscribed) {
+            setIsDataLoaded(true);
+            setIsLoading(false);
+          }
+        }
       } else {
+        setCurrentUser(null);
         const isLocallyAuth = localStorage.getItem('smartledger_authenticated') === 'true';
         setIsAuthenticated(isLocallyAuth);
         
@@ -244,8 +295,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setIsDataLoaded(true);
         setIsLoading(false);
       }
+    }, (authError) => {
+      console.error('[Auth State Error]', authError);
+      if (isSubscribed) {
+        setIsLoading(false);
+        setIsDataLoaded(true);
+      }
     });
+
     return () => {
+      console.log('[Auth] Cleaning up onAuthStateChanged and Firestore subscriptions');
+      isSubscribed = false;
       unsubscribe();
       if (unsubscribeFirestore) unsubscribeFirestore();
     };

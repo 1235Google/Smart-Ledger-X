@@ -43,16 +43,19 @@ export default function Login() {
 
   const handleGoogleSignIn = async () => {
     if (loading || googleLoading) return;
+    console.log('[Auth Action] Initiating Google Sign-In');
     setGoogleLoading(true);
     setError('');
     setSuccessMsg('');
     try {
       const result = await loginWithGoogle();
+      console.log('[Auth Action] Google Sign-In successful for user:', result?.user?.uid);
       if (result?.user) {
+        console.log('[Route Navigation] Navigating to / (Dashboard)');
         navigate('/', { replace: true });
       }
     } catch (err: any) {
-      console.error('Google Sign-In failed:', err);
+      console.error('[Auth Action Error] Google Sign-In failed:', err);
       let message = 'Unable to sign in with Google. Please try again.';
       if (err.code === 'auth/popup-closed-by-user') {
         message = 'Sign-in cancelled.';
@@ -79,15 +82,18 @@ export default function Login() {
     }
 
     if (authMode === 'forgot') {
+      console.log('[Auth Action] Requesting password reset email for:', email);
       setLoading(true);
       try {
         await requestPasswordReset(email);
+        console.log('[Auth Action] Password reset email sent successfully');
         setSuccessMsg('Password reset link has been sent to your email.');
         setTimeout(() => {
           setAuthMode('signin');
           setSuccessMsg('');
         }, 3500);
       } catch (err: any) {
+        console.error('[Auth Action Error] Password reset failed:', err);
         triggerError(err.message || 'Failed to send password reset email.');
       } finally {
         setLoading(false);
@@ -106,16 +112,20 @@ export default function Login() {
         return;
       }
 
+      console.log('[Auth Action] Registering new user with email:', email);
       setLoading(true);
       try {
         const cred = await registerWithEmail(email, password);
+        console.log('[Auth Action] User registration successful:', cred.user?.uid);
         if (fullName) {
           updateUserProfile({ fullName });
         }
         if (cred.user) {
+          console.log('[Route Navigation] Navigating to / (Dashboard)');
           navigate('/', { replace: true });
         }
       } catch (err: any) {
+        console.error('[Auth Action Error] Registration failed:', err);
         let msg = 'Failed to create account. Please try again.';
         if (err.code === 'auth/email-already-in-use') {
           msg = 'An account with this email already exists.';
@@ -130,13 +140,17 @@ export default function Login() {
       }
     } else {
       // Sign in
+      console.log('[Auth Action] Logging in user with email:', email);
       setLoading(true);
       try {
         const cred = await loginWithEmail(email, password);
+        console.log('[Auth Action] Login successful for user:', cred.user?.uid);
         if (cred.user) {
+          console.log('[Route Navigation] Navigating to / (Dashboard)');
           navigate('/', { replace: true });
         }
       } catch (err: any) {
+        console.error('[Auth Action Error] Login failed:', err);
         let msg = 'Invalid email or password.';
         if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
           msg = 'Invalid email or password credentials.';

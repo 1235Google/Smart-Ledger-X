@@ -19,9 +19,17 @@ import {
 import config from '../../firebase-applet-config.json';
 
 // Initialize Firebase App singleton
+console.log('[Firebase] Initializing Firebase App with project:', config.projectId);
 const app = getApps().length === 0 ? initializeApp(config) : getApp();
-const db = getFirestore(app, config.firestoreDatabaseId);
+
+const firestoreDbId = (config as any).firestoreDatabaseId && (config as any).firestoreDatabaseId !== '(default)'
+  ? (config as any).firestoreDatabaseId 
+  : undefined;
+const db = firestoreDbId ? getFirestore(app, firestoreDbId) : getFirestore(app);
+console.log('[Firebase] Firestore instance initialized. Database ID:', firestoreDbId || '(default)');
+
 const auth = getAuth(app);
+console.log('[Firebase] Auth instance initialized');
 
 // Enable browser local persistence for session memory across reloads/reopens
 setPersistence(auth, browserLocalPersistence).catch((err) => {

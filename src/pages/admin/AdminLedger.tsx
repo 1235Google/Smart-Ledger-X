@@ -4,9 +4,19 @@ import { Search, Calendar, Plus, Edit2, Trash2, X, ArrowUpDown, ChevronLeft, Che
 import { useStore } from '../../context/StoreContext';
 import { Transaction } from '../../types';
 import ExportModal from '../../components/ExportModal';
+import DataStateGuard from '../../components/ui/DataStateGuard';
 
 export default function AdminLedger() {
-  const { transactions, addReceivedMoney, addSentMoney, deleteTransaction, updateTransaction } = useStore();
+  const { 
+    transactions, 
+    addReceivedMoney, 
+    addSentMoney, 
+    deleteTransaction, 
+    updateTransaction,
+    dataStatus,
+    dataError,
+    retryFetchData
+  } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState('');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
@@ -25,13 +35,7 @@ export default function AdminLedger() {
   const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
   const [formType, setFormType] = useState<'received' | 'sent'>('received');
 
-  const safeTransactions = transactions && transactions.length > 0 ? transactions : [
-    { id: 'tx-1', personName: 'Aarav Patel', amount: 15000, type: 'received', date: '2026-07-26 09:30 AM', category: 'Sales', method: 'UPI' },
-    { id: 'tx-2', personName: 'Priya Sharma', amount: 8400, type: 'received', date: '2026-07-25 02:15 PM', category: 'Services', method: 'Bank Transfer' },
-    { id: 'tx-3', personName: 'Vikram Singh', amount: 24000, type: 'received', date: '2026-07-24 05:45 PM', category: 'Consulting', method: 'Cash' },
-    { id: 'tx-4', personName: 'Neha Gupta', amount: 5000, type: 'sent', date: '2026-07-23 11:20 AM', category: 'Vendor', method: 'Card' },
-    { id: 'tx-5', personName: 'Rohan Mehta', amount: 12000, type: 'received', date: '2026-07-22 10:10 AM', category: 'Retainer', method: 'UPI' },
-  ];
+  const safeTransactions = transactions || [];
 
   // Filter ONLY completed/received transactions (exclude pending records)
   const completedEntriesOnly = safeTransactions.filter((tx: any) => {
@@ -150,8 +154,15 @@ export default function AdminLedger() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-16">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <DataStateGuard
+      status={dataStatus}
+      error={dataError}
+      onRetry={retryFetchData}
+      loadingMessage="Loading ledger entries..."
+      skeletonType="table"
+    >
+      <div className="space-y-6 max-w-7xl mx-auto pb-16">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight">Entries</h1>
           <p className="text-neutral-400 text-sm mt-1">Manage and track all ledger transaction records.</p>
@@ -549,6 +560,7 @@ export default function AdminLedger() {
         records={completedEntriesOnly}
       />
     </div>
+    </DataStateGuard>
   );
 }
 

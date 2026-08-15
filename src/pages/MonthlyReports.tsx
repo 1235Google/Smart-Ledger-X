@@ -5,6 +5,7 @@ import { useStore } from '../context/StoreContext';
 import { cn } from '../lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ReportSchedule } from '../types';
+import DataStateGuard from '../components/ui/DataStateGuard';
 
 export default function MonthlyReports() {
   const { 
@@ -15,7 +16,10 @@ export default function MonthlyReports() {
     addGeneratedReport,
     transactions,
     customers,
-    currentBalance
+    currentBalance,
+    dataStatus,
+    dataError,
+    retryFetchData
   } = useStore();
 
   const [emailInput, setEmailInput] = useState(reportSettings?.emailAddress || '');
@@ -128,8 +132,15 @@ export default function MonthlyReports() {
   };
 
   return (
-    <div className="w-full max-w-4xl space-y-6">
-      <header className="mb-8">
+    <DataStateGuard
+      status={dataStatus}
+      error={dataError}
+      onRetry={retryFetchData}
+      loadingMessage="Loading monthly reports & schedules..."
+      skeletonType="cards"
+    >
+      <div className="w-full max-w-4xl space-y-6">
+        <header className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
             Monthly Reports
           </h1>
@@ -289,6 +300,7 @@ export default function MonthlyReports() {
             </div>
           )}
         </motion.div>
-    </div>
+      </div>
+    </DataStateGuard>
   );
 }

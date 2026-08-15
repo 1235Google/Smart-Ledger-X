@@ -250,6 +250,8 @@ export interface ReminderDetails {
   isStopped: boolean;
 }
 
+export type DataLoadStatus = 'loading' | 'success' | 'error';
+
 export interface AppState {
   isSetupComplete: boolean;
   startingBalance: number;

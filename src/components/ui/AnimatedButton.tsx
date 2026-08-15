@@ -38,9 +38,9 @@ export const AnimatedButton: React.FC<AnimatedButtonProps> = ({
     const rect = buttonRef.current.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
-    // Subtle magnetic attraction
-    const offsetX = (e.clientX - centerX) * 0.12;
-    const offsetY = (e.clientY - centerY) * 0.12;
+    // Subtle magnetic attraction (restrained to ~2-3px)
+    const offsetX = (e.clientX - centerX) * 0.08;
+    const offsetY = (e.clientY - centerY) * 0.08;
     setMagneticOffset({ x: offsetX, y: offsetY });
   };
 
@@ -67,24 +67,24 @@ export const AnimatedButton: React.FC<AnimatedButtonProps> = ({
   };
 
   const sizeClasses = {
-    sm: 'px-3 py-1.5 text-xs rounded-xl gap-1.5',
+    sm: 'px-3.5 py-1.5 text-xs rounded-xl gap-1.5',
     md: 'px-5 py-2.5 text-sm rounded-2xl gap-2 font-semibold',
     lg: 'px-7 py-3.5 text-base rounded-2xl gap-2.5 font-bold',
   }[size];
 
   const variantClasses = {
     primary:
-      'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 border border-white/20 hover:shadow-blue-500/45 hover:border-white/30',
+      'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-[0_4px_20px_rgba(59,130,246,0.3),inset_0_1px_0_rgba(255,255,255,0.2)] border border-white/20 hover:shadow-[0_6px_24px_rgba(59,130,246,0.45)] hover:border-white/30',
     secondary:
-      'bg-white/10 hover:bg-white/15 text-white border border-white/10 hover:border-white/20 backdrop-blur-md shadow-lg shadow-black/20',
+      'bg-white/[0.08] hover:bg-white/[0.14] text-white border border-white/10 hover:border-white/20 backdrop-blur-md shadow-lg shadow-black/20',
     outline:
-      'bg-transparent border border-white/20 hover:border-blue-400/60 text-slate-200 hover:text-white hover:bg-white/5 hover:shadow-[0_0_15px_rgba(59,130,246,0.2)]',
+      'bg-transparent border border-white/15 hover:border-blue-400/60 text-slate-200 hover:text-white hover:bg-white/5 hover:shadow-[0_0_15px_rgba(59,130,246,0.15)]',
     danger:
-      'bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-lg shadow-rose-500/25 border border-white/20 hover:shadow-rose-500/45 hover:border-white/30',
+      'bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-[0_4px_20px_rgba(244,63,94,0.3),inset_0_1px_0_rgba(255,255,255,0.2)] border border-white/20 hover:shadow-[0_6px_24px_rgba(244,63,94,0.45)] hover:border-white/30',
     success:
-      'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-500/25 border border-white/20 hover:shadow-emerald-500/45 hover:border-white/30',
+      'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-[0_4px_20px_rgba(16,185,129,0.3),inset_0_1px_0_rgba(255,255,255,0.2)] border border-white/20 hover:shadow-[0_6px_24px_rgba(16,185,129,0.45)] hover:border-white/30',
     ghost:
-      'bg-transparent text-slate-300 hover:text-white hover:bg-white/10',
+      'bg-transparent text-slate-300 hover:text-white hover:bg-white/[0.08]',
   }[variant];
 
   return (
@@ -100,15 +100,15 @@ export const AnimatedButton: React.FC<AnimatedButtonProps> = ({
       }
       whileHover={
         !disabled && !shouldReduceMotion
-          ? { y: -2, scale: 1.02 }
+          ? { y: -1, scale: 1.015 }
           : undefined
       }
       whileTap={
         !disabled && !shouldReduceMotion
-          ? { scale: 0.95 }
+          ? { scale: 0.98 }
           : undefined
       }
-      transition={{ type: 'spring', stiffness: 450, damping: 25 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 28 }}
       onClick={handleClick}
       disabled={disabled || isLoading}
       className={cn(

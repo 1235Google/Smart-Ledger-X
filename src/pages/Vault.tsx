@@ -6,6 +6,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { X, TrendingUp, TrendingDown, Target, Shield, CreditCard, Clock, Play, BarChart2, CheckCircle, Info, Heart, Activity } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { LuxuryVaultDisplay } from '../components/Vault3D';
+import DataStateGuard from '../components/ui/DataStateGuard';
 
 interface CashEvent {
   id: number;
@@ -285,8 +286,15 @@ export default function VaultPage() {
   const pendingPayments = store.transactions.filter((t): t is PendingMoney => t.type === 'pending' && t.status === 'pending');
 
   return (
-    <div className="w-full flex flex-col gap-6 relative">
-      <header className="mb-2">
+    <DataStateGuard
+      status={store.dataStatus}
+      error={store.dataError}
+      onRetry={store.retryFetchData}
+      loadingMessage="Synchronizing vault data..."
+      skeletonType="dashboard"
+    >
+      <div className="w-full flex flex-col gap-6 relative">
+        <header className="mb-2">
         <h1 className="text-3xl font-light text-white tracking-tight">Money Vault</h1>
         <p className="text-slate-400 mt-1">Premium visual overview of your net worth</p>
       </header>
@@ -610,6 +618,7 @@ export default function VaultPage() {
           </div>
         )}
       </AnimatePresence>
-    </div>
+      </div>
+    </DataStateGuard>
   );
 }

@@ -4,9 +4,19 @@ import { Search, Calendar, Plus, Edit2, Trash2, CheckCircle2, Bell, X, ArrowUpDo
 import { useStore } from '../../context/StoreContext';
 import { Transaction } from '../../types';
 import ExportModal from '../../components/ExportModal';
+import DataStateGuard from '../../components/ui/DataStateGuard';
 
 export default function AdminPending() {
-  const { transactions, addPendingMoney, markAsReceived, deleteTransaction, updateTransaction } = useStore();
+  const { 
+    transactions, 
+    addPendingMoney, 
+    markAsReceived, 
+    deleteTransaction, 
+    updateTransaction,
+    dataStatus,
+    dataError,
+    retryFetchData
+  } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid' | 'overdue'>('all');
@@ -25,13 +35,7 @@ export default function AdminPending() {
   const [formDueDate, setFormDueDate] = useState('');
   const [formStatus, setFormStatus] = useState<'pending' | 'paid' | 'overdue'>('pending');
 
-  const rawPending = transactions && transactions.length > 0 
-    ? transactions.filter(t => t.type === 'pending')
-    : [
-        { id: 'p1', personName: 'Priya Sharma', amount: 8400, type: 'pending', status: 'pending', date: '2026-07-20 10:00 AM', dueDate: '2026-07-30' },
-        { id: 'p2', personName: 'Rajesh Verma', amount: 12500, type: 'pending', status: 'overdue', date: '2026-07-01 02:30 PM', dueDate: '2026-07-15' },
-        { id: 'p3', personName: 'Ananya Roy', amount: 4500, type: 'pending', status: 'paid', date: '2026-07-10 11:15 AM', dueDate: '2026-07-22' },
-      ];
+  const rawPending = transactions ? transactions.filter(t => t.type === 'pending') : [];
 
   // Derive status dynamically if not set
   const processStatus = (item: any): 'pending' | 'paid' | 'overdue' => {
@@ -131,8 +135,15 @@ export default function AdminPending() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-16">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <DataStateGuard
+      status={dataStatus}
+      error={dataError}
+      onRetry={retryFetchData}
+      loadingMessage="Loading pending payments..."
+      skeletonType="table"
+    >
+      <div className="space-y-6 max-w-7xl mx-auto pb-16">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight">Pending Payments</h1>
           <p className="text-neutral-400 text-sm mt-1">Track outstanding dues, due dates, payment alerts, and settlements.</p>
@@ -530,6 +541,7 @@ export default function AdminPending() {
         records={rawPending}
       />
     </div>
+    </DataStateGuard>
   );
 }
 

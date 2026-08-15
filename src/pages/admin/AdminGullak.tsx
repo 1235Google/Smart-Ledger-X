@@ -4,9 +4,18 @@ import { Search, Calendar, Plus, Edit2, Trash2, X, ArrowUpDown, Download, Filter
 import { useStore } from '../../context/StoreContext';
 import { GullakEntry } from '../../types';
 import ExportModal from '../../components/ExportModal';
+import DataStateGuard from '../../components/ui/DataStateGuard';
 
 export default function AdminGullak() {
-  const { gullakEntries, addGullakEntry, updateGullakEntry, deleteGullakEntry } = useStore();
+  const { 
+    gullakEntries, 
+    addGullakEntry, 
+    updateGullakEntry, 
+    deleteGullakEntry,
+    dataStatus,
+    dataError,
+    retryFetchData
+  } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'deposit' | 'withdrawal' | 'transfer_in' | 'transfer_out'>('all');
   const [dateFilter, setDateFilter] = useState('');
@@ -62,8 +71,15 @@ export default function AdminGullak() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-16">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <DataStateGuard
+      status={dataStatus}
+      error={dataError}
+      onRetry={retryFetchData}
+      loadingMessage="Loading Gullak entries..."
+      skeletonType="table"
+    >
+      <div className="space-y-6 max-w-7xl mx-auto pb-16">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight">Gullak Entries</h1>
           <p className="text-neutral-400 text-sm mt-1">Manage all gullak transactions and monitor balances.</p>
@@ -155,6 +171,7 @@ export default function AdminGullak() {
             title="Export Gullak Entries Report"
             records={gullakEntries}
         />
-    </div>
+      </div>
+    </DataStateGuard>
   );
 }

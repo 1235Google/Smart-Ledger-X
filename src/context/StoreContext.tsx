@@ -1,11 +1,11 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { AppState, PendingMoney, ReceivedMoney, SentMoney, Transaction, SecuritySettings, EmailSettings, EmailHistoryLog, GeneralSettings, GullakEntry, GullakSettings, UnlockedAchievement, AiRecognitionSettings, AiRecognitionHistory, PosterTemplate, Customer, ReportSettings, GeneratedReport, UserProfile, ReminderHistoryLog, SavingsGoal, SecurityLog, AutomationRule, Investment, FinanceHabit } from '../types';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import { AppState, PendingMoney, ReceivedMoney, SentMoney, Transaction, SecuritySettings, EmailSettings, EmailHistoryLog, GeneralSettings, GullakEntry, GullakSettings, UnlockedAchievement, AiRecognitionSettings, AiRecognitionHistory, PosterTemplate, Customer, ReportSettings, GeneratedReport, UserProfile, ReminderHistoryLog, SavingsGoal, SecurityLog, AutomationRule, Investment, FinanceHabit, DataLoadStatus } from '../types';
 import CryptoJS from 'crypto-js';
 import { calculateProgress, ACHIEVEMENTS } from '../lib/achievements';
 import { DEFAULT_REMINDER_TEMPLATE } from '../lib/utils';
 import { auth } from '../lib/firebase';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
-import { subscribeToState, queueStateSync, migrateLocalDataToCloud, syncUserProfile } from "../lib/cloudSync";
+import { subscribeToState, queueStateSync, migrateLocalDataToCloud, syncUserProfile, fetchUserState } from "../lib/cloudSync";
 import { createNotification } from '../lib/notificationService';
 
 const SECRET_KEY = 'smart-ledger-secure-key-2026';
@@ -72,6 +72,10 @@ interface StoreContextType extends AppState {
   totalSent: number;
   totalPending: number;
   isLoading: boolean;
+  dataStatus: DataLoadStatus;
+  dataError: string | null;
+  retryFetchData: () => Promise<void>;
+  refreshData: () => Promise<void>;
   newlyUnlocked: UnlockedAchievement | null;
   clearNewlyUnlocked: () => void;
   updateUserProfile: (profile: Partial<UserProfile>) => void;
@@ -166,8 +170,23 @@ const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AppState>(defaultState);
+  const [state, setState] = useState<AppState>(() => {
+    // Attempt instant hydration from local cache if present
+    try {
+      const saved = localStorage.getItem('smart-ledger-data');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return { ...defaultState, ...parsed };
+        }
+      }
+    } catch (e) {}
+    return defaultState;
+  });
+
   const [isLoading, setIsLoading] = useState(true);
+  const [dataStatus, setDataStatus] = useState<DataLoadStatus>('loading');
+  const [dataError, setDataError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [newlyUnlocked, setNewlyUnlocked] = useState<UnlockedAchievement | null>(null);
   const [isLocked, setIsLocked] = useState(false); // Initialized later based on settings
@@ -179,37 +198,75 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
   });
+
   const prevStateRef = React.useRef<AppState>(defaultState);
   const isRemoteUpdateRef = React.useRef<boolean>(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const activeUnsubscribeRef = useRef<(() => void) | null>(null);
 
-  // 10-second timeout safeguard to ensure loading screen never hangs indefinitely
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      setIsLoading((loading) => {
-        if (loading) {
-          console.warn('[StoreContext] 10s timeout safeguard triggered: Clearing loading screen to prevent hang.');
-          setIsDataLoaded(true);
-          return false;
-        }
-        return false;
-      });
-    }, 10000);
-    return () => clearTimeout(timeout);
+  // Manual or automatic refresh and retry helper
+  const loadUserCloudData = useCallback(async (userId: string) => {
+    if (!userId) return;
+    console.log('[StoreContext] Fetching user cloud data on demand for:', userId);
+    setDataStatus('loading');
+    setIsLoading(true);
+    setDataError(null);
+
+    try {
+      const fetched = await fetchUserState(userId);
+      if (fetched) {
+        isRemoteUpdateRef.current = true;
+        setState((prev) => {
+          const base: AppState = {
+            ...defaultState,
+            ...prev,
+            ...fetched.state,
+            transactions: fetched.transactions || [],
+          };
+          prevStateRef.current = base;
+          return base;
+        });
+        setDataStatus('success');
+        setIsDataLoaded(true);
+        setIsLoading(false);
+        try {
+          localStorage.setItem(`smart-ledger-cache-${userId}`, JSON.stringify(fetched));
+        } catch (e) {}
+      }
+    } catch (err: any) {
+      console.error('[StoreContext] On-demand cloud fetch failed:', err);
+      setDataError(err?.message || 'Unable to connect to database');
+      setDataStatus('error');
+      setIsLoading(false);
+    }
   }, []);
+
+  const retryFetchData = useCallback(async () => {
+    if (currentUser?.uid) {
+      await loadUserCloudData(currentUser.uid);
+    } else {
+      setDataStatus('success');
+      setIsLoading(false);
+    }
+  }, [currentUser, loadUserCloudData]);
+
+  const refreshData = useCallback(async () => {
+    if (currentUser?.uid) {
+      await loadUserCloudData(currentUser.uid);
+    }
+  }, [currentUser, loadUserCloudData]);
 
   useEffect(() => {
     console.log('[Auth] Attaching onAuthStateChanged listener');
-    let unsubscribeFirestore: (() => void) | undefined;
     let isSubscribed = true;
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       console.log('[Auth State Changed] Current user:', user ? `${user.uid} (${user.email})` : 'None (Signed Out)');
       if (!isSubscribed) return;
 
-      if (unsubscribeFirestore) {
-        unsubscribeFirestore();
-        unsubscribeFirestore = undefined;
+      if (activeUnsubscribeRef.current) {
+        activeUnsubscribeRef.current();
+        activeUnsubscribeRef.current = null;
       }
       
       if (user) {
@@ -218,10 +275,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         try {
           localStorage.setItem('smartledger_authenticated', 'true');
         } catch (e) {}
+
+        setDataStatus('loading');
         setIsLoading(true);
+        setDataError(null);
+
+        // Try restoring user-specific cache while waiting for remote snapshot
+        try {
+          const userCache = localStorage.getItem(`smart-ledger-cache-${user.uid}`);
+          if (userCache) {
+            const parsedCache = JSON.parse(userCache);
+            if (parsedCache) {
+              setState((prev) => ({
+                ...defaultState,
+                ...prev,
+                ...(parsedCache.state || {}),
+                transactions: parsedCache.transactions || prev.transactions || [],
+              }));
+            }
+          }
+        } catch (e) {}
 
         try {
-          // Non-blocking background migration & profile sync with timeout safety
+          // Non-blocking background migration & profile sync
           Promise.allSettled([
             migrateLocalDataToCloud(user.uid, defaultState),
             syncUserProfile(user, {
@@ -229,9 +305,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               email: user.email || undefined,
               profilePhoto: user.photoURL || undefined,
             })
-          ]).then(() => {
-            console.log('[Auth] User profile and initial migration sync completed');
-          }).catch((err) => {
+          ]).catch((err) => {
             console.warn('[Auth] Background sync warning:', err);
           });
         } catch (e) {
@@ -239,10 +313,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }
 
         try {
-          unsubscribeFirestore = subscribeToState(
+          const unsub = subscribeToState(
             user.uid, 
             (newState) => {
-              console.log('[StoreContext] Firestore state dispatched to StoreContext');
+              console.log('[StoreContext] Firestore state dispatched to StoreContext. Tx count:', newState.transactions?.length || 0);
               if (!isSubscribed) return;
               isRemoteUpdateRef.current = true;
               setState((prev) => {
@@ -257,20 +331,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
                 prevStateRef.current = merged;
                 return merged;
               });
+              setDataStatus('success');
               setIsDataLoaded(true);
               setIsLoading(false);
+              setDataError(null);
             },
             (err) => {
               console.error('[StoreContext] Firestore error callback received:', err);
               if (!isSubscribed) return;
-              setIsDataLoaded(true);
+              setDataError(err?.message || 'Database connection error');
+              setDataStatus('error');
               setIsLoading(false);
             }
           );
-        } catch (err) {
+          activeUnsubscribeRef.current = unsub;
+        } catch (err: any) {
           console.error('[StoreContext] Failed to subscribe to Firestore:', err);
           if (isSubscribed) {
-            setIsDataLoaded(true);
+            setDataError(err?.message || 'Failed to initialize database subscription');
+            setDataStatus('error');
             setIsLoading(false);
           }
         }
@@ -289,14 +368,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           }
         } catch (e) {}
 
+        setDataStatus('success');
         setIsDataLoaded(true);
         setIsLoading(false);
       }
     }, (authError) => {
       console.error('[Auth State Error]', authError);
       if (isSubscribed) {
+        setDataError(authError?.message || 'Authentication error');
+        setDataStatus('error');
         setIsLoading(false);
-        setIsDataLoaded(true);
       }
     });
 
@@ -304,16 +385,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       console.log('[Auth] Cleaning up onAuthStateChanged and Firestore subscriptions');
       isSubscribed = false;
       unsubscribe();
-      if (unsubscribeFirestore) unsubscribeFirestore();
+      if (activeUnsubscribeRef.current) {
+        activeUnsubscribeRef.current();
+        activeUnsubscribeRef.current = null;
+      }
     };
   }, []);
 
+  // Safe background synchronization guard
   useEffect(() => {
-    if (isDataLoaded) {
+    // Only queue sync if data has successfully loaded and this was a user-initiated change
+    if (isDataLoaded && dataStatus === 'success') {
       if (isRemoteUpdateRef.current) {
         // Prevent echo cycle from remote Firestore update
         isRemoteUpdateRef.current = false;
       } else if (isAuthenticated && currentUser) {
+        // Double check we are not overwriting with completely blank state
         queueStateSync(currentUser.uid, state);
       } else {
         try {
@@ -322,7 +409,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       prevStateRef.current = state;
     }
-  }, [state, isAuthenticated, currentUser, isDataLoaded]);
+  }, [state, isAuthenticated, currentUser, isDataLoaded, dataStatus]);
 
   const loginWithPin = (pin: string): boolean => {
     if (!pin || pin.length !== 4) return false;
@@ -1074,6 +1161,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       totalSent,
       totalPending,
       isLoading,
+      dataStatus,
+      dataError,
+      retryFetchData,
+      refreshData,
       newlyUnlocked,
       clearNewlyUnlocked,
       isAdminAuthenticated,

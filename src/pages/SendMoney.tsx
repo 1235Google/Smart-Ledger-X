@@ -8,9 +8,18 @@ import { SentMoney } from '../types';
 import AnimatedInput from '../components/ui/AnimatedInput';
 import AnimatedButton from '../components/ui/AnimatedButton';
 import GlassCard from '../components/ui/GlassCard';
+import DataStateGuard from '../components/ui/DataStateGuard';
 
 export default function SendMoney() {
-  const { addSentMoney, transactions, currentBalance, generalSettings } = useStore();
+  const { 
+    addSentMoney, 
+    transactions, 
+    currentBalance, 
+    generalSettings,
+    dataStatus,
+    dataError,
+    retryFetchData
+  } = useStore();
   const { showSuccess, showError } = useToast();
 
   const [personName, setPersonName] = useState('');
@@ -54,12 +63,19 @@ export default function SendMoney() {
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-      className="w-full space-y-8"
+    <DataStateGuard
+      status={dataStatus}
+      error={dataError}
+      onRetry={retryFetchData}
+      loadingMessage="Loading sent payments..."
+      skeletonType="table"
     >
+      <motion.div 
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full space-y-8"
+      >
       <header className="mb-8">
         <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
           <ArrowUpRight className="text-rose-400" size={32} />
@@ -186,5 +202,6 @@ export default function SendMoney() {
         </div>
       </div>
     </motion.div>
+    </DataStateGuard>
   );
 }

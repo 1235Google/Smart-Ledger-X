@@ -5,12 +5,16 @@ import { Clock, Calendar, ArrowUpRight, ArrowDownLeft, ShieldAlert } from 'lucid
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { endOfDay, startOfDay, format } from 'date-fns';
+import DataStateGuard from '../components/ui/DataStateGuard';
 
 export default function TimelineReplay() {
   const { 
     startingBalance, 
     transactions, 
-    generalSettings 
+    generalSettings,
+    dataStatus,
+    dataError,
+    retryFetchData
   } = useStore();
   
   const [selectedDate, setSelectedDate] = useState<string>('');
@@ -112,8 +116,15 @@ export default function TimelineReplay() {
   };
 
   return (
-    <div className="w-full space-y-8">
-      <header className="mb-10">
+    <DataStateGuard
+      status={dataStatus}
+      error={dataError}
+      onRetry={retryFetchData}
+      loadingMessage="Loading historical replay data..."
+      skeletonType="dashboard"
+    >
+      <div className="w-full space-y-8">
+        <header className="mb-10">
         <h1 className="text-3xl font-[800] tracking-[-0.03em] text-white mb-2">Timeline Replay</h1>
         <p className="text-[#8e96a4] mt-2">View your financial history exactly as it appeared on any date.</p>
       </header>
@@ -316,6 +327,7 @@ export default function TimelineReplay() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+      </div>
+    </DataStateGuard>
   );
 }

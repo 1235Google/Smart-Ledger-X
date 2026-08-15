@@ -18,6 +18,7 @@ import {
 import Confetti from 'react-confetti';
 import { useWindowSize } from 'react-use';
 import { calculateProgress, ACHIEVEMENTS, getCurrentLevel, getNextLevel } from '../lib/achievements';
+import DataStateGuard from '../components/ui/DataStateGuard';
 
 const iconMap: Record<string, React.ReactNode> = {
   medal: <Medal size={24} />, coins: <Coins size={24} />, banknote: <Banknote size={24} />,
@@ -56,7 +57,20 @@ const AnimatedCounter = ({ value, prefix = '', suffix = '' }: { value: number, p
 };
 
 export default function Gullak() {
-  const { gullakEntries, gullakSettings, addGullakEntry, updateGullakEntry, deleteGullakEntry, updateGullakSettings, unlockedAchievements, newlyUnlocked, clearNewlyUnlocked } = useStore();
+  const { 
+    gullakEntries, 
+    gullakSettings, 
+    addGullakEntry, 
+    updateGullakEntry, 
+    deleteGullakEntry, 
+    updateGullakSettings, 
+    unlockedAchievements, 
+    newlyUnlocked, 
+    clearNewlyUnlocked,
+    dataStatus,
+    dataError,
+    retryFetchData
+  } = useStore();
   const { width, height } = useWindowSize();
   
   const [activeTab, setActiveTab] = useState<'dashboard' | 'list' | 'analytics' | 'achievements' | 'settings'>('dashboard');
@@ -296,8 +310,15 @@ export default function Gullak() {
   const savingsDiff = lastMonthSavings > 0 ? ((thisMonthSavings - lastMonthSavings) / lastMonthSavings) * 100 : 100;
   
   return (
-    <div className="w-full space-y-8">
-      {progress >= 100 && <Confetti width={width} height={height} recycle={false} numberOfPieces={500} gravity={0.2} />}
+    <DataStateGuard
+      status={dataStatus}
+      error={dataError}
+      onRetry={retryFetchData}
+      loadingMessage="Loading Gullak savings..."
+      skeletonType="cards"
+    >
+      <div className="w-full space-y-8">
+        {progress >= 100 && <Confetti width={width} height={height} recycle={false} numberOfPieces={500} gravity={0.2} />}
       
       {/* Premium Hero Section */}
       <div className="relative overflow-hidden rounded-[2.5rem] p-8 md:p-10 bg-[#0f1117] border border-white/5 shadow-2xl group">
@@ -758,5 +779,6 @@ export default function Gullak() {
       </AnimatePresence>
       
     </div>
+    </DataStateGuard>
   );
 }

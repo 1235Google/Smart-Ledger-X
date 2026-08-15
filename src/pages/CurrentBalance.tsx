@@ -8,13 +8,17 @@ import BalanceCard from '../components/BalanceCard';
 import GlassCard from '../components/ui/GlassCard';
 import CountUp from '../components/ui/CountUp';
 import AnimatedButton from '../components/ui/AnimatedButton';
+import DataStateGuard from '../components/ui/DataStateGuard';
 
 export default function CurrentBalance() {
   const { 
     currentBalance, 
     startingBalance, 
     transactions,
-    generalSettings
+    generalSettings,
+    dataStatus,
+    dataError,
+    retryFetchData
   } = useStore();
 
   const { totalReceived, totalPending, totalSent, pendingCount, receivedCount } = useMemo(() => {
@@ -48,12 +52,19 @@ export default function CurrentBalance() {
   }, [transactions]);
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-      className="w-full space-y-8"
+    <DataStateGuard
+      status={dataStatus}
+      error={dataError}
+      onRetry={retryFetchData}
+      loadingMessage="Loading balance & transactions..."
+      skeletonType="cards"
     >
+      <motion.div 
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full space-y-8"
+      >
       <header className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-white mb-1">Current Balance</h1>
@@ -177,5 +188,6 @@ export default function CurrentBalance() {
         </div>
       </div>
     </motion.div>
+    </DataStateGuard>
   );
 }

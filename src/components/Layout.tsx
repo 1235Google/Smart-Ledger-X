@@ -101,24 +101,33 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-[#05060a] text-slate-200 font-sans flex relative">
-      {/* Premium Animated Aurora Background */}
+      {/* Premium Animated Atmospheric Background System */}
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden select-none">
-        <div className="absolute top-[-15%] left-[-10%] w-[50%] h-[50%] bg-blue-600/15 rounded-full blur-[150px] animate-aurora-1" />
-        <div className="absolute bottom-[-15%] right-[-10%] w-[55%] h-[55%] bg-indigo-600/15 rounded-full blur-[160px] animate-aurora-2" />
-        <div className="absolute top-[40%] right-[15%] w-[35%] h-[35%] bg-cyan-600/8 rounded-full blur-[130px] animate-pulse" style={{ animationDuration: '12s' }} />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(255,255,255,0.03)_0%,_transparent_70%)]" />
+        {/* Subtle dot matrix grid overlay for financial terminal feel */}
+        <div 
+          className="absolute inset-0 opacity-[0.035]"
+          style={{
+            backgroundImage: `radial-gradient(rgba(255, 255, 255, 0.6) 1px, transparent 1px)`,
+            backgroundSize: '32px 32px'
+          }}
+        />
+        {/* Soft 24s-30s Ambient Glow Orbs */}
+        <div className="absolute top-[-10%] left-[-8%] w-[45%] h-[45%] bg-blue-600/12 rounded-full blur-[160px] animate-aurora-1" />
+        <div className="absolute bottom-[-10%] right-[-8%] w-[50%] h-[50%] bg-indigo-600/10 rounded-full blur-[180px] animate-aurora-2" />
+        <div className="absolute top-[35%] right-[20%] w-[30%] h-[30%] bg-cyan-600/6 rounded-full blur-[140px]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(255,255,255,0.02)_0%,_transparent_75%)]" />
       </div>
 
       {/* Desktop Sidebar */}
       <motion.aside
         initial={false}
         animate={{ width: isCollapsed ? 72 : 248 }}
-        transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-        className="hidden md:flex flex-col h-screen sticky top-0 bg-[#07080f]/80 backdrop-blur-2xl border-r border-white/10 flex-shrink-0 z-20 overflow-visible select-none shadow-[4px_0_30px_rgba(0,0,0,0.6)] relative"
+        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+        className="hidden md:flex flex-col h-screen sticky top-0 bg-[#070812]/90 backdrop-blur-2xl border-r border-white/[0.08] flex-shrink-0 z-20 overflow-visible select-none shadow-[4px_0_30px_rgba(0,0,0,0.6)] relative"
         aria-label="Main Navigation"
       >
         {/* Faint Ambient Glow inside Sidebar */}
-        <div className="absolute inset-0 bg-gradient-to-b from-blue-600/10 via-indigo-600/5 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-b from-blue-600/[0.07] via-indigo-600/[0.03] to-transparent pointer-events-none" />
 
         {/* Sidebar Header */}
         <div className={cn("p-5 flex items-center relative z-10 transition-all", isCollapsed ? "justify-center flex-col gap-4" : "justify-between")}>
@@ -134,8 +143,8 @@ export default function Layout() {
               className="relative flex-shrink-0"
             >
               <motion.div 
-                animate={{ opacity: [0.25, 0.65, 0.25] }} 
-                transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
+                animate={{ opacity: [0.2, 0.5, 0.2] }} 
+                transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
                 className="absolute -inset-1 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 blur-md pointer-events-none" 
               />
               <div className="relative w-10 h-10 bg-gradient-to-br from-blue-500 via-indigo-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25 border border-white/20">
@@ -161,7 +170,7 @@ export default function Layout() {
             onClick={toggleSidebar}
             aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 flex-shrink-0 relative z-10"
+            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 flex-shrink-0 relative z-10"
           >
             {isCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
           </motion.button>
@@ -179,7 +188,7 @@ export default function Layout() {
                   "group relative flex items-center rounded-xl transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
                   isCollapsed ? "justify-center h-11 w-11 mx-auto" : "px-3.5 py-2.5 gap-3 w-full",
                   isActive 
-                    ? "text-white" 
+                    ? "text-white font-semibold" 
                     : "text-slate-400 hover:text-white"
                 )
               }
@@ -204,19 +213,16 @@ export default function Layout() {
                     />
                   )}
 
-                  {/* Radial Blue Glow on Hover */}
-                  <div className="absolute inset-0 rounded-xl bg-blue-500/10 opacity-0 group-hover:opacity-100 blur-sm transition-opacity duration-200 pointer-events-none" />
-
-                  {/* Hover background for non-active items */}
+                  {/* Subtle hover background for non-active items */}
                   {!isActive && (
-                    <div className="absolute inset-0 rounded-xl bg-blue-500/0 group-hover:bg-white/5 transition-colors duration-200" />
+                    <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
                   )}
 
-                  {/* Icon with Spring Hover & Rotation Bounce */}
+                  {/* Icon with Spring Hover */}
                   <motion.div 
-                    whileHover={{ scale: 1.12, rotate: 6 }} 
-                    whileTap={{ scale: 0.92 }}
-                    transition={{ type: 'spring', stiffness: 500, damping: 22 }}
+                    whileHover={{ scale: 1.1, rotate: 4 }} 
+                    whileTap={{ scale: 0.94 }}
+                    transition={{ type: 'spring', stiffness: 450, damping: 24 }}
                     className="relative z-10 flex items-center justify-center"
                   >
                     {isActive ? (

@@ -165,37 +165,37 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
             <Sparkles size={14} className="text-blue-400 ml-1 opacity-80" />
           </div>
 
-          <div className="text-4xl sm:text-5xl md:text-6xl font-[800] tracking-tight text-white mb-6 flex items-baseline gap-1">
+          <div className="text-4xl sm:text-5xl md:text-6xl font-[800] tracking-tight text-white mb-6 flex items-baseline gap-1 font-tabular">
             <CountUp
               value={currentBalance}
               duration={1000}
               formatter={(val) => formatCurrency(val)}
-              className="bg-gradient-to-b from-white via-slate-100 to-slate-300 bg-clip-text text-transparent"
+              className="bg-gradient-to-b from-white via-slate-100 to-slate-300 bg-clip-text text-transparent drop-shadow-sm"
             />
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <div className="bg-white/[0.05] backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
-              <p className="text-[10px] text-white/60 uppercase tracking-widest font-bold">
+            <div className="bg-white/[0.06] backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
+              <p className="text-[10px] text-white/70 uppercase tracking-[0.1em] font-bold">
                 Starting
               </p>
-              <p className="text-base font-bold text-white/90">
+              <p className="text-base font-bold text-white/95 font-tabular">
                 {formatCurrency(startingBalance)}
               </p>
             </div>
-            <div className="bg-emerald-500/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-emerald-500/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-              <p className="text-[10px] text-emerald-400 uppercase tracking-widest font-bold">
+            <div className="bg-emerald-500/[0.12] backdrop-blur-md px-4 py-2.5 rounded-2xl border border-emerald-500/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+              <p className="text-[10px] text-emerald-400 uppercase tracking-[0.1em] font-bold">
                 Total In
               </p>
-              <p className="text-base font-bold text-emerald-300">
+              <p className="text-base font-bold text-emerald-300 font-tabular">
                 +{formatCurrency(totalReceived)}
               </p>
             </div>
-            <div className="bg-rose-500/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-rose-500/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-              <p className="text-[10px] text-rose-400 uppercase tracking-widest font-bold">
+            <div className="bg-rose-500/[0.12] backdrop-blur-md px-4 py-2.5 rounded-2xl border border-rose-500/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+              <p className="text-[10px] text-rose-400 uppercase tracking-[0.1em] font-bold">
                 Total Out
               </p>
-              <p className="text-base font-bold text-rose-300">
+              <p className="text-base font-bold text-rose-300 font-tabular">
                 -{formatCurrency(totalSent)}
               </p>
             </div>

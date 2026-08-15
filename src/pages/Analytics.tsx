@@ -8,12 +8,13 @@ import { startOfDay, startOfWeek, startOfMonth, startOfYear, subMonths, isWithin
 import GlassCard from '../components/ui/GlassCard';
 import CountUp from '../components/ui/CountUp';
 import AnimatedButton from '../components/ui/AnimatedButton';
+import DataStateGuard from '../components/ui/DataStateGuard';
 
 type DateFilter = 'today' | 'week' | 'month' | 'lastMonth' | 'year' | 'all';
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
 
 export default function Analytics() {
-  const { transactions } = useStore();
+  const { transactions, dataStatus, dataError, retryFetchData } = useStore();
   const [filter, setFilter] = useState<DateFilter>('month');
 
   // AI Insights
@@ -184,12 +185,19 @@ export default function Analytics() {
   const forecast = Math.round(income * 1.1);
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-      className="w-full space-y-8"
+    <DataStateGuard
+      status={dataStatus}
+      error={dataError}
+      onRetry={retryFetchData}
+      loadingMessage="Analyzing financial metrics..."
+      skeletonType="cards"
     >
+      <motion.div 
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full space-y-8"
+      >
       <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
@@ -356,5 +364,6 @@ export default function Analytics() {
         </GlassCard>
       </motion.div>
     </motion.div>
+    </DataStateGuard>
   );
 }

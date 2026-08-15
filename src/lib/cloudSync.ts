@@ -286,6 +286,39 @@ class SyncQueueManager {
 export const queueManager = new SyncQueueManager();
 
 /**
+ * Direct fetch helper for initial data loads or manual retries
+ */
+export async function fetchUserState(userId: string): Promise<{ state: Partial<AppState>; transactions: Transaction[] } | null> {
+  if (!userId) return null;
+  try {
+    console.log('[Firestore Direct Fetch] Fetching complete state for user:', userId);
+    const stateDocRef = doc(db, 'users', userId, 'app', 'state');
+    const txCollectionRef = collection(db, 'users', userId, 'transactions');
+
+    const [stateSnap, txSnap] = await Promise.all([
+      import('firebase/firestore').then(m => m.getDoc(stateDocRef)),
+      getDocs(txCollectionRef)
+    ]);
+
+    const stateData = stateSnap.exists() ? (stateSnap.data() as Partial<AppState>) : {};
+    const transactions = txSnap.docs.map(d => d.data() as Transaction);
+    
+    transactions.sort((a, b) => {
+      const dateA = (a as any).date || (a as any).dueDate || '';
+      const dateB = (b as any).date || (b as any).dueDate || '';
+      return new Date(dateB || 0).getTime() - new Date(dateA || 0).getTime();
+    });
+
+    console.log('[Firestore Direct Fetch] Success. State loaded:', stateSnap.exists(), 'Tx count:', transactions.length);
+    return { state: stateData, transactions };
+  } catch (err) {
+    console.error('[Firestore Direct Fetch Error]', err);
+    classifyAndSetError(err, OperationType.GET, `users/${userId}`);
+    throw err;
+  }
+}
+
+/**
  * Public function to queue any state mutation to Firestore
  */
 export function queueStateSync(userId: string, state: AppState) {

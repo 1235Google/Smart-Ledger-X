@@ -83,14 +83,15 @@ export const GlassCard: React.FC<GlassCardProps> = ({
       onMouseMove={handleMouseMove}
       onClick={onClick}
       className={cn(
-        'relative overflow-hidden rounded-[2rem] bg-white/[0.04] border border-white/10 backdrop-blur-xl p-6 shadow-xl transition-all duration-300 group perspective-1000',
+        'relative overflow-hidden rounded-[2rem] bg-white/[0.035] border border-white/[0.08] backdrop-blur-2xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.4)] transition-all duration-300 group perspective-1000',
+        'hover:border-white/[0.18]',
         onClick ? 'cursor-pointer select-none' : '',
         className
       )}
       style={{
         boxShadow: isHovered
-          ? `0 24px 48px -12px ${glowColor}, 0 0 32px 0 ${glowColor}`
-          : '0 10px 30px -10px rgba(0, 0, 0, 0.5)',
+          ? `0 20px 40px -15px ${glowColor}, 0 0 25px 0 ${glowColor}, inset 0 1px 0 0 rgba(255,255,255,0.12)`
+          : '0 8px 30px -8px rgba(0, 0, 0, 0.6), inset 0 1px 0 0 rgba(255, 255, 255, 0.06)',
       }}
       {...(props as any)}
     >

@@ -91,20 +91,37 @@ export async function syncUserProfile(user: User, profileData?: Partial<UserProf
     console.log('[Firestore Write] User profile updated successfully.');
   } catch (err: any) {
     console.error('[Firestore Write Error] Failed to sync user profile:', err);
-    classifyAndSetError(err);
+    classifyAndSetError(err, OperationType.UPDATE, `users/${user.uid}/profile/info`);
   }
 }
 
 /**
  * Classify Firestore error into specific sync status
  */
-function classifyAndSetError(err: any) {
+function classifyAndSetError(
+  err: any, 
+  operationType: OperationType = OperationType.WRITE, 
+  path: string | null = null
+) {
+  const currentUid = auth.currentUser?.uid || null;
+  const authStatus = auth.currentUser ? 'authenticated' : 'unauthenticated';
+  const code = err?.code || 'unknown';
+  const message = err?.message || String(err);
+
+  console.error('[Firestore Error Diagnostic]', {
+    currentUserId: currentUid,
+    firestorePath: path,
+    authStatus,
+    operationType,
+    errorCode: code,
+    errorMessage: message,
+    timestamp: new Date().toISOString(),
+  });
+
   if (!navigator.onLine) {
     setSyncStatus('offline');
     return;
   }
-  const code = err?.code || '';
-  const message = err?.message || String(err);
 
   if (code === 'permission-denied' || message.includes('permission')) {
     setSyncStatus('permission_error');
@@ -249,7 +266,7 @@ class SyncQueueManager {
       setSyncStatus('synced');
     } catch (err: any) {
       console.error(`[Sync Queue Error] Sync failed for user ${userId}:`, err);
-      classifyAndSetError(err);
+      classifyAndSetError(err, OperationType.WRITE, `users/${userId}`);
 
       // Schedule exponential backoff retry
       this.retryAttempt++;
@@ -335,7 +352,7 @@ export const subscribeToState = (
     },
     (error) => {
       console.warn('[Firestore Read Error] State subscription error:', error);
-      classifyAndSetError(error);
+      classifyAndSetError(error, OperationType.GET, `users/${userId}/app/state`);
       isInitialStateLoaded = true;
       if (onError) {
         try { onError(error); } catch (e) { console.error(e); }
@@ -365,7 +382,7 @@ export const subscribeToState = (
     },
     (error) => {
       console.warn('[Firestore Read Error] Transactions subscription error:', error);
-      classifyAndSetError(error);
+      classifyAndSetError(error, OperationType.LIST, `users/${userId}/transactions`);
       isInitialTxLoaded = true;
       if (onError) {
         try { onError(error); } catch (e) { console.error(e); }
@@ -447,7 +464,7 @@ export async function migrateLocalDataToCloud(userId: string, defaultState: AppS
     return true;
   } catch (err) {
     console.error('[Migration Error] Data migration error:', err);
-    classifyAndSetError(err);
+    classifyAndSetError(err, OperationType.WRITE, `users/${userId}/migration`);
     return false;
   }
 }

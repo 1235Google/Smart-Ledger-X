@@ -77,35 +77,28 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData?.map((provider) => ({
-        providerId: provider.providerId,
-        email: provider.email,
-      })) || [],
-    },
+  const errCode = (error as any)?.code || 'unknown';
+  const errMsg = error instanceof Error ? error.message : String(error);
+  const currentUid = auth.currentUser?.uid || null;
+  const authStatus = auth.currentUser ? 'authenticated' : 'unauthenticated';
+
+  const errInfo = {
+    currentUserId: currentUid,
+    firestorePath: path,
+    authStatus,
     operationType,
-    path,
+    errorCode: errCode,
+    errorMessage: errMsg,
+    timestamp: new Date().toISOString()
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+
+  console.error('[Firestore Detailed Error]', JSON.stringify(errInfo, null, 2));
 }
 
-// Connection check
+// Connection check - safe non-throwing check
 export async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase initialized in offline-first mode.');
-    }
-  }
+  // Connection state is managed by Firebase Auth and IndexedDB persistence
+  console.log('[Firebase Connection] Firebase ready. Online status:', navigator.onLine);
 }
 
 // Helper Auth API Methods

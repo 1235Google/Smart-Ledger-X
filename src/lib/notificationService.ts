@@ -41,25 +41,25 @@ export interface FirestoreErrorInfo {
   };
 }
 
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData?.map(provider => ({
-        providerId: provider.providerId,
-        email: provider.email,
-      })) || []
-    },
+function logNotificationFirestoreError(
+  error: unknown, 
+  operationType: OperationType, 
+  path: string | null
+) {
+  const currentUid = auth.currentUser?.uid || null;
+  const authStatus = auth.currentUser ? 'authenticated' : 'unauthenticated';
+  const errorCode = (error as any)?.code || 'unknown';
+  const errorMessage = error instanceof Error ? error.message : String(error);
+
+  console.error('[Notification Firestore Error Diagnostic]', {
+    currentUserId: currentUid,
+    firestorePath: path,
+    authStatus,
     operationType,
-    path
-  };
-  console.error('Firestore Notification Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+    errorCode,
+    errorMessage,
+    timestamp: new Date().toISOString()
+  });
 }
 
 /**
@@ -72,7 +72,12 @@ export async function createNotification(params: {
   userId?: string;
   referenceId?: string;
 }): Promise<string | null> {
-  const targetUserId = params.userId || auth.currentUser?.uid || 'all';
+  if (!auth.currentUser) {
+    console.log('[NotificationService] Skipping notification creation: No authenticated user.');
+    return null;
+  }
+
+  const targetUserId = params.userId || auth.currentUser.uid;
   const newNotif = {
     title: params.title,
     message: params.message,
@@ -88,7 +93,7 @@ export async function createNotification(params: {
     const docRef = await addDoc(collection(db, collectionPath), newNotif);
     return docRef.id;
   } catch (err) {
-    console.warn('Could not save notification to Firestore:', err);
+    logNotificationFirestoreError(err, OperationType.CREATE, collectionPath);
     return null;
   }
 }
@@ -100,7 +105,7 @@ export function subscribeNotifications(
   userId: string,
   onData: (notifications: AppNotification[]) => void
 ): () => void {
-  if (!userId || !auth.currentUser) {
+  if (!userId || !auth.currentUser || auth.currentUser.uid !== userId) {
     onData([]);
     return () => {};
   }
@@ -150,7 +155,7 @@ export function subscribeNotifications(
       processSnapshot,
       (error) => {
         if (!auth.currentUser) return;
-        console.warn('Notification primary listener issue, trying simple fallback:', error);
+        logNotificationFirestoreError(error, OperationType.LIST, `${collectionPath}?userId=${userId}`);
         const fallbackQuery = query(
           collection(db, collectionPath),
           where('userId', '==', userId),
@@ -161,7 +166,7 @@ export function subscribeNotifications(
           processSnapshot,
           (fallbackError) => {
             if (auth.currentUser) {
-              console.warn('Notification fallback listener notice:', fallbackError);
+              logNotificationFirestoreError(fallbackError, OperationType.LIST, `${collectionPath}?userId=${userId} (fallback)`);
             }
           }
         );
@@ -173,7 +178,7 @@ export function subscribeNotifications(
       if (unsubscribeFallback) unsubscribeFallback();
     };
   } catch (error) {
-    console.error('Failed to subscribe to notifications:', error);
+    logNotificationFirestoreError(error, OperationType.LIST, collectionPath);
     return () => {};
   }
 }
@@ -182,11 +187,12 @@ export function subscribeNotifications(
  * Marks a single notification as read.
  */
 export async function markNotificationAsRead(notificationId: string): Promise<void> {
+  if (!auth.currentUser) return;
   const docPath = `notifications/${notificationId}`;
   try {
     await updateDoc(doc(db, 'notifications', notificationId), { read: true });
   } catch (error) {
-    console.warn('Could not mark notification as read:', error);
+    logNotificationFirestoreError(error, OperationType.UPDATE, docPath);
   }
 }
 
@@ -194,6 +200,7 @@ export async function markNotificationAsRead(notificationId: string): Promise<vo
  * Marks all notifications for a user as read.
  */
 export async function markAllNotificationsAsRead(userId: string): Promise<void> {
+  if (!auth.currentUser || auth.currentUser.uid !== userId) return;
   const collectionPath = 'notifications';
   try {
     const q = query(
@@ -210,7 +217,7 @@ export async function markAllNotificationsAsRead(userId: string): Promise<void> 
     });
     await batch.commit();
   } catch (error) {
-    console.warn('Could not mark all notifications as read:', error);
+    logNotificationFirestoreError(error, OperationType.UPDATE, `${collectionPath}/batch`);
   }
 }
 
@@ -218,10 +225,11 @@ export async function markAllNotificationsAsRead(userId: string): Promise<void> 
  * Deletes a notification from Firestore.
  */
 export async function deleteNotification(notificationId: string): Promise<void> {
+  if (!auth.currentUser) return;
   const docPath = `notifications/${notificationId}`;
   try {
     await deleteDoc(doc(db, 'notifications', notificationId));
   } catch (error) {
-    console.warn('Could not delete notification:', error);
+    logNotificationFirestoreError(error, OperationType.DELETE, docPath);
   }
 }

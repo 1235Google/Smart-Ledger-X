@@ -3,9 +3,8 @@ import { AppState, PendingMoney, ReceivedMoney, SentMoney, Transaction, Security
 import CryptoJS from 'crypto-js';
 import { calculateProgress, ACHIEVEMENTS } from '../lib/achievements';
 import { DEFAULT_REMINDER_TEMPLATE } from '../lib/utils';
-import { auth, db, testConnection } from '../lib/firebase';
+import { auth } from '../lib/firebase';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
 import { subscribeToState, queueStateSync, migrateLocalDataToCloud, syncUserProfile } from "../lib/cloudSync";
 import { createNotification } from '../lib/notificationService';
 
@@ -183,10 +182,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const prevStateRef = React.useRef<AppState>(defaultState);
   const isRemoteUpdateRef = React.useRef<boolean>(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
-
-  useEffect(() => {
-    testConnection().catch(() => {});
-  }, []);
 
   // 10-second timeout safeguard to ensure loading screen never hangs indefinitely
   useEffect(() => {

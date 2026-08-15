@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Search, Users, Edit3, Trash2, ShieldAlert, CheckCircle2, User, Phone, Mail, X, Wallet, ShieldCheck, Database, Calendar } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { cn } from '../../lib/utils';
-import { db } from '../../lib/firebase';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { db, auth } from '../../lib/firebase';
+import { getDoc, doc, updateDoc } from 'firebase/firestore';
 
 interface AppUser {
   uid: string;
@@ -18,7 +18,7 @@ interface AppUser {
 }
 
 export default function AdminUsers() {
-  const { transactions } = useStore();
+  const { transactions, userProfile } = useStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [users, setUsers] = useState<AppUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -27,18 +27,38 @@ export default function AdminUsers() {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const usersSnapshot = await getDocs(collection(db, 'users'));
-        const usersData = usersSnapshot.docs.map(doc => doc.data() as AppUser);
-        setUsers(usersData);
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+          setUsers([]);
+          setIsLoading(false);
+          return;
+        }
+
+        const profileDocRef = doc(db, 'users', currentUser.uid, 'profile', 'info');
+        const profileSnap = await getDoc(profileDocRef);
+        const profileData = profileSnap.exists() ? profileSnap.data() : null;
+
+        const userRecord: AppUser = {
+          uid: currentUser.uid,
+          displayName: profileData?.fullName || userProfile?.fullName || currentUser.displayName || 'Primary Account',
+          email: currentUser.email || 'user@smartledger.local',
+          photoURL: profileData?.photoURL || userProfile?.profilePhoto || currentUser.photoURL || '',
+          provider: currentUser.providerData[0]?.providerId || 'password',
+          createdAt: currentUser.metadata.creationTime || new Date().toISOString(),
+          lastLogin: currentUser.metadata.lastSignInTime || new Date().toISOString(),
+          role: 'admin'
+        };
+
+        setUsers([userRecord]);
       } catch (err: any) {
-        console.error("Error fetching users:", err);
-        setError("You do not have permission to view all users. (Admin role required)");
+        console.error("Error fetching user info:", err);
+        setError("Unable to load user records.");
       } finally {
         setIsLoading(false);
       }
     };
     fetchUsers();
-  }, []);
+  }, [userProfile]);
 
   const filteredUsers = users.filter(u => 
     (u.displayName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||

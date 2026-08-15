@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { AlertTriangle, Lock, Trash2, CheckCircle, Loader2 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { useNavigate } from 'react-router-dom';
+import { db, auth } from '../lib/firebase';
+import { collection, getDocs, doc, deleteDoc, writeBatch, query, where } from 'firebase/firestore';
 
 interface ResetDataModalProps {
   isOpen: boolean;
@@ -74,89 +76,65 @@ export default function ResetDataModal({ isOpen, onClose }: ResetDataModalProps)
 
   // Helper function to clear Firestore collections safely with batching and permission handling
   const clearFirestoreCollections = async () => {
+    const user = auth.currentUser;
+    if (!user) {
+      console.log("[DeleteAllData] No authenticated user session found. Skipping remote database deletion.");
+      return;
+    }
+
     try {
-      const win = window as any;
-      let db = win.db || win.firestore;
-      if (!db && win.firebase && typeof win.firebase.firestore === 'function') {
-        try {
-          db = win.firebase.firestore();
-        } catch (e) {
-          console.log("[DeleteAllData] Firebase instance fetch log:", e);
+      console.log("[DeleteAllData] Deleting Firestore documents for user:", user.uid);
+      const userId = user.uid;
+
+      // 1. Delete transactions subcollection
+      const txSnapshot = await getDocs(collection(db, 'users', userId, 'transactions'));
+      let batch = writeBatch(db);
+      let count = 0;
+      for (const docSnap of txSnapshot.docs) {
+        batch.delete(docSnap.ref);
+        count++;
+        if (count >= 400) {
+          await batch.commit();
+          batch = writeBatch(db);
+          count = 0;
         }
       }
 
-      if (!db) {
-        console.log("[DeleteAllData] No active Firestore database found on window context.");
-        return;
-      }
-
-      const collections = [
-        'customers',
-        'pending_payments',
-        'received_payments',
-        'sent_payments',
-        'transactions',
-        'analytics',
-        'monthly_reports',
-        'goals',
-        'savings',
-        'timeline_replay',
-        'notifications',
-        'reminder_history',
-        'ai_insight_cache',
-        'user_preferences',
-        'poster_templates',
-        'gullak_entries',
-        'email_history',
-        'user_profile'
-      ];
-
-      for (const colName of collections) {
-        try {
-          let snapshot: any = null;
-          if (typeof db.collection === 'function') {
-            snapshot = await db.collection(colName).get();
-          } else if (win.getDocs && win.collection) {
-            snapshot = await win.getDocs(win.collection(db, colName));
-          }
-
-          if (!snapshot || snapshot.empty) continue;
-
-          const docs = snapshot.docs || snapshot.documents || [];
-          let batch = typeof db.batch === 'function' ? db.batch() : null;
-          let count = 0;
-
-          for (const doc of docs) {
-            if (batch) {
-              batch.delete(doc.ref);
-              count++;
-              if (count >= 450) { // Firestore 500 limit batch
-                await batch.commit();
-                batch = db.batch();
-                count = 0;
-              }
-            } else if (doc.ref && typeof doc.ref.delete === 'function') {
-              await doc.ref.delete();
-            } else if (win.deleteDoc) {
-              await win.deleteDoc(doc.ref);
-            }
-          }
-
-          if (batch && count > 0) {
-            await batch.commit();
-          }
-        } catch (colErr: any) {
-          console.error(`[DeleteAllData] Error deleting collection ${colName}:`, colErr);
-          if (colErr?.code === 'permission-denied' || colErr?.message?.toLowerCase().includes('permission')) {
-            throw new Error(`Firestore permissions blocked deletion on collection '${colName}'. Cause: ${colErr.message}`);
-          } else {
-            throw new Error(`Failed to delete collection '${colName}': ${colErr?.message || colErr}`);
-          }
+      // 2. Delete ledger subcollection
+      const ledgerSnapshot = await getDocs(collection(db, 'users', userId, 'ledger'));
+      for (const docSnap of ledgerSnapshot.docs) {
+        batch.delete(docSnap.ref);
+        count++;
+        if (count >= 400) {
+          await batch.commit();
+          batch = writeBatch(db);
+          count = 0;
         }
       }
+
+      // 3. Delete app state and profile docs
+      batch.delete(doc(db, 'users', userId, 'app', 'state'));
+      batch.delete(doc(db, 'users', userId, 'profile', 'info'));
+      count += 2;
+
+      if (count > 0) {
+        await batch.commit();
+      }
+
+      // 4. Delete user's notifications
+      const notifsSnapshot = await getDocs(
+        query(collection(db, 'notifications'), where('userId', '==', userId))
+      );
+      if (!notifsSnapshot.empty) {
+        const notifBatch = writeBatch(db);
+        notifsSnapshot.docs.forEach((docSnap) => notifBatch.delete(docSnap.ref));
+        await notifBatch.commit();
+      }
+
+      console.log("[DeleteAllData] Successfully deleted all Firestore records for user:", userId);
     } catch (err: any) {
       console.error("[DeleteAllData] Firestore deletion error:", err);
-      throw err;
+      throw new Error(`Failed to delete remote records: ${err?.message || err}`);
     }
   };
 

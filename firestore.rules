@@ -24,9 +24,19 @@ service cloud.firestore {
       allow read, write: if isOwner(userId);
     }
 
-    // Notifications collection
+    // Notifications collection - strictly scoped to recipient or broadcast
     match /notifications/{notificationId} {
-      allow read, write: if isSignedIn();
+      allow create: if isSignedIn() && (
+        !('userId' in request.resource.data) || 
+        request.resource.data.userId == request.auth.uid || 
+        request.resource.data.userId == 'all'
+      );
+      allow read, update, delete: if isSignedIn() && (
+        !('userId' in resource.data) || 
+        resource.data.userId == request.auth.uid || 
+        resource.data.userId == 'all'
+      );
     }
   }
 }
+

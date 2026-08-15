@@ -6,7 +6,7 @@ import { DEFAULT_REMINDER_TEMPLATE } from '../lib/utils';
 import { auth, db, testConnection } from '../lib/firebase';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { subscribeToState, syncStateToCloud, migrateLocalDataToCloud, syncUserProfile } from "../lib/cloudSync";
+import { subscribeToState, queueStateSync, migrateLocalDataToCloud, syncUserProfile } from "../lib/cloudSync";
 import { createNotification } from '../lib/notificationService';
 
 const SECRET_KEY = 'smart-ledger-secure-key-2026';
@@ -181,6 +181,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   });
   const prevStateRef = React.useRef<AppState>(defaultState);
+  const isRemoteUpdateRef = React.useRef<boolean>(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   useEffect(() => {
@@ -248,6 +249,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             (newState) => {
               console.log('[StoreContext] Firestore state dispatched to StoreContext');
               if (!isSubscribed) return;
+              isRemoteUpdateRef.current = true;
               setState((prev) => {
                 const base = { ...defaultState, ...prev, ...newState };
                 const updatedProfile = {
@@ -313,10 +315,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (isDataLoaded) {
-      if (isAuthenticated && currentUser) {
-        syncStateToCloud(currentUser.uid, prevStateRef.current, state).catch(e => console.error(e));
+      if (isRemoteUpdateRef.current) {
+        // Prevent echo cycle from remote Firestore update
+        isRemoteUpdateRef.current = false;
+      } else if (isAuthenticated && currentUser) {
+        queueStateSync(currentUser.uid, state);
       } else {
-        localStorage.setItem('smart-ledger-data', JSON.stringify(state));
+        try {
+          localStorage.setItem('smart-ledger-data', JSON.stringify(state));
+        } catch (e) {}
       }
       prevStateRef.current = state;
     }

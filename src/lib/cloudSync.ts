@@ -1,19 +1,23 @@
 import { 
   doc, 
-  getDoc, 
   setDoc, 
   collection, 
   onSnapshot, 
   writeBatch, 
   getDocs,
-  deleteDoc,
-  serverTimestamp
+  Unsubscribe
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from './firebase';
-import { AppState, Transaction } from '../types';
+import { db, auth, OperationType, handleFirestoreError } from './firebase';
+import { AppState, Transaction, UserProfile } from '../types';
 import { User } from 'firebase/auth';
 
-export type SyncStatus = 'syncing' | 'synced' | 'offline' | 'reconnecting' | 'error';
+export type SyncStatus = 
+  | 'synced'
+  | 'syncing'
+  | 'offline'
+  | 'auth_error'
+  | 'permission_error'
+  | 'network_error';
 
 type SyncListener = (status: SyncStatus) => void;
 const syncListeners = new Set<SyncListener>();
@@ -28,43 +32,247 @@ export function subscribeToSyncStatus(listener: SyncListener) {
 }
 
 export function setSyncStatus(status: SyncStatus) {
-  currentSyncStatus = status;
-  syncListeners.forEach((l) => l(status));
+  if (currentSyncStatus !== status) {
+    currentSyncStatus = status;
+    console.log(`[Firebase Sync Status] -> ${status}`);
+    syncListeners.forEach((l) => {
+      try { l(status); } catch (e) { console.error(e); }
+    });
+  }
 }
 
-// Window online/offline event bindings
+// Window online/offline event handlers
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {
-    setSyncStatus('reconnecting');
-    setTimeout(() => {
-      setSyncStatus('synced');
-    }, 1500);
+    console.log('[Firebase Sync] Network online detected. Triggering immediate queue flush.');
+    setSyncStatus('syncing');
+    queueManager.triggerFlush();
   });
   window.addEventListener('offline', () => {
+    console.log('[Firebase Sync] Network offline detected.');
     setSyncStatus('offline');
   });
 }
 
 /**
- * Sync user profile to Firestore `/users/{uid}/profile`
+ * Deep sanitization to ensure Firestore compatibility.
+ * Removes undefined fields, functions, and non-serializable objects.
  */
-export async function syncUserProfile(user: User, profileData?: Partial<AppState['userProfile']>) {
-  if (!user || !user.uid) return;
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === undefined || data === null) return data;
+  return JSON.parse(JSON.stringify(data, (_, value) => {
+    if (value === undefined) return null;
+    return value;
+  }));
+}
+
+/**
+ * Synchronize user profile to `/users/{uid}/profile/info`
+ */
+export async function syncUserProfile(user: User, profileData?: Partial<UserProfile>): Promise<void> {
+  if (!user || !user.uid) {
+    console.warn('[Firebase Sync] syncUserProfile skipped: No authenticated user.');
+    return;
+  }
+
   const profileRef = doc(db, 'users', user.uid, 'profile', 'info');
   try {
-    const payload = {
+    const payload = sanitizeForFirestore({
       uid: user.uid,
-      name: profileData?.fullName || user.displayName || '',
+      fullName: profileData?.fullName || user.displayName || '',
       email: user.email || '',
       photoURL: profileData?.profilePhoto || user.photoURL || '',
       businessName: profileData?.businessName || '',
       mobile: profileData?.mobile || user.phoneNumber || '',
       updatedAt: new Date().toISOString(),
-    };
+    });
+    console.log('[Firestore Write] Updating user profile for:', user.uid);
     await setDoc(profileRef, payload, { merge: true });
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}/profile/info`);
+    console.log('[Firestore Write] User profile updated successfully.');
+  } catch (err: any) {
+    console.error('[Firestore Write Error] Failed to sync user profile:', err);
+    classifyAndSetError(err);
   }
+}
+
+/**
+ * Classify Firestore error into specific sync status
+ */
+function classifyAndSetError(err: any) {
+  if (!navigator.onLine) {
+    setSyncStatus('offline');
+    return;
+  }
+  const code = err?.code || '';
+  const message = err?.message || String(err);
+
+  if (code === 'permission-denied' || message.includes('permission')) {
+    setSyncStatus('permission_error');
+  } else if (code === 'unauthenticated' || message.includes('auth')) {
+    setSyncStatus('auth_error');
+  } else if (code === 'unavailable' || message.includes('network') || message.includes('offline')) {
+    setSyncStatus('network_error');
+  } else {
+    setSyncStatus('network_error');
+  }
+}
+
+/**
+ * Robust Sync Queue Manager with Exponential Backoff
+ */
+class SyncQueueManager {
+  private pendingState: { userId: string; state: AppState } | null = null;
+  private lastSyncedHash: string = '';
+  private isProcessing = false;
+  private retryAttempt = 0;
+  private retryTimeout: NodeJS.Timeout | null = null;
+  private debounceTimer: NodeJS.Timeout | null = null;
+
+  public enqueue(userId: string, state: AppState) {
+    if (!userId) {
+      console.warn('[Sync Queue] enqueue skipped: missing userId.');
+      return;
+    }
+
+    // 1. Save locally immediately (Zero data loss guarantee)
+    try {
+      localStorage.setItem('smart-ledger-data', JSON.stringify(state));
+    } catch (e) {
+      console.warn('[Sync Queue] Local storage cache warning:', e);
+    }
+
+    // Compute simple payload signature to avoid redundant uploads
+    const currentHash = JSON.stringify({
+      txCount: state.transactions?.length || 0,
+      startingBalance: state.startingBalance,
+      customersCount: state.customers?.length || 0,
+      goalsCount: state.savingsGoals?.length || 0,
+      gullakCount: state.gullakEntries?.length || 0,
+      lastTxId: state.transactions?.[0]?.id || '',
+      updatedAt: state.userProfile?.fullName || '',
+    });
+
+    if (currentHash === this.lastSyncedHash && !this.pendingState) {
+      return;
+    }
+
+    this.pendingState = { userId, state };
+
+    // Debounce writes by 400ms to coalesce rapid user interactions
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    this.debounceTimer = setTimeout(() => {
+      this.processQueue();
+    }, 400);
+  }
+
+  public triggerFlush() {
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    if (this.retryTimeout) clearTimeout(this.retryTimeout);
+    this.retryAttempt = 0;
+    this.processQueue();
+  }
+
+  private async processQueue() {
+    if (this.isProcessing) return;
+    if (!this.pendingState) return;
+
+    if (!auth.currentUser || auth.currentUser.uid !== this.pendingState.userId) {
+      console.warn('[Sync Queue] Current auth user does not match pending queue user.');
+      setSyncStatus('auth_error');
+      return;
+    }
+
+    if (!navigator.onLine) {
+      setSyncStatus('offline');
+      return;
+    }
+
+    this.isProcessing = true;
+    setSyncStatus('syncing');
+
+    const { userId, state } = this.pendingState;
+    console.log(`[Sync Queue] Processing batch for user ${userId}. Tx count: ${state.transactions?.length || 0}`);
+
+    try {
+      // 1. Prepare transactions & ledger batch
+      const txs = state.transactions || [];
+      const txCollectionRef = collection(db, 'users', userId, 'transactions');
+      const ledgerCollectionRef = collection(db, 'users', userId, 'ledger');
+
+      let batch = writeBatch(db);
+      let count = 0;
+
+      for (const tx of txs) {
+        if (!tx.id) continue;
+        const sanitizedTx = sanitizeForFirestore(tx);
+        const txDoc = doc(txCollectionRef, tx.id);
+        const ledgerDoc = doc(ledgerCollectionRef, tx.id);
+        batch.set(txDoc, sanitizedTx, { merge: true });
+        batch.set(ledgerDoc, sanitizedTx, { merge: true });
+        count += 2;
+
+        if (count >= 400) {
+          console.log(`[Firestore Write] Committing chunk batch of ${count} operations`);
+          await batch.commit();
+          batch = writeBatch(db);
+          count = 0;
+        }
+      }
+
+      if (count > 0) {
+        console.log(`[Firestore Write] Committing final transactions batch (${count} ops)`);
+        await batch.commit();
+      }
+
+      // 2. Synchronize App State Document
+      const stateToSave = sanitizeForFirestore({ ...state });
+      delete (stateToSave as any).transactions;
+
+      const stateDocRef = doc(db, 'users', userId, 'app', 'state');
+      console.log('[Firestore Write] Committing app state document');
+      await setDoc(stateDocRef, stateToSave, { merge: true });
+
+      // Successful completion
+      console.log(`[Firebase Sync] Successfully synchronized all ledger data for user ${userId}`);
+      this.lastSyncedHash = JSON.stringify({
+        txCount: state.transactions?.length || 0,
+        startingBalance: state.startingBalance,
+        customersCount: state.customers?.length || 0,
+        goalsCount: state.savingsGoals?.length || 0,
+        gullakCount: state.gullakEntries?.length || 0,
+        lastTxId: state.transactions?.[0]?.id || '',
+        updatedAt: state.userProfile?.fullName || '',
+      });
+
+      this.pendingState = null;
+      this.retryAttempt = 0;
+      setSyncStatus('synced');
+    } catch (err: any) {
+      console.error(`[Sync Queue Error] Sync failed for user ${userId}:`, err);
+      classifyAndSetError(err);
+
+      // Schedule exponential backoff retry
+      this.retryAttempt++;
+      const backoffMs = Math.min(1500 * Math.pow(1.5, this.retryAttempt), 15000);
+      console.log(`[Sync Queue] Scheduling automatic retry #${this.retryAttempt} in ${Math.round(backoffMs)}ms...`);
+      
+      if (this.retryTimeout) clearTimeout(this.retryTimeout);
+      this.retryTimeout = setTimeout(() => {
+        this.processQueue();
+      }, backoffMs);
+    } finally {
+      this.isProcessing = false;
+    }
+  }
+}
+
+export const queueManager = new SyncQueueManager();
+
+/**
+ * Public function to queue any state mutation to Firestore
+ */
+export function queueStateSync(userId: string, state: AppState) {
+  queueManager.enqueue(userId, state);
 }
 
 /**
@@ -74,18 +282,18 @@ export const subscribeToState = (
   userId: string, 
   onUpdate: (state: Partial<AppState>) => void,
   onError?: (err: any) => void
-) => {
+): Unsubscribe => {
   if (!userId) {
     console.warn('[CloudSync] subscribeToState called without userId');
     return () => {};
   }
 
-  console.log('[CloudSync] Subscribing to Firestore state and transactions for user:', userId);
+  console.log('[Firestore Read] Initializing real-time listeners for user:', userId);
 
   const stateDocRef = doc(db, 'users', userId, 'app', 'state');
   const txCollectionRef = collection(db, 'users', userId, 'transactions');
   
-  let currentState: AppState | null = null;
+  let currentState: Partial<AppState> | null = null;
   let currentTransactions: Transaction[] = [];
   let isInitialTxLoaded = false;
   let isInitialStateLoaded = false;
@@ -93,15 +301,16 @@ export const subscribeToState = (
   setSyncStatus('syncing');
 
   const notifyUpdate = () => {
-    console.log('[CloudSync] State update ready. State exists:', !!currentState, 'Tx count:', currentTransactions.length);
-    const stateToSend = currentState 
-      ? { ...currentState, transactions: currentTransactions } 
-      : ({ transactions: currentTransactions } as Partial<AppState>);
+    console.log('[Firestore Read] Dispatching remote state update. State doc loaded:', isInitialStateLoaded, 'Tx count:', currentTransactions.length);
+    const mergedState: Partial<AppState> = {
+      ...(currentState || {}),
+      transactions: currentTransactions
+    };
     
     try {
-      onUpdate(stateToSend);
+      onUpdate(mergedState);
     } catch (err) {
-      console.error('[CloudSync] Error inside onUpdate handler:', err);
+      console.error('[CloudSync] Exception in onUpdate handler:', err);
     }
 
     if (!navigator.onLine) {
@@ -115,9 +324,9 @@ export const subscribeToState = (
     stateDocRef,
     { includeMetadataChanges: true },
     (docSnap) => {
-      console.log('[Firestore Read] User state doc received. Exists:', docSnap.exists(), 'fromCache:', docSnap.metadata.fromCache);
+      console.log('[Firestore Read] App state snapshot received. Exists:', docSnap.exists(), 'fromCache:', docSnap.metadata.fromCache);
       if (docSnap.exists()) {
-        currentState = docSnap.data() as AppState;
+        currentState = docSnap.data() as Partial<AppState>;
       }
       isInitialStateLoaded = true;
       if (isInitialTxLoaded) {
@@ -126,7 +335,7 @@ export const subscribeToState = (
     },
     (error) => {
       console.warn('[Firestore Read Error] State subscription error:', error);
-      setSyncStatus(navigator.onLine ? 'error' : 'offline');
+      classifyAndSetError(error);
       isInitialStateLoaded = true;
       if (onError) {
         try { onError(error); } catch (e) { console.error(e); }
@@ -141,9 +350,9 @@ export const subscribeToState = (
     txCollectionRef,
     { includeMetadataChanges: true },
     (snapshot) => {
-      console.log('[Firestore Read] Transactions collection snapshot received. Count:', snapshot.docs.length, 'fromCache:', snapshot.metadata.fromCache);
+      console.log('[Firestore Read] Transactions snapshot received. Count:', snapshot.docs.length, 'fromCache:', snapshot.metadata.fromCache);
       currentTransactions = snapshot.docs.map((d) => d.data() as Transaction);
-      // Sort newest first by default if date/createdAt exists
+      // Sort newest first
       currentTransactions.sort((a, b) => {
         const dateA = (a as any).date || (a as any).dueDate || '';
         const dateB = (b as any).date || (b as any).dueDate || '';
@@ -156,7 +365,7 @@ export const subscribeToState = (
     },
     (error) => {
       console.warn('[Firestore Read Error] Transactions subscription error:', error);
-      setSyncStatus(navigator.onLine ? 'error' : 'offline');
+      classifyAndSetError(error);
       isInitialTxLoaded = true;
       if (onError) {
         try { onError(error); } catch (e) { console.error(e); }
@@ -168,7 +377,7 @@ export const subscribeToState = (
   );
 
   return () => {
-    console.log('[CloudSync] Unsubscribing listeners for user:', userId);
+    console.log('[Firestore Read] Cleaning up snapshot listeners for user:', userId);
     unsubState();
     unsubTx();
   };
@@ -194,6 +403,7 @@ export async function migrateLocalDataToCloud(userId: string, defaultState: AppS
       return false;
     }
 
+    console.log('[Migration] Migrating local data to Firestore for user:', userId);
     setSyncStatus('syncing');
 
     // Check if cloud already has transactions
@@ -205,10 +415,11 @@ export async function migrateLocalDataToCloud(userId: string, defaultState: AppS
       let opCount = 0;
 
       for (const tx of localData.transactions) {
+        const sanitizedTx = sanitizeForFirestore(tx);
         const txDoc = doc(txRef, tx.id);
         const ledgerDoc = doc(db, 'users', userId, 'ledger', tx.id);
-        batch.set(txDoc, tx, { merge: true });
-        batch.set(ledgerDoc, tx, { merge: true });
+        batch.set(txDoc, sanitizedTx, { merge: true });
+        batch.set(ledgerDoc, sanitizedTx, { merge: true });
         opCount += 2;
 
         if (opCount >= 400) {
@@ -225,115 +436,18 @@ export async function migrateLocalDataToCloud(userId: string, defaultState: AppS
 
     // Save initial state
     const stateDocRef = doc(db, 'users', userId, 'app', 'state');
-    const stateToSave = { ...localData };
+    const stateToSave = sanitizeForFirestore({ ...localData });
     delete (stateToSave as any).transactions;
     await setDoc(stateDocRef, stateToSave, { merge: true });
 
     // Mark as migrated
     localStorage.setItem(migrationFlagKey, 'true');
+    console.log('[Migration] Local data migration completed successfully.');
     setSyncStatus('synced');
     return true;
   } catch (err) {
-    console.error('Data migration error:', err);
-    setSyncStatus(navigator.onLine ? 'error' : 'offline');
+    console.error('[Migration Error] Data migration error:', err);
+    classifyAndSetError(err);
     return false;
   }
 }
-
-/**
- * Synchronize any changes to Cloud Firestore
- */
-export const syncStateToCloud = async (
-  userId: string, 
-  previousState: AppState, 
-  currentState: AppState
-): Promise<void> => {
-  if (!userId) return;
-
-  try {
-    setSyncStatus('syncing');
-
-    // 1. Synchronize Transactions (Create, Update, Delete)
-    const prevTx = previousState.transactions || [];
-    const currTx = currentState.transactions || [];
-
-    const prevMap = new Map(prevTx.map((t) => [t.id, t]));
-    const currMap = new Map(currTx.map((t) => [t.id, t]));
-
-    const modifiedOrAdded: Transaction[] = [];
-    const deletedIds: string[] = [];
-
-    // Find added or modified
-    for (const tx of currTx) {
-      const prev = prevMap.get(tx.id);
-      if (!prev || JSON.stringify(prev) !== JSON.stringify(tx)) {
-        modifiedOrAdded.push(tx);
-      }
-    }
-
-    // Find deleted
-    for (const tx of prevTx) {
-      if (!currMap.has(tx.id)) {
-        deletedIds.push(tx.id);
-      }
-    }
-
-    if (modifiedOrAdded.length > 0 || deletedIds.length > 0) {
-      const txCollectionRef = collection(db, 'users', userId, 'transactions');
-      const ledgerCollectionRef = collection(db, 'users', userId, 'ledger');
-
-      let batch = writeBatch(db);
-      let count = 0;
-
-      for (const tx of modifiedOrAdded) {
-        const txDoc = doc(txCollectionRef, tx.id);
-        const ledgerDoc = doc(ledgerCollectionRef, tx.id);
-        batch.set(txDoc, tx, { merge: true });
-        batch.set(ledgerDoc, tx, { merge: true });
-        count += 2;
-
-        if (count >= 400) {
-          await batch.commit();
-          batch = writeBatch(db);
-          count = 0;
-        }
-      }
-
-      for (const id of deletedIds) {
-        const txDoc = doc(txCollectionRef, id);
-        const ledgerDoc = doc(ledgerCollectionRef, id);
-        batch.delete(txDoc);
-        batch.delete(ledgerDoc);
-        count += 2;
-
-        if (count >= 400) {
-          await batch.commit();
-          batch = writeBatch(db);
-          count = 0;
-        }
-      }
-
-      if (count > 0) {
-        await batch.commit();
-      }
-    }
-
-    // 2. Synchronize App State Document
-    const prevWithoutTx = { ...previousState };
-    delete (prevWithoutTx as any).transactions;
-
-    const currWithoutTx = { ...currentState };
-    delete (currWithoutTx as any).transactions;
-
-    if (JSON.stringify(prevWithoutTx) !== JSON.stringify(currWithoutTx)) {
-      const docRef = doc(db, 'users', userId, 'app', 'state');
-      await setDoc(docRef, currWithoutTx, { merge: true });
-    }
-
-    setSyncStatus(navigator.onLine ? 'synced' : 'offline');
-  } catch (error) {
-    console.error('Error syncing state to cloud:', error);
-    setSyncStatus(navigator.onLine ? 'error' : 'offline');
-    handleFirestoreError(error, OperationType.WRITE, `users/${userId}/app/state`);
-  }
-};

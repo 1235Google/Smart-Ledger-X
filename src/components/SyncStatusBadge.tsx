@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Cloud, CloudOff, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { Cloud, CloudOff, RefreshCw, CheckCircle2, AlertCircle, ShieldAlert, WifiOff } from 'lucide-react';
 import { subscribeToSyncStatus, SyncStatus } from '../lib/cloudSync';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -11,7 +11,14 @@ export default function SyncStatusBadge({ className }: { className?: string }) {
     return subscribeToSyncStatus(setStatus);
   }, []);
 
-  const config = {
+  const configMap: Record<SyncStatus, {
+    icon: any;
+    label: string;
+    color: string;
+    bg: string;
+    dot: string;
+    animate: boolean;
+  }> = {
     synced: {
       icon: CheckCircle2,
       label: 'Synced',
@@ -23,37 +30,46 @@ export default function SyncStatusBadge({ className }: { className?: string }) {
     syncing: {
       icon: RefreshCw,
       label: 'Syncing...',
-      color: 'text-blue-400',
-      bg: 'bg-blue-500/10 border-blue-500/20',
-      dot: 'bg-blue-400 animate-ping',
-      animate: true,
-    },
-    reconnecting: {
-      icon: RefreshCw,
-      label: 'Reconnecting...',
       color: 'text-amber-400',
       bg: 'bg-amber-500/10 border-amber-500/20',
-      dot: 'bg-amber-400 animate-pulse',
+      dot: 'bg-amber-400 animate-ping',
       animate: true,
     },
     offline: {
-      icon: CloudOff,
-      label: 'Offline (Cached)',
-      color: 'text-slate-400',
-      bg: 'bg-slate-500/10 border-slate-500/20',
-      dot: 'bg-slate-400',
-      animate: false,
-    },
-    error: {
-      icon: CloudOff,
-      label: 'Sync Retry...',
+      icon: WifiOff,
+      label: 'Offline',
       color: 'text-rose-400',
       bg: 'bg-rose-500/10 border-rose-500/20',
       dot: 'bg-rose-400',
       animate: false,
     },
-  }[status];
+    auth_error: {
+      icon: ShieldAlert,
+      label: 'Auth Error',
+      color: 'text-rose-400',
+      bg: 'bg-rose-500/10 border-rose-500/20',
+      dot: 'bg-rose-400',
+      animate: false,
+    },
+    permission_error: {
+      icon: AlertCircle,
+      label: 'Permission Error',
+      color: 'text-rose-400',
+      bg: 'bg-rose-500/10 border-rose-500/20',
+      dot: 'bg-rose-400',
+      animate: false,
+    },
+    network_error: {
+      icon: CloudOff,
+      label: 'Network Error',
+      color: 'text-rose-400',
+      bg: 'bg-rose-500/10 border-rose-500/20',
+      dot: 'bg-rose-400',
+      animate: false,
+    },
+  };
 
+  const config = configMap[status] || configMap.synced;
   const Icon = config.icon;
 
   return (
@@ -69,7 +85,7 @@ export default function SyncStatusBadge({ className }: { className?: string }) {
           config.bg,
           className
         )}
-        title={`Cloud Firestore: ${config.label}`}
+        title={`Cloud Firestore Status: ${config.label}`}
       >
         <span className="relative flex h-2 w-2">
           <span className={cn('relative inline-flex rounded-full h-2 w-2', config.dot)} />

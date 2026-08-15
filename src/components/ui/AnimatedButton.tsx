@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { cn } from '../../lib/utils';
 
@@ -28,16 +28,36 @@ export const AnimatedButton: React.FC<AnimatedButtonProps> = ({
   ...props
 }) => {
   const shouldReduceMotion = useReducedMotion();
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const [ripples, setRipples] = useState<Ripple[]>([]);
+  const [isHovered, setIsHovered] = useState(false);
+  const [magneticOffset, setMagneticOffset] = useState({ x: 0, y: 0 });
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (disabled || isLoading || shouldReduceMotion || !buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    // Subtle magnetic attraction
+    const offsetX = (e.clientX - centerX) * 0.12;
+    const offsetY = (e.clientY - centerY) * 0.12;
+    setMagneticOffset({ x: offsetX, y: offsetY });
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovered(false);
+    setMagneticOffset({ x: 0, y: 0 });
+  };
 
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     if (disabled || isLoading) return;
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    setRipples((prev) => [...prev, { x, y, id: Date.now() }]);
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      setRipples((prev) => [...prev, { x, y, id: Date.now() }]);
+    }
 
     if (onClick) onClick(e);
   };
@@ -54,49 +74,63 @@ export const AnimatedButton: React.FC<AnimatedButtonProps> = ({
 
   const variantClasses = {
     primary:
-      'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 border border-white/20 hover:shadow-blue-500/40',
+      'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 border border-white/20 hover:shadow-blue-500/45 hover:border-white/30',
     secondary:
-      'bg-white/10 hover:bg-white/15 text-white border border-white/10 backdrop-blur-md',
+      'bg-white/10 hover:bg-white/15 text-white border border-white/10 hover:border-white/20 backdrop-blur-md shadow-lg shadow-black/20',
     outline:
-      'bg-transparent border border-white/20 hover:border-blue-400/50 text-slate-200 hover:text-white hover:bg-white/5',
+      'bg-transparent border border-white/20 hover:border-blue-400/60 text-slate-200 hover:text-white hover:bg-white/5 hover:shadow-[0_0_15px_rgba(59,130,246,0.2)]',
     danger:
-      'bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-lg shadow-rose-500/25 border border-white/20 hover:shadow-rose-500/40',
+      'bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-lg shadow-rose-500/25 border border-white/20 hover:shadow-rose-500/45 hover:border-white/30',
     success:
-      'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-500/25 border border-white/20 hover:shadow-emerald-500/40',
+      'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-500/25 border border-white/20 hover:shadow-emerald-500/45 hover:border-white/30',
     ghost:
       'bg-transparent text-slate-300 hover:text-white hover:bg-white/10',
   }[variant];
 
   return (
     <motion.button
+      ref={buttonRef}
+      onMouseMove={handleMouseMove}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={handleMouseLeave}
+      animate={
+        !disabled && !shouldReduceMotion
+          ? { x: magneticOffset.x, y: magneticOffset.y }
+          : { x: 0, y: 0 }
+      }
       whileHover={
         !disabled && !shouldReduceMotion
-          ? { y: -2, scale: 1.01 }
+          ? { y: -2, scale: 1.02 }
           : undefined
       }
       whileTap={
         !disabled && !shouldReduceMotion
-          ? { scale: 0.96 }
+          ? { scale: 0.95 }
           : undefined
       }
       transition={{ type: 'spring', stiffness: 450, damping: 25 }}
       onClick={handleClick}
       disabled={disabled || isLoading}
       className={cn(
-        'relative overflow-hidden inline-flex items-center justify-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed select-none',
+        'relative overflow-hidden inline-flex items-center justify-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed select-none group',
         sizeClasses,
         variantClasses,
         className
       )}
       {...(props as any)}
     >
+      {/* Light Sheen Sweep Effect on Hover */}
+      {!disabled && !shouldReduceMotion && (
+        <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+      )}
+
       {/* Ripple elements */}
       {ripples.map((ripple) => (
         <motion.span
           key={ripple.id}
-          initial={{ scale: 0, opacity: 0.4 }}
-          animate={{ scale: 3, opacity: 0 }}
-          transition={{ duration: 0.6, ease: 'easeOut' }}
+          initial={{ scale: 0, opacity: 0.45 }}
+          animate={{ scale: 3.5, opacity: 0 }}
+          transition={{ duration: 0.65, ease: 'easeOut' }}
           onAnimationComplete={() => removeRipple(ripple.id)}
           className="absolute bg-white/40 rounded-full pointer-events-none -translate-x-1/2 -translate-y-1/2"
           style={{
@@ -111,10 +145,16 @@ export const AnimatedButton: React.FC<AnimatedButtonProps> = ({
       {isLoading ? (
         <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-1.5" />
       ) : icon ? (
-        <span className="shrink-0">{icon}</span>
+        <motion.span 
+          className="shrink-0"
+          animate={isHovered ? { scale: 1.1 } : { scale: 1 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 20 }}
+        >
+          {icon}
+        </motion.span>
       ) : null}
 
-      <span className="relative z-10 whitespace-nowrap">{children}</span>
+      <span className="relative z-10 whitespace-nowrap font-semibold">{children}</span>
     </motion.button>
   );
 };

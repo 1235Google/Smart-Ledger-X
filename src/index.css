@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
@@ -18,9 +18,8 @@
 .animate-spin-slow { animation: spin 10s linear infinite; }
 
 @keyframes shimmer {
-  100% {
-    transform: translateX(100%);
-  }
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 @keyframes pulseGlowGreen {
@@ -33,15 +32,50 @@
   50% { box-shadow: 0 0 35px rgba(244, 63, 94, 0.6); }
 }
 
+@keyframes aurora-1 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); opacity: 0.15; }
+  50% { transform: translate(30px, -20px) scale(1.1); opacity: 0.25; }
+}
+
+@keyframes aurora-2 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); opacity: 0.12; }
+  50% { transform: translate(-25px, 25px) scale(1.15); opacity: 0.22; }
+}
+
+@keyframes float-subtle {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-4px); }
+}
+
+.animate-aurora-1 {
+  animation: aurora-1 12s ease-in-out infinite;
+}
+
+.animate-aurora-2 {
+  animation: aurora-2 15s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float-subtle 4s ease-in-out infinite;
+}
+
 body {
   font-family: var(--font-sans);
   background-color: #05060a;
   color: #e2e8f0;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 html {
   overflow-x: hidden;
+  scroll-behavior: smooth;
+}
+
+::selection {
+  background: rgba(59, 130, 246, 0.35);
+  color: #ffffff;
 }
 
 /* Custom 4px Sidebar Scrollbar */

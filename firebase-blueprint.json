@@ -7,28 +7,58 @@
       "properties": {
         "fullName": { "type": "string" },
         "email": { "type": "string" },
-        "businessName": { "type": "string" }
+        "photoURL": { "type": "string" },
+        "businessName": { "type": "string" },
+        "mobile": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
       }
     },
-    "Transaction": {
-      "title": "Transaction",
-      "description": "Financial transaction",
+    "LedgerEntry": {
+      "title": "LedgerEntry",
+      "description": "Ledger transaction entry",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "amount": { "type": "number" },
-        "type": { "type": "string" }
+        "type": { "type": "string" },
+        "partyName": { "type": "string" },
+        "date": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string" },
+        "paymentMode": { "type": "string" },
+        "notes": { "type": "string" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "AppState": {
+      "title": "AppState",
+      "description": "User app configuration and state store",
+      "type": "object",
+      "properties": {
+        "startingBalance": { "type": "number" },
+        "isSetupComplete": { "type": "boolean" },
+        "userProfile": { "$ref": "#/entities/UserProfile" }
       }
     }
   },
   "firestore": {
     "/users/{uid}/profile": {
       "schema": "UserProfile",
-      "description": "User profile"
+      "description": "User profile document"
+    },
+    "/users/{uid}/ledger/{entryId}": {
+      "schema": "LedgerEntry",
+      "description": "User ledger entries"
     },
     "/users/{uid}/transactions/{transactionId}": {
-      "schema": "Transaction",
-      "description": "User transactions"
+      "schema": "LedgerEntry",
+      "description": "User transaction records"
+    },
+    "/users/{uid}/app/state": {
+      "schema": "AppState",
+      "description": "User state synchronization document"
     }
   }
 }

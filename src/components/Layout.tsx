@@ -21,6 +21,7 @@ import { cn } from '../lib/utils';
 
 import NotificationDropdown, { NotificationDropdownRef } from './NotificationDropdown';
 import UserProfileDropdown from './UserProfileDropdown';
+import SyncStatusBadge from './SyncStatusBadge';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
@@ -100,10 +101,12 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-[#05060a] text-slate-200 font-sans flex relative">
-      {/* Premium Animated Background */}
-      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/15 rounded-full blur-[140px] animate-pulse" style={{ animationDuration: '8s' }} />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-600/15 rounded-full blur-[140px] animate-pulse" style={{ animationDuration: '10s', animationDelay: '1s' }} />
+      {/* Premium Animated Aurora Background */}
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden select-none">
+        <div className="absolute top-[-15%] left-[-10%] w-[50%] h-[50%] bg-blue-600/15 rounded-full blur-[150px] animate-aurora-1" />
+        <div className="absolute bottom-[-15%] right-[-10%] w-[55%] h-[55%] bg-indigo-600/15 rounded-full blur-[160px] animate-aurora-2" />
+        <div className="absolute top-[40%] right-[15%] w-[35%] h-[35%] bg-cyan-600/8 rounded-full blur-[130px] animate-pulse" style={{ animationDuration: '12s' }} />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(255,255,255,0.03)_0%,_transparent_70%)]" />
       </div>
 
       {/* Desktop Sidebar */}
@@ -269,6 +272,7 @@ export default function Layout() {
           </div>
 
           <div className="flex items-center gap-2">
+            <SyncStatusBadge />
             <NotificationDropdown ref={mobileNotifRef} />
             <UserProfileDropdown onOpenNotifications={() => mobileNotifRef.current?.open()} />
           </div>
@@ -343,6 +347,7 @@ export default function Layout() {
         {/* Desktop Header */}
         <header className="hidden md:flex h-20 items-center justify-end px-8 border-b border-white/5 bg-[#05060a]/80 backdrop-blur-md flex-shrink-0 sticky top-0 z-30">
           <div className="flex items-center gap-3">
+            <SyncStatusBadge />
             <NotificationDropdown ref={desktopNotifRef} />
             <UserProfileDropdown onOpenNotifications={() => desktopNotifRef.current?.open()} />
           </div>

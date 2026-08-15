@@ -3,10 +3,10 @@ import { AppState, PendingMoney, ReceivedMoney, SentMoney, Transaction, Security
 import CryptoJS from 'crypto-js';
 import { calculateProgress, ACHIEVEMENTS } from '../lib/achievements';
 import { DEFAULT_REMINDER_TEMPLATE } from '../lib/utils';
-import { auth, db } from '../lib/firebase';
+import { auth, db, testConnection } from '../lib/firebase';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { subscribeToState, syncStateToCloud } from "../lib/cloudSync";
+import { subscribeToState, syncStateToCloud, migrateLocalDataToCloud, syncUserProfile } from "../lib/cloudSync";
 import { createNotification } from '../lib/notificationService';
 
 const SECRET_KEY = 'smart-ledger-secure-key-2026';
@@ -184,6 +184,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   useEffect(() => {
+    testConnection().catch(() => {});
+  }, []);
+
+  useEffect(() => {
     let unsubscribeFirestore: (() => void) | undefined;
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
@@ -196,10 +200,30 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           localStorage.setItem('smartledger_authenticated', 'true');
         } catch (e) {}
         setIsLoading(true);
+
+        // Safe initial migration of local storage data if user is signing in for the first time
+        await migrateLocalDataToCloud(user.uid, defaultState);
+
+        // Sync user profile data to /users/{uid}/profile
+        await syncUserProfile(user, {
+          fullName: user.displayName || undefined,
+          email: user.email || undefined,
+          profilePhoto: user.photoURL || undefined,
+        });
         
         unsubscribeFirestore = subscribeToState(user.uid, (newState) => {
-          setState(newState);
-          prevStateRef.current = newState;
+          setState((prev) => {
+            // Keep userProfile email/name synchronized if coming from Auth
+            const updatedProfile = {
+              ...newState.userProfile,
+              email: user.email || newState.userProfile?.email || prev.userProfile?.email,
+              fullName: newState.userProfile?.fullName || user.displayName || prev.userProfile?.fullName,
+              profilePhoto: newState.userProfile?.profilePhoto || user.photoURL || prev.userProfile?.profilePhoto,
+            };
+            const merged = { ...newState, userProfile: updatedProfile };
+            prevStateRef.current = merged;
+            return merged;
+          });
           setIsDataLoaded(true);
           setIsLoading(false);
         });

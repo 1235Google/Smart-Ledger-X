@@ -34,6 +34,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
   const [pulseState, setPulseState] = useState<'increase' | 'decrease' | null>(null);
   const [floatingPills, setFloatingPills] = useState<FloatingPill[]>([]);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [tilt, setTilt] = useState({ rx: 0, ry: 0 });
   const [isHovered, setIsHovered] = useState(false);
 
   // Monitor balance changes for green/red flash and floating pill trigger
@@ -67,10 +68,22 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!cardRef.current) return;
     const rect = cardRef.current.getBoundingClientRect();
-    setMousePos({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    });
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setMousePos({ x, y });
+
+    if (!shouldReduceMotion) {
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      const rx = ((y - centerY) / centerY) * -3.5;
+      const ry = ((x - centerX) / centerX) * 3.5;
+      setTilt({ rx, ry });
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovered(false);
+    setTilt({ rx: 0, ry: 0 });
   };
 
   return (
@@ -80,17 +93,19 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
       animate={{
         opacity: 1,
         y: 0,
+        rotateX: isHovered ? tilt.rx : 0,
+        rotateY: isHovered ? tilt.ry : 0,
         scale: pulseState ? [1, 1.025, 1] : 1,
       }}
       transition={
         pulseState
           ? { duration: 0.6, ease: 'easeInOut' }
-          : { type: 'spring', stiffness: 350, damping: 25 }
+          : { type: 'spring', stiffness: 380, damping: 26 }
       }
       onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseLeave={handleMouseLeave}
       onMouseMove={handleMouseMove}
-      className={`relative p-8 rounded-[2rem] border overflow-hidden backdrop-blur-2xl transition-all duration-300 group select-none shadow-2xl ${
+      className={`relative p-8 rounded-[2rem] border overflow-hidden backdrop-blur-2xl transition-all duration-300 group select-none shadow-2xl perspective-1000 ${
         pulseState === 'increase'
           ? 'border-emerald-500/60 bg-gradient-to-br from-[#0B1026] via-[#10322b] to-[#04422e] shadow-[0_0_50px_rgba(16,185,129,0.35)] animate-[pulseGlowGreen_1.2s_ease-in-out_infinite]'
           : pulseState === 'decrease'

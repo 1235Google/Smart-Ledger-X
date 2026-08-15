@@ -1,12 +1,11 @@
 {
-  "projectId": "sound-plane-6f4nj",
-  "appId": "1:344948542072:web:a23bc2b9d416cf748bbb8d",
-  "apiKey": "AIzaSyBG6K_bapxBVBbH10jh7qBoRImGiIii--E",
-  "authDomain": "sound-plane-6f4nj.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-remixsmartledger-203e7f93-0745-42a5-b0bc-6dd0e2dc9049",
-  "storageBucket": "sound-plane-6f4nj.firebasestorage.app",
-  "messagingSenderId": "344948542072",
+  "projectId": "studio-3200340687-9f052",
+  "appId": "1:747165304055:web:52a58cce6ab57601803ff2",
+  "apiKey": "AIzaSyBGtChtK6JEwE7gTfSSQUkv1JD7px0Bep0",
+  "authDomain": "studio-3200340687-9f052.firebaseapp.com",
+  "storageBucket": "studio-3200340687-9f052.firebasestorage.app",
+  "messagingSenderId": "747165304055",
   "measurementId": "",
-  "oAuthClientId": "344948542072-f22ar7cnbv2o5kvdlij0mutsifnm7l63.apps.googleusercontent.com",
+  "oAuthClientId": "",
   "recaptchaSiteKey": ""
 }

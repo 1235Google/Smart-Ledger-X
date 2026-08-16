@@ -1,3 +1,4 @@
+import { getStorage } from 'firebase/storage';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
   getFirestore, 
@@ -30,6 +31,9 @@ console.log('[Firebase] Firestore instance initialized. Database ID:', firestore
 
 const auth = getAuth(app);
 console.log('[Firebase] Auth instance initialized');
+
+const storage = getStorage(app);
+console.log('[Firebase] Storage instance initialized');
 
 // Enable browser local persistence for session memory across reloads/reopens
 setPersistence(auth, browserLocalPersistence).catch((err) => {
@@ -122,4 +126,4 @@ export async function logoutUser() {
   return await signOut(auth);
 }
 
-export { app, db, auth };
+export { app, db, auth, storage };

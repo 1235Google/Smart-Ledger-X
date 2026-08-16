@@ -19,6 +19,7 @@ import Confetti from 'react-confetti';
 import { useWindowSize } from 'react-use';
 import { calculateProgress, ACHIEVEMENTS, getCurrentLevel, getNextLevel } from '../lib/achievements';
 import DataStateGuard from '../components/ui/DataStateGuard';
+import CountUp from '../components/ui/CountUp';
 
 const iconMap: Record<string, React.ReactNode> = {
   medal: <Medal size={24} />, coins: <Coins size={24} />, banknote: <Banknote size={24} />,
@@ -28,32 +29,6 @@ const iconMap: Record<string, React.ReactNode> = {
   'book-open': <BookOpen size={24} />, archive: <Archive size={24} />, user: <User size={24} />,
   users: <Users size={24} />, star: <Star size={24} />, target: <Target size={24} />,
   zap: <Zap size={24} />, award: <Award size={24} />, trophy: <Trophy size={24} />
-};
-
-const AnimatedCounter = ({ value, prefix = '', suffix = '' }: { value: number, prefix?: string, suffix?: string }) => {
-  const [displayValue, setDisplayValue] = useState(0);
-  
-  useEffect(() => {
-    let start = 0;
-    if (start === value) return;
-    const duration = 1000;
-    const incrementTime = 20;
-    const steps = duration / incrementTime;
-    const increment = (value - start) / steps;
-    
-    const timer = setInterval(() => {
-      start += increment;
-      if (start >= value) {
-        setDisplayValue(value);
-        clearInterval(timer);
-      } else {
-        setDisplayValue(Math.floor(start));
-      }
-    }, incrementTime);
-    return () => clearInterval(timer);
-  }, [value]);
-
-  return <span>{prefix}{displayValue.toLocaleString('en-IN')}{suffix}</span>;
 };
 
 export default function Gullak() {
@@ -107,8 +82,8 @@ export default function Gullak() {
   }, [gullakEntries, totalSavings]);
 
   const goal = gullakSettings?.monthlyGoal || 1;
-  const progress = Math.min((thisMonthSavings / goal) * 100, 100);
-  const remainingGoal = Math.max(goal - thisMonthSavings, 0);
+  const progress = Math.min((totalSavings / goal) * 100, 100);
+  const remainingGoal = Math.max(goal - totalSavings, 0);
 
   const daysLeftInMonth = useMemo(() => {
     const now = new Date();
@@ -321,66 +296,141 @@ export default function Gullak() {
         {progress >= 100 && <Confetti width={width} height={height} recycle={false} numberOfPieces={500} gravity={0.2} />}
       
       {/* Premium Hero Section */}
-      <div className="relative overflow-hidden rounded-[2.5rem] p-8 md:p-10 bg-[#0f1117] border border-white/5 shadow-2xl group">
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-transparent opacity-50" />
-        <div className="absolute -inset-[1px] bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-[2.5rem] opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-md" />
+      <div className="relative overflow-hidden rounded-[2.5rem] p-8 md:p-12 bg-[#0A0B10] border border-white/5 shadow-2xl group">
+        {/* Background Mesh & Ambient Glow */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/20 via-[#0A0B10] to-[#0A0B10] opacity-80" />
+        <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-purple-500/10 blur-[100px] rounded-full pointer-events-none" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-indigo-500/5 blur-[120px] rounded-[100%] pointer-events-none" />
         
-        <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
-          <div className="space-y-6 flex-1">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-lg shadow-indigo-500/20">
-                <PiggyBank className="text-white" size={24} />
+        {/* Subtle Floating Particles */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          {[...Array(6)].map((_, i) => (
+            <motion.div
+              key={i}
+              className="absolute text-white/5 font-serif text-2xl select-none"
+              initial={{ 
+                x: Math.random() * 100 + "%", 
+                y: Math.random() * 100 + "%", 
+                opacity: 0,
+                scale: 0.5,
+                rotate: 0
+              }}
+              animate={{ 
+                y: [null, Math.random() * -100 - 50],
+                opacity: [0, 0.4, 0],
+                scale: [0.5, 1, 0.5],
+                rotate: 360
+              }}
+              transition={{
+                duration: Math.random() * 10 + 15,
+                repeat: Infinity,
+                ease: "linear",
+                delay: Math.random() * 10
+              }}
+            >
+              ₹
+            </motion.div>
+          ))}
+        </div>
+
+        <div className="absolute -inset-[1px] bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-[2.5rem] opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-md pointer-events-none" />
+        
+        <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-12 pr-0 lg:pr-8">
+          <div className="space-y-10 flex-1">
+            <div className="flex items-center gap-4">
+              <div className="p-3.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-[0_0_30px_rgba(99,102,241,0.3)] border border-white/10 relative overflow-hidden group-hover:scale-105 transition-transform duration-500">
+                <div className="absolute inset-0 bg-white/20 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <PiggyBank className="text-white relative z-10" size={26} />
               </div>
               <h1 className="text-2xl font-bold text-white tracking-tight">Gullak Savings</h1>
             </div>
             
-            <div>
-              <p className="text-slate-400 font-medium tracking-wide text-sm uppercase mb-2">Current Savings</p>
-              <div className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 tracking-tight">
-                <AnimatedCounter prefix="₹" value={totalSavings} />
+            <div className="relative">
+              <p className="text-slate-400 font-medium tracking-[0.2em] text-[11px] uppercase mb-4 flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+                Current Savings
+              </p>
+              <div className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white via-slate-200 to-slate-500 tracking-tight flex items-baseline gap-1 relative group cursor-default w-fit">
+                <CountUp prefix="₹" value={totalSavings} />
+                
+                {/* Floating Coins on Hover */}
+                <div className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300 overflow-visible z-50">
+                  {[...Array(5)].map((_, i) => (
+                    <motion.div
+                      key={i}
+                      className="absolute text-amber-400"
+                      initial={{ opacity: 0, y: 10, x: 0 }}
+                      animate={{ 
+                        opacity: [0, 1, 0],
+                        y: [-10, -60],
+                        x: [(i - 2) * 15, (i - 2) * 35],
+                        rotate: [0, Math.random() * 360]
+                      }}
+                      transition={{
+                        duration: 1.5,
+                        repeat: Infinity,
+                        delay: i * 0.2,
+                        ease: "easeOut"
+                      }}
+                      style={{
+                        left: '50%',
+                        top: '50%',
+                        marginLeft: '-12px',
+                        marginTop: '-12px',
+                        filter: 'drop-shadow(0 0 10px rgba(251,191,36,0.6))'
+                      }}
+                    >
+                      <Coins size={24} />
+                    </motion.div>
+                  ))}
+                </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-4 py-2 rounded-xl backdrop-blur-md">
-                <TrendingUp size={18} className="text-emerald-400" />
-                <span className="text-emerald-400 font-semibold">+₹{todaySavings.toLocaleString('en-IN')} Today</span>
-              </div>
-              <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 px-4 py-2 rounded-xl backdrop-blur-md">
-                <Flame size={18} className="text-amber-400" />
-                <span className="text-amber-400 font-semibold">{savingsStreak} Day Streak</span>
-              </div>
-              <div className="flex items-center gap-2 bg-purple-500/10 border border-purple-500/20 px-4 py-2 rounded-xl backdrop-blur-md">
-                <Sparkles size={18} className="text-purple-400" />
-                <span className="text-purple-400 font-semibold">AI On Track</span>
-              </div>
+            <div className="flex flex-wrap items-center gap-3">
+              {[
+                { icon: TrendingUp, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", shadow: "hover:shadow-[0_0_15px_rgba(16,185,129,0.2)]", label: `+₹${todaySavings.toLocaleString('en-IN')} Today` },
+                { icon: Flame, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", shadow: "hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]", label: `${savingsStreak} Day Streak` },
+                { icon: Sparkles, color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/20", shadow: "hover:shadow-[0_0_15px_rgba(168,85,247,0.2)]", label: "AI On Track" }
+              ].map((badge, idx) => (
+                <div key={idx} className={`flex items-center gap-2 ${badge.bg} border ${badge.border} px-4 py-2.5 rounded-xl backdrop-blur-md transition-all duration-300 hover:-translate-y-1 ${badge.shadow} cursor-default`}>
+                  <badge.icon size={16} className={badge.color} />
+                  <span className={`${badge.color} text-[13px] font-semibold tracking-wide`}>{badge.label}</span>
+                </div>
+              ))}
             </div>
           </div>
 
-          <div className="relative w-full lg:w-96 aspect-square max-w-[280px] mx-auto lg:mx-0 flex items-center justify-center">
-             <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/20 to-pink-500/20 rounded-full blur-3xl animate-pulse" />
-             <div className="relative w-full h-full bg-black/40 border border-white/10 rounded-full backdrop-blur-xl flex flex-col items-center justify-center shadow-2xl p-6">
-                <div className="text-slate-400 text-sm font-semibold tracking-wider uppercase mb-2">Goal Progress</div>
-                <div className="text-5xl font-black text-white mb-2">{progress.toFixed(0)}%</div>
-                <div className="text-sm text-slate-400 text-center">
-                  ₹{thisMonthSavings.toLocaleString('en-IN')} / ₹{goal.toLocaleString('en-IN')}
+          <div className="relative w-full lg:w-[22rem] aspect-square max-w-[300px] mx-auto lg:mx-0 flex items-center justify-center shrink-0">
+             <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/20 to-pink-500/20 rounded-full blur-[40px] animate-pulse group-hover:blur-[60px] transition-all duration-700" />
+             <div className="relative w-[90%] h-[90%] bg-[#0f1117]/80 border border-white/10 rounded-full backdrop-blur-2xl flex flex-col items-center justify-center shadow-[0_20px_50px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.1)] p-6 group-hover:scale-[1.02] transition-transform duration-500">
+                <Target size={20} className="text-slate-400 mb-3 opacity-50" />
+                <div className="text-slate-400 text-[10px] font-bold tracking-[0.2em] uppercase mb-1">Goal Progress</div>
+                <div className="text-5xl font-black text-white mb-2 tracking-tighter flex items-baseline">
+                  <CountUp value={progress} />
+                  <span className="text-3xl font-bold text-white/50 ml-1">%</span>
+                </div>
+                <div className="text-[13px] text-slate-400 font-medium tracking-wide">
+                  ₹{totalSavings.toLocaleString('en-IN')} / ₹{goal.toLocaleString('en-IN')}
                 </div>
                 
                 {/* SVG Progress Circle */}
-                <svg className="absolute inset-0 w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="46" fill="transparent" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
+                <svg className="absolute inset-0 w-full h-full transform -rotate-90 pointer-events-none" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="46" fill="transparent" stroke="rgba(255,255,255,0.03)" strokeWidth="6" />
                   <motion.circle 
                     cx="50" cy="50" r="46" fill="transparent" 
-                    stroke="url(#gradient)" strokeWidth="8" strokeLinecap="round"
-                    strokeDasharray="289.02"
-                    initial={{ strokeDashoffset: 289.02 }}
-                    animate={{ strokeDashoffset: 289.02 - (289.02 * progress) / 100 }}
-                    transition={{ duration: 0.5, ease: "easeOut" }}
+                    stroke="url(#progress-gradient)" strokeWidth="6" strokeLinecap="round"
+                    strokeDasharray="289.0265"
+                    initial={{ strokeDashoffset: 289.0265 }}
+                    animate={{ strokeDashoffset: 289.0265 - (289.0265 * progress) / 100 }}
+                    transition={{ duration: 1.5, ease: [0.16, 1, 0.3, 1] }}
+                    style={{ filter: "drop-shadow(0 0 4px rgba(139,92,246,0.5))" }}
                   />
                   <defs>
-                    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="#8b5cf6" />
-                      <stop offset="100%" stopColor="#ec4899" />
+                    <linearGradient id="progress-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#818cf8" />
+                      <stop offset="50%" stopColor="#c084fc" />
+                      <stop offset="100%" stopColor="#f472b6" />
                     </linearGradient>
                   </defs>
                 </svg>

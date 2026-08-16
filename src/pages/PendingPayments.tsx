@@ -634,7 +634,13 @@ export default function PendingPayments() {
       loadingMessage="Loading pending payments..."
       skeletonType="cards"
     >
-      <div className="w-full space-y-8">
+      <motion.div 
+        layoutId="shared-pending"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full space-y-8 bg-[#05060a]"
+      >
         <header className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight text-white flex items-center gap-3">
           <Clock className="text-orange-400" />
@@ -1039,7 +1045,7 @@ export default function PendingPayments() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </motion.div>
     </DataStateGuard>
   );
 }

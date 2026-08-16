@@ -59,10 +59,11 @@ export default function MoneyReceived() {
       skeletonType="table"
     >
       <motion.div 
+        layoutId="shared-received"
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full space-y-8"
+        className="w-full space-y-8 bg-[#05060a]"
       >
       <header className="mb-8">
         <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">

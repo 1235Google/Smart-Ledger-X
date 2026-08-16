@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useReducedMotion } from 'motion/react';
+import { motion, useSpring, useTransform, useMotionValue, useReducedMotion } from 'motion/react';
 
 interface CountUpProps {
   value: number;
-  duration?: number;
+  duration?: number; // Kept for API compatibility, but physics dictates timing now
   prefix?: string;
   suffix?: string;
   decimals?: number;
@@ -13,7 +13,6 @@ interface CountUpProps {
 
 export const CountUp: React.FC<CountUpProps> = ({
   value,
-  duration = 1000,
   prefix = '',
   suffix = '',
   decimals = 0,
@@ -21,57 +20,34 @@ export const CountUp: React.FC<CountUpProps> = ({
   formatter,
 }) => {
   const shouldReduceMotion = useReducedMotion();
-  const [displayValue, setDisplayValue] = useState<number>(value);
-  const prevValueRef = useRef<number>(value);
-  const animFrameRef = useRef<number | null>(null);
+  const motionValue = useMotionValue(value);
+  
+  // High-end spring physics (similar to Apple VisionOS/iOS counters)
+  const springValue = useSpring(motionValue, { 
+    damping: 30, 
+    stiffness: 150, 
+    mass: 0.8,
+    restDelta: 0.001 
+  });
 
   useEffect(() => {
     if (shouldReduceMotion) {
-      setDisplayValue(value);
-      prevValueRef.current = value;
-      return;
+      motionValue.set(value);
+    } else {
+      motionValue.set(value);
     }
+  }, [value, motionValue, shouldReduceMotion]);
 
-    const startValue = prevValueRef.current;
-    const endValue = value;
-    if (startValue === endValue) return;
+  const display = useTransform(shouldReduceMotion ? motionValue : springValue, (current) => {
+    return formatter 
+      ? formatter(current) 
+      : `${prefix}${current.toLocaleString(undefined, {
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals,
+        })}${suffix}`;
+  });
 
-    const startTime = performance.now();
-
-    const update = (currentTime: number) => {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      // Spring-like cubic ease out
-      const easeProgress = 1 - Math.pow(1 - progress, 3);
-      const current = startValue + (endValue - startValue) * easeProgress;
-
-      setDisplayValue(current);
-
-      if (progress < 1) {
-        animFrameRef.current = requestAnimationFrame(update);
-      } else {
-        setDisplayValue(endValue);
-        prevValueRef.current = endValue;
-      }
-    };
-
-    animFrameRef.current = requestAnimationFrame(update);
-
-    return () => {
-      if (animFrameRef.current) {
-        cancelAnimationFrame(animFrameRef.current);
-      }
-    };
-  }, [value, duration, shouldReduceMotion]);
-
-  const formattedStr = formatter
-    ? formatter(displayValue)
-    : `${prefix}${displayValue.toLocaleString(undefined, {
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals,
-      })}${suffix}`;
-
-  return <span className={className}>{formattedStr}</span>;
+  return <motion.span className={className}>{display}</motion.span>;
 };
 
 export default CountUp;

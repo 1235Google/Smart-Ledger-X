@@ -34,32 +34,39 @@
 
 /* Ultra-Subtle 24-30s Ambient Atmospheric Drift (Calm, Minimal, Luxury) */
 @keyframes ambient-drift-1 {
-  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.12; }
-  50% { transform: translate3d(24px, -18px, 0) scale(1.08); opacity: 0.18; }
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1) rotate(0deg); opacity: 0.15; }
+  33% { transform: translate3d(30px, -40px, 0) scale(1.1) rotate(2deg); opacity: 0.25; }
+  66% { transform: translate3d(-20px, 30px, 0) scale(0.95) rotate(-1deg); opacity: 0.2; }
 }
 
 @keyframes ambient-drift-2 {
-  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.10; }
-  50% { transform: translate3d(-20px, 22px, 0) scale(1.12); opacity: 0.16; }
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1) rotate(0deg); opacity: 0.12; }
+  33% { transform: translate3d(-30px, 40px, 0) scale(1.15) rotate(-2deg); opacity: 0.2; }
+  66% { transform: translate3d(20px, -20px, 0) scale(0.9) rotate(1deg); opacity: 0.25; }
 }
 
 @keyframes float-subtle {
   0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-4px); }
+  50% { transform: translateY(-6px); }
 }
 
 .animate-aurora-1 {
-  animation: ambient-drift-1 24s ease-in-out infinite;
+  animation: ambient-drift-1 25s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   will-change: transform, opacity;
 }
 
 .animate-aurora-2 {
-  animation: ambient-drift-2 30s ease-in-out infinite;
+  animation: ambient-drift-2 30s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   will-change: transform, opacity;
 }
 
 .animate-float {
-  animation: float-subtle 4s ease-in-out infinite;
+  animation: float-subtle 5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.bg-noise {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
 }
 
 /* Tabular numbers for financial precision */

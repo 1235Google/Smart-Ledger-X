@@ -33,8 +33,6 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
   
   const [pulseState, setPulseState] = useState<'increase' | 'decrease' | null>(null);
   const [floatingPills, setFloatingPills] = useState<FloatingPill[]>([]);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const [tilt, setTilt] = useState({ rx: 0, ry: 0 });
   const [isHovered, setIsHovered] = useState(false);
 
   // Monitor balance changes for green/red flash and floating pill trigger
@@ -65,25 +63,8 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
     setFloatingPills((prev) => prev.filter((p) => p.id !== id));
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current) return;
-    const rect = cardRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    setMousePos({ x, y });
-
-    if (!shouldReduceMotion) {
-      const centerX = rect.width / 2;
-      const centerY = rect.height / 2;
-      const rx = ((y - centerY) / centerY) * -3.5;
-      const ry = ((x - centerX) / centerX) * 3.5;
-      setTilt({ rx, ry });
-    }
-  };
-
   const handleMouseLeave = () => {
     setIsHovered(false);
-    setTilt({ rx: 0, ry: 0 });
   };
 
   return (
@@ -93,8 +74,6 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
       animate={{
         opacity: 1,
         y: 0,
-        rotateX: isHovered ? tilt.rx : 0,
-        rotateY: isHovered ? tilt.ry : 0,
         scale: pulseState ? [1, 1.025, 1] : 1,
       }}
       transition={
@@ -104,7 +83,6 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
       }
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={handleMouseLeave}
-      onMouseMove={handleMouseMove}
       className={`relative p-8 rounded-[2rem] border overflow-hidden backdrop-blur-2xl transition-all duration-300 group select-none shadow-2xl perspective-1000 ${
         pulseState === 'increase'
           ? 'border-emerald-500/60 bg-gradient-to-br from-[#0B1026] via-[#10322b] to-[#04422e] shadow-[0_0_50px_rgba(16,185,129,0.35)] animate-[pulseGlowGreen_1.2s_ease-in-out_infinite]'
@@ -117,12 +95,12 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
       <div className="absolute -bottom-32 -right-32 w-72 h-72 bg-blue-500/25 rounded-full blur-[100px] pointer-events-none" />
       <div className="absolute -top-32 -left-32 w-72 h-72 bg-indigo-500/20 rounded-full blur-[100px] pointer-events-none" />
 
-      {/* Interactive Glass Reflection Effect Following Mouse */}
-      {isHovered && !shouldReduceMotion && (
-        <div
-          className="pointer-events-none absolute inset-0 z-10 transition-opacity duration-300"
+      {/* Static Glass Reflection Effect */}
+      {!shouldReduceMotion && (
+        <motion.div
+          className="pointer-events-none absolute inset-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-700"
           style={{
-            background: `radial-gradient(400px circle at ${mousePos.x}px ${mousePos.y}px, rgba(255, 255, 255, 0.15), transparent 80%)`,
+            background: `radial-gradient(500px circle at 50% 0%, rgba(255, 255, 255, 0.15), transparent 70%)`,
           }}
         />
       )}

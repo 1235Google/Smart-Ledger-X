@@ -18,98 +18,89 @@ export const GlassCard: React.FC<GlassCardProps> = ({
   delay = 0,
   hoverEffect = true,
   tiltEffect = true,
-  glowColor = 'rgba(59, 130, 246, 0.15)',
+  glowColor = 'rgba(59, 130, 246, 0.25)',
   onClick,
   ...props
 }) => {
   const shouldReduceMotion = useReducedMotion();
   const cardRef = useRef<HTMLDivElement>(null);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const [tilt, setTilt] = useState({ rx: 0, ry: 0 });
+  
   const [isHovered, setIsHovered] = useState(false);
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current || !hoverEffect) return;
-    const rect = cardRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    setMousePos({ x, y });
-
-    if (tiltEffect && !shouldReduceMotion) {
-      const centerX = rect.width / 2;
-      const centerY = rect.height / 2;
-      const rx = ((y - centerY) / centerY) * -4; // max 4 deg
-      const ry = ((x - centerX) / centerX) * 4;  // max 4 deg
-      setTilt({ rx, ry });
-    }
-  };
 
   const handleMouseLeave = () => {
     setIsHovered(false);
-    setTilt({ rx: 0, ry: 0 });
   };
 
   return (
     <motion.div
       ref={cardRef}
-      initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
+      initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 30, filter: 'blur(10px)', scale: 0.95 }}
       animate={{ 
         opacity: 1, 
         y: 0,
-        rotateX: isHovered && tiltEffect ? tilt.rx : 0,
-        rotateY: isHovered && tiltEffect ? tilt.ry : 0,
+        filter: 'blur(0px)',
+        scale: 1,
       }}
       transition={
         shouldReduceMotion
           ? { duration: 0.2 }
           : {
               type: 'spring',
-              stiffness: 380,
-              damping: 26,
+              stiffness: 280,
+              damping: 24,
               delay: delay,
             }
       }
       whileHover={
         hoverEffect && !shouldReduceMotion
           ? {
-              scale: 1.015,
-              y: -3,
+              scale: 1.02,
+              y: -5,
               transition: { type: 'spring', stiffness: 400, damping: 25 },
             }
           : undefined
       }
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={handleMouseLeave}
-      onMouseMove={handleMouseMove}
       onClick={onClick}
       className={cn(
-        'relative overflow-hidden rounded-[2rem] bg-white/[0.035] border border-white/[0.08] backdrop-blur-2xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.4)] transition-all duration-300 group perspective-1000',
-        'hover:border-white/[0.18]',
+        'relative overflow-hidden rounded-[2rem] bg-[#11131E]/60 border border-white/[0.08] backdrop-blur-3xl p-6 transition-all duration-500 group perspective-1000',
+        'hover:border-white/[0.15]',
         onClick ? 'cursor-pointer select-none' : '',
         className
       )}
       style={{
         boxShadow: isHovered
-          ? `0 20px 40px -15px ${glowColor}, 0 0 25px 0 ${glowColor}, inset 0 1px 0 0 rgba(255,255,255,0.12)`
-          : '0 8px 30px -8px rgba(0, 0, 0, 0.6), inset 0 1px 0 0 rgba(255, 255, 255, 0.06)',
+          ? `0 30px 60px -15px rgba(0,0,0,0.8), 0 0 40px 0 ${glowColor}, inset 0 1px 0 0 rgba(255,255,255,0.2)`
+          : '0 20px 40px -15px rgba(0, 0, 0, 0.7), inset 0 1px 0 0 rgba(255, 255, 255, 0.08)',
       }}
       {...(props as any)}
     >
-      {/* Dynamic Specular Reflection Effect Following Mouse */}
-      {hoverEffect && isHovered && !shouldReduceMotion && (
-        <div
-          className="pointer-events-none absolute inset-0 z-10 transition-opacity duration-300"
+      {/* Static Specular Reflection Effect */}
+      {hoverEffect && !shouldReduceMotion && (
+        <motion.div
+          className="pointer-events-none absolute inset-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-700"
           style={{
-            background: `radial-gradient(420px circle at ${mousePos.x}px ${mousePos.y}px, rgba(255, 255, 255, 0.12), transparent 75%)`,
+            background: `radial-gradient(500px circle at 50% 0%, rgba(255, 255, 255, 0.1), transparent 60%)`,
           }}
         />
       )}
 
-      {/* Subtle Ambient Border Light with Gradient Transition */}
-      <div className="pointer-events-none absolute -inset-px rounded-[2rem] border border-white/0 group-hover:border-white/20 transition-colors duration-300" />
+      {/* Subtle Inner Glow */}
+      {hoverEffect && !shouldReduceMotion && (
+        <motion.div
+          className="pointer-events-none absolute inset-0 z-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 mix-blend-overlay"
+          style={{
+            background: `radial-gradient(800px circle at 50% 100%, ${glowColor}, transparent 50%)`,
+          }}
+        />
+      )}
 
       {/* Top Rim Shimmer Line */}
-      <div className="pointer-events-none absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-60 group-hover:opacity-100 transition-opacity duration-300" />
+      <div className="pointer-events-none absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-40 group-hover:opacity-100 transition-opacity duration-500" />
+      
+      {/* Dynamic Border Gradient */}
+      <div className="pointer-events-none absolute inset-0 rounded-[2rem] border-[1.5px] border-transparent bg-gradient-to-br from-white/10 to-transparent [mask-image:linear-gradient(to_bottom,white,transparent)] group-hover:opacity-100 opacity-50 transition-opacity duration-500" />
 
       <div className="relative z-20">{children}</div>
     </motion.div>

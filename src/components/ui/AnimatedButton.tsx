@@ -31,22 +31,9 @@ export const AnimatedButton: React.FC<AnimatedButtonProps> = ({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [ripples, setRipples] = useState<Ripple[]>([]);
   const [isHovered, setIsHovered] = useState(false);
-  const [magneticOffset, setMagneticOffset] = useState({ x: 0, y: 0 });
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLButtonElement>) => {
-    if (disabled || isLoading || shouldReduceMotion || !buttonRef.current) return;
-    const rect = buttonRef.current.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    // Subtle magnetic attraction (restrained to ~2-3px)
-    const offsetX = (e.clientX - centerX) * 0.08;
-    const offsetY = (e.clientY - centerY) * 0.08;
-    setMagneticOffset({ x: offsetX, y: offsetY });
-  };
 
   const handleMouseLeave = () => {
     setIsHovered(false);
-    setMagneticOffset({ x: 0, y: 0 });
   };
 
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -90,14 +77,8 @@ export const AnimatedButton: React.FC<AnimatedButtonProps> = ({
   return (
     <motion.button
       ref={buttonRef}
-      onMouseMove={handleMouseMove}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={handleMouseLeave}
-      animate={
-        !disabled && !shouldReduceMotion
-          ? { x: magneticOffset.x, y: magneticOffset.y }
-          : { x: 0, y: 0 }
-      }
       whileHover={
         !disabled && !shouldReduceMotion
           ? { y: -1, scale: 1.015 }

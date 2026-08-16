@@ -21,6 +21,7 @@ import Calculator from './pages/Calculator';
 import TimelineReplay from './pages/TimelineReplay';
 import SecurityWrapper from './components/SecurityWrapper';
 import SecurityCenter from './pages/SecurityCenter';
+import BackupDashboard from './pages/BackupDashboard';
 import Help from './pages/Help';
 import About from './pages/About';
 import AdminLogin from './pages/admin/AdminLogin';
@@ -74,6 +75,12 @@ function LoginRoute({ children }: { children: React.ReactNode }) {
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './context/ToastContext';
 import ToastContainer from './components/ui/ToastContainer';
+import CommandPalette from './components/CommandPalette';
+
+import SplashScreen from './components/SplashScreen';
+import { AnimatePresence } from 'motion/react';
+
+import AutomaticBackupRunner from './components/AutomaticBackupRunner';
 
 function AppRoutes() {
   return (
@@ -118,6 +125,7 @@ function AppRoutes() {
         <Route path="settings" element={<Settings />} />
         <Route path="security" element={<SecurityCenter />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="backup" element={<BackupDashboard />} />
         <Route path="help" element={<Help />} />
         <Route path="about" element={<About />} />
       </Route>
@@ -127,15 +135,23 @@ function AppRoutes() {
 }
 
 export default function App() {
+  const [showSplash, setShowSplash] = React.useState(true);
+
   return (
     <ErrorBoundary>
       <StoreProvider>
         <ToastProvider>
           <BrowserRouter>
-            <SecurityWrapper>
-              <AppRoutes />
-              <ToastContainer />
-            </SecurityWrapper>
+            {showSplash ? (
+              <SplashScreen onComplete={() => setShowSplash(false)} />
+            ) : (
+              <SecurityWrapper>
+                <AutomaticBackupRunner />
+                <AppRoutes />
+                <CommandPalette />
+                <ToastContainer />
+              </SecurityWrapper>
+            )}
           </BrowserRouter>
         </ToastProvider>
       </StoreProvider>

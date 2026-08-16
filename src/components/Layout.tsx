@@ -14,10 +14,12 @@ import {
   PiggyBank, 
   Calculator as CalculatorIcon,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Cloud
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import Lenis from 'lenis';
 
 import NotificationDropdown, { NotificationDropdownRef } from './NotificationDropdown';
 import UserProfileDropdown from './UserProfileDropdown';
@@ -34,6 +36,7 @@ const navItems = [
   { icon: CalculatorIcon, label: 'Calculator', path: '/calculator' },
   { icon: User, label: 'Profile', path: '/profile' },
   { icon: Settings, label: 'Settings', path: '/settings' },
+  { icon: Cloud, label: 'Backup & Recovery', path: '/backup' },
 ];
 
 export default function Layout() {
@@ -99,23 +102,72 @@ export default function Layout() {
     return () => { document.body.style.overflow = 'unset'; };
   }, [mobileMenuOpen]);
 
+  // Premium Smooth Scroll Context
+  useEffect(() => {
+    const lenis = new Lenis({
+      duration: 1.2,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      touchMultiplier: 2,
+    });
+
+    function raf(time: number) {
+      lenis.raf(time);
+      requestAnimationFrame(raf);
+    }
+
+    requestAnimationFrame(raf);
+    
+    return () => {
+      lenis.destroy();
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#05060a] text-slate-200 font-sans flex relative">
       {/* Premium Animated Atmospheric Background System */}
-      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden select-none">
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden select-none bg-[#020308]">
+        {/* Dynamic Noise Filter */}
+        <div className="absolute inset-0 bg-noise mix-blend-overlay z-[1]" />
+        
         {/* Subtle dot matrix grid overlay for financial terminal feel */}
         <div 
-          className="absolute inset-0 opacity-[0.035]"
+          className="absolute inset-0 opacity-[0.02] z-[2]"
           style={{
-            backgroundImage: `radial-gradient(rgba(255, 255, 255, 0.6) 1px, transparent 1px)`,
+            backgroundImage: `radial-gradient(rgba(255, 255, 255, 0.8) 1px, transparent 1px)`,
             backgroundSize: '32px 32px'
           }}
         />
-        {/* Soft 24s-30s Ambient Glow Orbs */}
-        <div className="absolute top-[-10%] left-[-8%] w-[45%] h-[45%] bg-blue-600/12 rounded-full blur-[160px] animate-aurora-1" />
+        {/* Soft Ambient Glow Orbs */}
+        <div className="absolute top-[-10%] left-[-8%] w-[45%] h-[45%] bg-blue-600/10 rounded-full blur-[160px] animate-aurora-1" />
         <div className="absolute bottom-[-10%] right-[-8%] w-[50%] h-[50%] bg-indigo-600/10 rounded-full blur-[180px] animate-aurora-2" />
-        <div className="absolute top-[35%] right-[20%] w-[30%] h-[30%] bg-cyan-600/6 rounded-full blur-[140px]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(255,255,255,0.02)_0%,_transparent_75%)]" />
+        <div className="absolute top-[35%] right-[20%] w-[30%] h-[30%] bg-cyan-500/5 rounded-full blur-[140px]" />
+        
+        {/* Deep space radial gradient over everything to focus the center */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(255,255,255,0.03)_0%,_transparent_80%)]" />
+
+        {/* Floating particles */}
+        {[...Array(12)].map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute w-1 h-1 bg-white/20 rounded-full blur-[1px]"
+            initial={{ 
+              x: Math.random() * 100 + "vw", 
+              y: Math.random() * 100 + "vh", 
+              opacity: Math.random() * 0.5 + 0.1 
+            }}
+            animate={{ 
+              y: [null, Math.random() * -100 - 50 + "vh"],
+              x: [null, Math.random() * 50 - 25 + "vw"],
+              opacity: [null, 0]
+            }}
+            transition={{
+              duration: Math.random() * 20 + 20,
+              repeat: Infinity,
+              ease: "linear",
+              delay: Math.random() * 10
+            }}
+          />
+        ))}
       </div>
 
       {/* Desktop Sidebar */}
@@ -360,14 +412,15 @@ export default function Layout() {
         </header>
 
         <div className="flex-1 w-full pt-[calc(4rem+env(safe-area-inset-top))] md:pt-0">
-          <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 md:p-8">
-            <AnimatePresence mode="wait">
+          <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 md:p-8 relative">
+            <AnimatePresence mode="popLayout" initial={false}>
               <motion.div
                 key={location.pathname}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                initial={{ opacity: 0, y: 20, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 1.02, position: "absolute", top: 0, left: 0, right: 0 }}
+                transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                className="w-full relative"
               >
                 <Outlet />
               </motion.div>

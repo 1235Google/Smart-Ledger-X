@@ -11,60 +11,17 @@ import {
 import { cn } from '../lib/utils';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
+import PremiumProfileCard from '../components/ui/PremiumProfileCard';
+
 export default function Profile() {
   const { userProfile, customers, transactions, updateUserProfile } = useStore();
-  const [activeTab, setActiveTab] = useState<'overview' | 'ai'>('overview');
-  const [aiQuery, setAiQuery] = useState('');
-  const [aiResponse, setAiResponse] = useState('');
-  const [isAiThinking, setIsAiThinking] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [selectedAchievement, setSelectedAchievement] = useState<any | null>(null);
   const [selectedDoc, setSelectedDoc] = useState<any | null>(null);
   
-  // Customizer state
-  const [accentColor, setAccentColor] = useState('emerald');
-  const [amoledMode, setAmoledMode] = useState(true);
-  const [glassIntensity, setGlassIntensity] = useState(80);
-
-  // Security toggles state
-  const [biometricActive, setBiometricActive] = useState(true);
-  const [twoFactorActive, setTwoFactorActive] = useState(true);
-  const [faceUnlockActive, setFaceUnlockActive] = useState(true);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
-  };
-
-  const safeProfile = userProfile || {
-    fullName: 'Rahul Sharma',
-    username: '@rahul_smartledger',
-    email: 'rahul.sharma@fintech.io',
-    mobile: '+91 98765 43210',
-    dob: '1992-06-15',
-    gender: 'Male',
-    occupation: 'Fintech Entrepreneur & Trader',
-    address: '42, Connaught Place, New Delhi',
-    language: 'English (IN)',
-    currency: 'INR (₹)',
-    timezone: 'IST (UTC+5:30)',
-    memberSince: '2024-01-10',
-    profilePhoto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
-    businessName: 'Sharma Digital Enterprises',
-    businessCategory: 'Fintech & Retail',
-    gstNumber: '07AABCS1429B1Z8',
-    upiId: 'sharmadigital@okaxis',
-    businessAddress: '108, Cyber City, Phase 2, Gurugram',
-    website: 'https://sharmadigital.io',
-    businessLogo: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80',
-    annualRevenue: '₹1,45,00,000',
-    businessRating: 4.9,
-    verifiedEmail: true,
-    verifiedPhone: true,
-    lastLogin: 'Today, 10:42 AM from New Delhi',
-    activeDevice: 'Chrome on macOS (Secure Session)'
   };
 
   // Money Goal State
@@ -91,7 +48,8 @@ export default function Profile() {
   const completedTransactions = transactions ? transactions.filter(t => t.type === 'received') : [];
   const monthlyIncomes: { [key: string]: number } = {};
   completedTransactions.forEach(t => {
-      const month = t.date.substring(0, 7);
+      if (!t.date) return;
+      const month = String(t.date).substring(0, 7);
       monthlyIncomes[month] = (monthlyIncomes[month] || 0) + Number(t.amount);
   });
   const incomeValues = Object.values(monthlyIncomes);
@@ -101,7 +59,7 @@ export default function Profile() {
   const currentMonth = new Date().toISOString().substring(0, 7);
   const prevMonth = new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().substring(0, 7);
   
-  const getIncomeForMonth = (month: string) => completedTransactions.filter(t => t.date.startsWith(month)).reduce((sum, t) => sum + Number(t.amount), 0);
+  const getIncomeForMonth = (month: string) => completedTransactions.filter(t => t.date && String(t.date).startsWith(month)).reduce((sum, t) => sum + Number(t.amount), 0);
   const prevIncome = getIncomeForMonth(prevMonth);
   const currIncome = getIncomeForMonth(currentMonth);
   const incomeTrend = prevIncome > 0 ? Math.round(((currIncome - prevIncome) / prevIncome) * 100) : 0;
@@ -160,35 +118,6 @@ export default function Profile() {
     { id: 'doc6', name: 'Company Logo & Branding Kit', status: 'Uploaded', date: 'Mar 20, 2024', type: 'PNG/Vector Kit' },
   ];
 
-  const handleAiAsk = (query: string) => {
-    setAiQuery(query);
-    setIsAiThinking(true);
-    setTimeout(() => {
-      setIsAiThinking(false);
-      if (query.includes('highest pending')) {
-        setAiResponse("Your highest pending balance is with Priya Sharma (₹18,400 due since 4 days). WhatsApp reminder recommended.");
-      } else if (query.includes('predict')) {
-        setAiResponse("AI Forecast: Projected next month's income is ₹1,68,500 (+14.2% growth trend based on recurring Monday collections).");
-      } else if (query.includes('pays fastest')) {
-        setAiResponse("Vikram Singh consistently clears invoices within an average of 18 minutes of issuance.");
-      } else {
-        setAiResponse(`Comprehensive AI Financial Report generated for ${safeProfile.businessName}. Liquidity health score is 92/100. All metrics optimized.`);
-      }
-    }, 900);
-  };
-
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        updateUserProfile({ profilePhoto: reader.result as string });
-        showToast("Profile photo updated successfully!");
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   return (
     <div className="w-full text-white space-y-8 overflow-x-hidden">
       
@@ -218,107 +147,7 @@ export default function Profile() {
         
         {/* CENTERPIECE: DIGITAL IDENTITY CARD (ULTRA-LUXURY ATM/CREDIT CARD AESTHETIC) */}
         <div className="flex justify-center w-full">
-          <motion.div 
-            initial={{ opacity: 0, y: 20, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className="relative w-full max-w-xl group"
-          >
-            {/* Ambient Backlight Glow */}
-            <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500/30 via-purple-500/30 to-cyan-500/30 rounded-[32px] blur-2xl opacity-50 group-hover:opacity-80 transition duration-700" />
-
-            {/* The Ultra-Luxury Fintech Card */}
-            <div 
-              style={{ backdropFilter: `blur(${glassIntensity}px)` }}
-              className="relative overflow-hidden rounded-[20px] sm:rounded-[24px] bg-[#0A0B10] border border-white/10 shadow-2xl p-4 sm:p-6 md:p-8 transition-all duration-500"
-            >
-              {/* Inner Glow Border Highlight */}
-              <div className="absolute inset-0 rounded-[20px] sm:rounded-[24px] border border-white/10 pointer-events-none" />
-              <div className="absolute inset-0 rounded-[20px] sm:rounded-[24px] border border-white/[0.05] shadow-[inset_0_0_20px_rgba(255,255,255,0.05)] pointer-events-none" />
-              
-              {/* Holographic Shine Overlay */}
-              <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent opacity-30 pointer-events-none" />
-
-              {/* Card Header: Brand Logo & Premium Tier Badge */}
-              <div className="flex items-center justify-between mb-6 sm:mb-8 relative z-10">
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-br from-indigo-900 to-black p-[1px] shadow-lg">
-                    <div className="w-full h-full bg-slate-950 rounded-[11px] sm:rounded-[15px] flex items-center justify-center">
-                      <Sparkles className="w-5 h-5 text-cyan-400" />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="font-bold tracking-widest text-[10px] sm:text-xs text-white uppercase font-mono">SmartLedger</div>
-                    <div className="text-[8px] sm:text-[10px] text-cyan-400 font-medium uppercase tracking-widest">Premium Member</div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-1 sm:px-4 sm:py-1.5 rounded-full bg-gradient-to-r from-slate-900 to-slate-800 border border-amber-500/30 text-amber-300 text-[8px] sm:text-[10px] font-bold uppercase tracking-wider shadow-[0_0_15px_rgba(245,158,11,0.15)] flex items-center gap-1">
-                    <Star className="w-2 h-2 sm:w-3 sm:h-3 fill-amber-300" /> Diamond Tier
-                  </span>
-                </div>
-              </div>
-
-              {/* Profile Identity Area: Avatar as Digital Chip */}
-              <div className="flex flex-col sm:flex-row items-center sm:items-center gap-4 sm:gap-6 relative z-10 mb-6 sm:mb-8">
-                {/* Avatar Chip */}
-                <div className="relative group/avatar shrink-0">
-                  <div className="absolute -inset-1 bg-gradient-to-tr from-indigo-500 via-purple-500 to-cyan-500 rounded-2xl sm:rounded-3xl blur opacity-50 group-hover/avatar:opacity-80 transition duration-300" />
-                  
-                  <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-xl sm:rounded-2xl overflow-hidden border border-white/10 bg-black shadow-inner flex items-center justify-center">
-                    {safeProfile.profilePhoto ? (
-                      <img src={safeProfile.profilePhoto} alt={safeProfile.fullName} className="w-full h-full object-cover" />
-                    ) : (
-                      <User className="w-8 h-8 sm:w-10 sm:h-10 text-slate-500" />
-                    )}
-                    {/* Security Verification Indicator */}
-                    <div className="absolute bottom-2 right-2 bg-emerald-500 rounded-full p-1 border border-black">
-                      <BadgeCheck className="w-2.5 h-2.5 text-white" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Member Info */}
-                <div className="flex-1 text-center sm:text-left min-w-0">
-                  <h1 className="text-xl sm:text-2xl sm:text-3xl font-extrabold text-white truncate mb-0.5 sm:mb-1">
-                    {safeProfile.fullName}
-                  </h1>
-                  <p className="text-slate-400 text-[10px] sm:text-xs font-mono mb-3 sm:mb-4">{safeProfile.username}</p>
-
-                  {/* XP Progress Bar */}
-                  <div className="w-full bg-black/40 rounded-full h-1.5 sm:h-2 p-[1px] border border-white/5">
-                    <div className="h-full bg-gradient-to-r from-indigo-500 to-cyan-400 rounded-full w-[84.5%] relative">
-                      <div className="absolute inset-0 bg-white/20 blur-sm rounded-full" />
-                    </div>
-                  </div>
-                  <div className="flex justify-between text-[8px] sm:text-[10px] text-slate-500 mt-1 sm:mt-2 font-mono">
-                    <span>LEVEL 8</span>
-                    <span>8,450 / 10,000 XP</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Card Footer: Detailed Info */}
-              <div className="pt-4 sm:pt-6 border-t border-white/10 grid grid-cols-3 gap-2 sm:gap-4 text-center relative z-10">
-                {[
-                  { label: 'Member ID', value: 'SLX-8942-8819', icon: Lock },
-                  { label: 'Member Since', value: 'JAN 2024', icon: Calendar },
-                  { label: 'Trust Score', value: '98/100', icon: ShieldCheck },
-                ].map((item, i) => (
-                  <div key={i} className="flex flex-col items-center gap-0.5 sm:gap-1">
-                    <div className="text-[9px] text-slate-500 uppercase tracking-widest flex items-center gap-1">
-                      <item.icon size={10} /> {item.label}
-                    </div>
-                    <div className="text-[10px] sm:text-xs font-mono font-bold text-slate-200 truncate max-w-full">
-                      {item.value}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-            </div>
-          </motion.div>
+          <PremiumProfileCard />
         </div>
 
         {/* SIX PREMIUM GLASS CARDS IN RESPONSIVE 3x2 GRID (3 Cols Desktop, 2 Cols Tablet, 1 Col Mobile) */}

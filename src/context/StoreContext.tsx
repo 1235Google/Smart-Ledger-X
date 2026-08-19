@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { AppState, PendingMoney, ReceivedMoney, SentMoney, Transaction, SecuritySettings, EmailSettings, EmailHistoryLog, GeneralSettings, GullakEntry, GullakSettings, UnlockedAchievement, AiRecognitionSettings, AiRecognitionHistory, PosterTemplate, Customer, ReportSettings, GeneratedReport, UserProfile, ReminderHistoryLog, SavingsGoal, SecurityLog, AutomationRule, Investment, FinanceHabit, DataLoadStatus } from '../types';
+import { AppState, PendingMoney, ReceivedMoney, SentMoney, Transaction, SecuritySettings, EmailSettings, EmailHistoryLog, GeneralSettings, GullakEntry, GullakSettings, UnlockedAchievement, AiRecognitionSettings, AiRecognitionHistory, PosterTemplate, Customer, ReportSettings, GeneratedReport, UserProfile, ReminderHistoryLog, SavingsGoal, SecurityLog, AutomationRule, Investment, FinanceHabit, DataLoadStatus, BackupSettings } from '../types';
 import CryptoJS from 'crypto-js';
 import { calculateProgress, ACHIEVEMENTS } from '../lib/achievements';
 import { DEFAULT_REMINDER_TEMPLATE } from '../lib/utils';
@@ -79,6 +79,8 @@ interface StoreContextType extends AppState {
   newlyUnlocked: UnlockedAchievement | null;
   clearNewlyUnlocked: () => void;
   updateUserProfile: (profile: Partial<UserProfile>) => void;
+  updateBackupSettings: (settings: Partial<BackupSettings>) => void;
+  applyRestoredState: (restored: AppState) => void;
   isAdminAuthenticated: boolean;
   adminLogin: (pass: string, email?: string) => Promise<{ success: boolean; error?: string }>;
   adminLogout: () => void;
@@ -163,7 +165,14 @@ export const defaultState: AppState = {
     activeDevice: ''
   },
   reminderHistory: [],
-  customReminderTemplate: DEFAULT_REMINDER_TEMPLATE
+  customReminderTemplate: DEFAULT_REMINDER_TEMPLATE,
+  backupSettings: {
+    autoBackupEnabled: true,
+    frequency: '24h',
+    retention: '25',
+    backupOnLogin: false,
+    backupBeforeLogout: false,
+  }
 };
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -1079,6 +1088,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const updateBackupSettings = (settings: Partial<BackupSettings>) => {
+    setState(prev => {
+      const updated = {
+        ...(prev.backupSettings || defaultState.backupSettings!),
+        ...settings
+      };
+      return { ...prev, backupSettings: updated };
+    });
+    createNotification({
+      title: 'Backup Settings Saved',
+      message: 'Cloud backup configuration updated successfully',
+      type: 'admin_db_backup'
+    });
+  };
+
+  const applyRestoredState = (restored: AppState) => {
+    setState(restored);
+  };
+
   const resetData = () => {
     setState(defaultState);
     try {
@@ -1154,6 +1182,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       deleteInvestment,
       updateFinanceHabit,
       updateUserProfile,
+      updateBackupSettings,
+      applyRestoredState,
       resetData,
       importData,
       currentBalance,

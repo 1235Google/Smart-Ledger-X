@@ -252,6 +252,45 @@ export interface ReminderDetails {
 
 export type DataLoadStatus = 'loading' | 'success' | 'error';
 
+export interface BackupSettings {
+  autoBackupEnabled: boolean;
+  frequency: '12h' | '24h' | '7d';
+  retention: '10' | '25' | 'unlimited';
+  backupOnLogin: boolean;
+  backupBeforeLogout: boolean;
+  lastAutoBackupTime?: string;
+}
+
+export type BackupType = 'manual' | 'automatic' | 'pre-restore' | 'on-login' | 'on-logout' | 'daily';
+
+export type BackupProgressStage = 'idle' | 'preparing' | 'encrypting' | 'uploading' | 'verifying' | 'completed' | 'failed';
+
+export interface BackupItemCounts {
+  transactions: number;
+  customers: number;
+  savingsGoals: number;
+  gullakEntries: number;
+  investments: number;
+  reports: number;
+}
+
+export interface BackupMetadata {
+  id: string;
+  name: string;
+  fileName: string;
+  createdAt: string;
+  size: number;
+  status: 'verified' | 'failed' | 'pending' | 'restored';
+  version: string;
+  type: BackupType;
+  checksumSha256: string;
+  encryptionIv?: string;
+  itemCounts?: BackupItemCounts;
+  storagePath?: string;
+  userId?: string;
+  compressed?: boolean;
+}
+
 export interface AppState {
   isSetupComplete: boolean;
   startingBalance: number;
@@ -277,6 +316,7 @@ export interface AppState {
   userProfile?: UserProfile;
   reminderHistory?: ReminderHistoryLog[];
   customReminderTemplate?: string;
+  backupSettings?: BackupSettings;
 }
 
 

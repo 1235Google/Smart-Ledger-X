@@ -41,6 +41,26 @@
         "isSetupComplete": { "type": "boolean" },
         "userProfile": { "$ref": "#/entities/UserProfile" }
       }
+    },
+    "BackupRecord": {
+      "title": "BackupRecord",
+      "description": "Metadata for an encrypted cloud backup snapshot",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fileName": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "size": { "type": "number" },
+        "status": { "type": "string" },
+        "version": { "type": "string" },
+        "type": { "type": "string" },
+        "checksumSha256": { "type": "string" },
+        "encryptionIv": { "type": "string" },
+        "itemCounts": { "type": "object" },
+        "storagePath": { "type": "string" },
+        "userId": { "type": "string" }
+      },
+      "required": ["id", "fileName", "createdAt", "size", "status", "version", "type", "checksumSha256", "userId"]
     }
   },
   "firestore": {
@@ -59,6 +79,10 @@
     "/users/{uid}/app/state": {
       "schema": "AppState",
       "description": "User state synchronization document"
+    },
+    "/users/{uid}/backups/{backupId}": {
+      "schema": "BackupRecord",
+      "description": "User backup metadata records"
     }
   }
 }

@@ -221,39 +221,72 @@ export default function BackupDashboard() {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="bg-indigo-950/40 border border-indigo-500/30 p-5 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-md"
+              className="bg-indigo-950/50 border border-indigo-500/30 p-5 rounded-3xl overflow-hidden shadow-2xl backdrop-blur-md space-y-4"
             >
-              <div className="flex items-center justify-between gap-4 mb-3">
+              <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-indigo-500/20 text-indigo-300 rounded-lg animate-pulse">
-                    <Database size={18} />
+                  <div className="p-2.5 bg-indigo-500/20 text-indigo-300 rounded-xl animate-pulse">
+                    <Database size={20} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-white">Generating Real-Time Cloud Snapshot</h3>
-                    <p className="text-xs text-indigo-300/80">{progressMessage}</p>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <span>Real-Time Cloud Snapshot Pipeline</span>
+                      <span className="text-[11px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-full font-mono uppercase font-semibold">
+                        {progressStage}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-indigo-200/80 mt-0.5">{progressMessage}</p>
                   </div>
                 </div>
-                <span className="text-sm font-bold text-indigo-400 font-mono">{progressPercent}%</span>
+                <div className="text-right">
+                  <span className="text-lg font-extrabold text-indigo-400 font-mono">{progressPercent}%</span>
+                </div>
               </div>
 
               {/* Progress Bar */}
-              <div className="w-full bg-indigo-950/80 h-2 rounded-full overflow-hidden border border-indigo-500/20">
+              <div className="w-full bg-black/60 h-2.5 rounded-full overflow-hidden border border-white/10">
                 <motion.div 
-                  className="bg-gradient-to-r from-indigo-500 to-cyan-400 h-full rounded-full transition-all duration-300"
+                  className="bg-gradient-to-r from-indigo-500 via-cyan-400 to-emerald-400 h-full rounded-full transition-all duration-300"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
 
-              <div className="flex items-center justify-between text-[11px] text-slate-400 mt-3 pt-2 border-t border-indigo-500/20">
-                <span className="flex items-center gap-1.5">
-                  <Shield size={12} className="text-emerald-400" /> AES-256 Zero-Knowledge CBC
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Lock size={12} className="text-indigo-400" /> SHA-256 Cryptographic Checksum
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Server size={12} className="text-cyan-400" /> Firebase Cloud Storage
-                </span>
+              {/* Pipeline Steps Indicator */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1 text-[11px]">
+                <div className={`p-2 rounded-xl border flex items-center gap-1.5 ${
+                  progressPercent >= 20 ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : 'bg-black/30 text-slate-500 border-white/5'
+                }`}>
+                  <CheckCircle2 size={12} className={progressPercent >= 20 ? 'text-emerald-400' : 'text-slate-600'} />
+                  <span className="truncate">1. Collect Data</span>
+                </div>
+
+                <div className={`p-2 rounded-xl border flex items-center gap-1.5 ${
+                  progressPercent >= 45 ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : progressPercent >= 25 ? 'bg-indigo-500/20 text-indigo-200 border-indigo-500/40 animate-pulse' : 'bg-black/30 text-slate-500 border-white/5'
+                }`}>
+                  <Lock size={12} className={progressPercent >= 45 ? 'text-emerald-400' : 'text-slate-600'} />
+                  <span className="truncate">2. AES-256</span>
+                </div>
+
+                <div className={`p-2 rounded-xl border flex items-center gap-1.5 ${
+                  progressPercent >= 55 ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : progressPercent >= 45 ? 'bg-indigo-500/20 text-indigo-200 border-indigo-500/40 animate-pulse' : 'bg-black/30 text-slate-500 border-white/5'
+                }`}>
+                  <Shield size={12} className={progressPercent >= 55 ? 'text-emerald-400' : 'text-slate-600'} />
+                  <span className="truncate">3. SHA-256</span>
+                </div>
+
+                <div className={`p-2 rounded-xl border flex items-center gap-1.5 ${
+                  progressPercent >= 85 ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : progressPercent >= 65 ? 'bg-indigo-500/20 text-indigo-200 border-indigo-500/40 animate-pulse' : 'bg-black/30 text-slate-500 border-white/5'
+                }`}>
+                  <Server size={12} className={progressPercent >= 85 ? 'text-emerald-400' : 'text-slate-600'} />
+                  <span className="truncate">4. Storage</span>
+                </div>
+
+                <div className={`p-2 rounded-xl border flex items-center gap-1.5 ${
+                  progressPercent >= 100 ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : progressPercent >= 85 ? 'bg-indigo-500/20 text-indigo-200 border-indigo-500/40 animate-pulse' : 'bg-black/30 text-slate-500 border-white/5'
+                }`}>
+                  <CheckCircle2 size={12} className={progressPercent >= 100 ? 'text-emerald-400' : 'text-slate-600'} />
+                  <span className="truncate">5. Verified</span>
+                </div>
               </div>
             </motion.div>
           )}

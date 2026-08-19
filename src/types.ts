@@ -276,19 +276,27 @@ export interface BackupItemCounts {
 
 export interface BackupMetadata {
   id: string;
+  backupId?: string;
   name: string;
   fileName: string;
   createdAt: string;
+  fileSize: number;
   size: number;
   status: 'verified' | 'failed' | 'pending' | 'restored';
   version: string;
+  appVersion?: string;
+  encryptionVersion?: string;
+  device?: string;
+  restoreVersion?: string;
   type: BackupType;
+  checksum: string;
   checksumSha256: string;
   encryptionIv?: string;
   itemCounts?: BackupItemCounts;
   storagePath?: string;
   userId?: string;
   compressed?: boolean;
+  lastRestoredAt?: string;
 }
 
 export interface AppState {

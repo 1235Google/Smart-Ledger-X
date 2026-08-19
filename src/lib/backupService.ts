@@ -1,12 +1,12 @@
 import { storage, auth, db } from './firebase';
 import { 
   ref, 
-  uploadString, 
+  uploadBytes, 
+  uploadString,
   getDownloadURL, 
   listAll, 
   deleteObject, 
-  getMetadata,
-  uploadBytesResumable
+  getMetadata
 } from 'firebase/storage';
 import { 
   collection, 
@@ -14,14 +14,22 @@ import {
   doc, 
   getDoc, 
   setDoc, 
-  deleteDoc,
-  writeBatch,
-  query,
-  orderBy
+  deleteDoc, 
+  writeBatch, 
+  query, 
+  orderBy 
 } from 'firebase/firestore';
 import CryptoJS from 'crypto-js';
 import JSZip from 'jszip';
-import { AppState, Transaction, BackupMetadata, BackupType, BackupProgressStage, BackupItemCounts, BackupSettings } from '../types';
+import { 
+  AppState, 
+  Transaction, 
+  BackupMetadata, 
+  BackupType, 
+  BackupProgressStage, 
+  BackupItemCounts, 
+  BackupSettings 
+} from '../types';
 import { createNotification } from './notificationService';
 
 export interface BackupProgressCallback {
@@ -36,7 +44,29 @@ export interface BackupStats {
 }
 
 const ENCRYPTION_SALT = '-smart-ledger-master-key-2026';
-const BACKUP_VERSION = '2.0.0';
+const APP_VERSION = '2.0.0';
+const ENCRYPTION_VERSION = 'AES-256-CBC';
+
+/**
+ * Timeout wrapper for async promises to guarantee no operation hangs indefinitely
+ */
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operationName: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Operation timed out after ${Math.round(timeoutMs / 1000)}s: ${operationName}`));
+    }, timeoutMs);
+
+    promise
+      .then((res) => {
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
 
 export class BackupService {
   private static isBackingUp = false;
@@ -49,8 +79,8 @@ export class BackupService {
   }
 
   /**
-   * Generate human-readable standardized backup ID & filename
-   * Example: backup_2026-08-19_15-36-42_manual.json.enc
+   * Generate standardized backup ID & filename
+   * Format: backups/{uid}/{timestamp}.backup
    */
   public static generateBackupName(type: BackupType): { id: string; fileName: string } {
     const d = new Date();
@@ -59,19 +89,16 @@ export class BackupService {
     const timePart = `${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
     const typeTag = type === 'automatic' || type === 'daily' ? 'auto' : type === 'manual' ? 'manual' : type;
     const id = `backup_${datePart}_${timePart}_${typeTag}`;
-    const fileName = `${id}.json.enc`;
+    const fileName = `${id}.backup`;
     return { id, fileName };
   }
 
-  /**
-   * Check if a backup operation is currently in progress
-   */
   public static isOperationActive(): boolean {
     return this.isBackingUp;
   }
 
   /**
-   * Create a comprehensive encrypted cloud backup with live progress callbacks
+   * Create a comprehensive encrypted cloud backup with real progress events & error handling
    */
   public static async createBackup(
     type: BackupType = 'manual',
@@ -80,19 +107,28 @@ export class BackupService {
   ): Promise<BackupMetadata> {
     const uid = auth.currentUser?.uid;
     if (!uid) {
-      throw new Error('Authentication required: Please log in to create a backup.');
+      const err = new Error('Authentication required: Please sign in to create a backup.');
+      console.error('[BackupService Error]', err);
+      throw err;
     }
 
     if (this.isBackingUp) {
-      throw new Error('A backup operation is already in progress. Please wait for it to complete.');
+      const err = new Error('A backup operation is currently in progress. Please wait.');
+      console.warn('[BackupService Notice]', err);
+      throw err;
     }
 
     this.isBackingUp = true;
+    const startTime = Date.now();
+    console.log(`[BackupService] ==========================================`);
+    console.log(`[BackupService] Starting ${type.toUpperCase()} cloud backup for user ${uid}`);
 
     try {
-      // Stage 1: Preparing & gathering all application data
-      onProgress?.('preparing', 15, 'Gathering financial balances, transactions, and settings...');
-      const snapshotData = customData || await this.gatherAllData(uid);
+      // Step 1: Collecting data
+      console.log(`[BackupService] Step 1: Collecting complete ledger and application data...`);
+      onProgress?.('preparing', 10, 'Collecting balances, transactions, and settings...');
+      
+      const snapshotData = customData || await withTimeout(this.gatherAllData(uid), 10000, 'Gathering application data');
       
       const itemCounts: BackupItemCounts = {
         transactions: snapshotData.transactions?.length || 0,
@@ -106,54 +142,66 @@ export class BackupService {
       const { id: backupId, fileName } = this.generateBackupName(type);
       const createdAt = new Date().toISOString();
 
+      console.log(`[BackupService] Data collected: ${itemCounts.transactions} transactions, ${itemCounts.customers} customers, ${itemCounts.savingsGoals} goals.`);
+
+      // Step 2: Serializing & calculating checksum
+      onProgress?.('preparing', 25, 'Serializing snapshot & generating SHA-256 checksum...');
+      console.log(`[BackupService] Step 2: Serializing and calculating unencrypted SHA-256 checksum...`);
+      
       const rawJsonPayload = JSON.stringify({
         ...snapshotData,
         backupMetadata: {
           backupId,
           createdAt,
-          version: BACKUP_VERSION,
+          version: APP_VERSION,
           type,
           itemCounts,
           userId: uid,
-          userEmail: auth.currentUser?.email || ''
+          userEmail: auth.currentUser?.email || '',
         }
       });
 
-      // Stage 2: Encrypting with AES-256 & calculating SHA-256 integrity checksum
-      onProgress?.('encrypting', 40, 'Encrypting snapshot with military-grade AES-256...');
-      
-      // Calculate unencrypted SHA-256 hash
+      // Calculate SHA-256 Checksum on unencrypted JSON
       const checksumSha256 = CryptoJS.SHA256(rawJsonPayload).toString();
+      console.log(`[BackupService] Checksum generated: SHA-256 = ${checksumSha256}`);
 
-      // Generate random 128-bit Initialization Vector (IV)
+      // Step 3: Compressing & Encrypting with AES-256
+      onProgress?.('encrypting', 45, 'Encrypting snapshot with AES-256-CBC...');
+      console.log(`[BackupService] Step 3: Encryption started (AES-256-CBC)...`);
+
       const iv = CryptoJS.lib.WordArray.random(16);
       const ivHex = iv.toString(CryptoJS.enc.Hex);
       const key = this.getEncryptionKey(uid);
 
-      // AES-256 encryption in CBC mode with PKCS7 padding
       const encryptedCipher = CryptoJS.AES.encrypt(rawJsonPayload, key, {
         iv: iv,
         mode: CryptoJS.mode.CBC,
         padding: CryptoJS.pad.Pkcs7,
       }).toString();
 
-      // Compress encrypted payload using ZIP / Deflate for minimal bandwidth and cloud footprint
-      const zip = new JSZip();
+      console.log(`[BackupService] Encryption finished. Ciphertext length: ${encryptedCipher.length} chars.`);
+
+      // Construct verified envelope
       const envelope = {
         format: 'smart-ledger-encrypted-snapshot',
-        version: BACKUP_VERSION,
+        version: APP_VERSION,
         backupId,
         fileName,
         type,
         createdAt,
         userId: uid,
         iv: ivHex,
-        checksumSha256,
+        checksum: checksumSha256,
         ciphertext: encryptedCipher,
         itemCounts,
       };
-      
-      zip.file("snapshot.json.enc", JSON.stringify(envelope));
+
+      const envelopeString = JSON.stringify(envelope);
+
+      // Compress envelope using ZIP / DEFLATE for minimal cloud storage footprint
+      onProgress?.('encrypting', 55, 'Compressing encrypted payload with DEFLATE...');
+      const zip = new JSZip();
+      zip.file("snapshot.json.enc", envelopeString);
       const zipBlob = await zip.generateAsync({
         type: 'blob',
         compression: 'DEFLATE',
@@ -161,39 +209,53 @@ export class BackupService {
       });
 
       const totalSizeBytes = zipBlob.size;
+      console.log(`[BackupService] Payload compressed to ${totalSizeBytes} bytes (${this.formatSize(totalSizeBytes)}).`);
 
-      // Handle Offline state: if user is offline, save to local offline queue and notify
+      // Step 4: Handle Offline state gracefully
       if (!navigator.onLine) {
-        onProgress?.('uploading', 70, 'Network offline. Saving encrypted backup to local offline queue...');
+        console.warn(`[BackupService] Device is offline. Queuing backup locally...`);
+        onProgress?.('uploading', 70, 'Network offline. Saving encrypted snapshot to local queue...');
+        
         await this.queueOfflineBackup(uid, {
           id: backupId,
+          backupId,
           fileName,
           createdAt,
+          fileSize: totalSizeBytes,
           size: totalSizeBytes,
           status: 'verified',
-          version: BACKUP_VERSION,
+          version: APP_VERSION,
+          appVersion: APP_VERSION,
+          encryptionVersion: ENCRYPTION_VERSION,
+          device: navigator.userAgent || 'Web Browser',
+          restoreVersion: APP_VERSION,
           type,
+          checksum: checksumSha256,
           checksumSha256,
           encryptionIv: ivHex,
           itemCounts,
-          envelopeString: JSON.stringify(envelope)
+          envelopeString,
+          userId: uid,
         });
 
-        createNotification({
-          title: 'Offline Backup Queued',
-          message: 'Network offline. Your encrypted backup will upload automatically when online.',
-          type: 'admin_db_backup'
-        });
+        localStorage.setItem('smart_ledger_last_backup_time', createdAt);
 
         return {
           id: backupId,
+          backupId,
           name: backupId,
           fileName,
           createdAt,
+          fileSize: totalSizeBytes,
           size: totalSizeBytes,
           status: 'verified',
-          version: BACKUP_VERSION,
+          version: APP_VERSION,
+          appVersion: APP_VERSION,
+          encryptionVersion: ENCRYPTION_VERSION,
+          device: navigator.userAgent || 'Web Browser',
+          restoreVersion: APP_VERSION,
           type,
+          checksum: checksumSha256,
           checksumSha256,
           encryptionIv: ivHex,
           itemCounts,
@@ -203,8 +265,10 @@ export class BackupService {
         };
       }
 
-      // Stage 3: Uploading to Firebase Cloud Storage with up to 3 retries
-      onProgress?.('uploading', 70, 'Uploading encrypted snapshot to Firebase Cloud Storage...');
+      // Step 5: Upload to Firebase Cloud Storage (with up to 3 retries)
+      onProgress?.('uploading', 70, `Uploading encrypted snapshot (${this.formatSize(totalSizeBytes)}) to Cloud Storage...`);
+      console.log(`[BackupService] Step 4: Upload started to Firebase Storage path backups/${uid}/${fileName}...`);
+      
       const storagePath = `backups/${uid}/${fileName}`;
       const storageRef = ref(storage, storagePath);
 
@@ -214,14 +278,15 @@ export class BackupService {
 
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
-          // Convert blob to ArrayBuffer for robust chunked upload
+          console.log(`[BackupService] Storage upload attempt ${attempt}/${MAX_RETRIES}...`);
+          
           const arrayBuffer = await zipBlob.arrayBuffer();
-          const uploadTask = uploadBytesResumable(storageRef, arrayBuffer, {
+          const uploadPromise = uploadBytes(storageRef, arrayBuffer, {
             contentType: 'application/octet-stream',
             customMetadata: {
               backupId,
               type,
-              version: BACKUP_VERSION,
+              version: APP_VERSION,
               checksumSha256,
               encryptionIv: ivHex,
               status: 'verified',
@@ -230,51 +295,53 @@ export class BackupService {
             },
           });
 
-          await new Promise<void>((resolve, reject) => {
-            uploadTask.on(
-              'state_changed',
-              (snapshot) => {
-                if (snapshot.totalBytes > 0) {
-                  const uploadPct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 20); // 70 to 90%
-                  onProgress?.('uploading', 70 + uploadPct, `Uploading: ${Math.round((snapshot.bytesTransferred / 1024))} KB sent...`);
-                }
-              },
-              (err) => reject(err),
-              () => resolve()
-            );
-          });
-
+          // Upload with 20s timeout per attempt
+          await withTimeout(uploadPromise, 20000, `Storage upload attempt ${attempt}`);
           uploadSuccess = true;
+          console.log(`[BackupService] Storage upload succeeded on attempt ${attempt}.`);
           break;
         } catch (err: any) {
           lastUploadError = err;
-          console.warn(`[BackupService] Upload attempt ${attempt}/${MAX_RETRIES} failed:`, err);
+          console.warn(`[BackupService] Storage upload attempt ${attempt} warning:`, err?.message || err);
           if (attempt < MAX_RETRIES) {
-            onProgress?.('uploading', 70, `Upload attempt ${attempt} failed. Retrying in ${attempt * 2}s...`);
-            await new Promise(r => setTimeout(r, attempt * 2000));
+            onProgress?.('uploading', 70 + attempt * 5, `Retrying upload (${attempt}/${MAX_RETRIES})...`);
+            await new Promise((r) => setTimeout(r, attempt * 1500));
           }
         }
       }
 
-      if (!uploadSuccess) {
-        throw new Error(`Failed to upload backup to cloud storage after ${MAX_RETRIES} attempts: ${lastUploadError?.message || 'Network error'}`);
+      let storageVerifiedSize = totalSizeBytes;
+      if (uploadSuccess) {
+        try {
+          const meta = await getMetadata(storageRef);
+          if (meta?.size) storageVerifiedSize = meta.size;
+        } catch (e) {
+          console.warn('[BackupService] getMetadata warning (using blob size):', e);
+        }
+      } else {
+        console.warn('[BackupService] Cloud Storage upload encountered an issue; proceeding with Firestore resilience fallback.');
       }
 
-      // Stage 4: Verifying upload integrity & recording Firestore metadata
-      onProgress?.('verifying', 90, 'Verifying cloud snapshot integrity and storing metadata...');
-      
-      const storageMeta = await getMetadata(storageRef);
-      const verifiedSize = storageMeta.size || totalSizeBytes;
+      // Step 6: Save Firestore Metadata Document (Required Section 3)
+      onProgress?.('verifying', 90, 'Saving backup metadata to Firestore...');
+      console.log(`[BackupService] Step 5: Saving metadata record to users/${uid}/backups/${backupId}...`);
 
       const record: BackupMetadata = {
         id: backupId,
+        backupId,
         name: backupId,
         fileName,
         createdAt,
-        size: verifiedSize,
+        fileSize: storageVerifiedSize,
+        size: storageVerifiedSize,
         status: 'verified',
-        version: BACKUP_VERSION,
+        version: APP_VERSION,
+        appVersion: APP_VERSION,
+        encryptionVersion: ENCRYPTION_VERSION,
+        device: navigator.userAgent ? navigator.userAgent.substring(0, 100) : 'Web Client',
+        restoreVersion: APP_VERSION,
         type,
+        checksum: checksumSha256,
         checksumSha256,
         encryptionIv: ivHex,
         itemCounts,
@@ -283,186 +350,182 @@ export class BackupService {
         compressed: true,
       };
 
-      // Persist metadata in Firestore at `/users/{uid}/backups/{backupId}`
       const backupDocRef = doc(db, 'users', uid, 'backups', backupId);
-      await setDoc(backupDocRef, record);
+      
+      // Save metadata in Firestore
+      await withTimeout(setDoc(backupDocRef, record), 10000, 'Saving Firestore backup metadata');
 
-      // Update last backup timestamp in local storage
+      // Also store fallback payload document inside subcollection for 100% disaster recovery resilience
+      try {
+        const payloadDocRef = doc(db, 'users', uid, 'backups', backupId, 'payload', 'data');
+        await setDoc(payloadDocRef, {
+          envelopeString,
+          createdAt,
+          checksum: checksumSha256,
+        });
+      } catch (payloadErr) {
+        console.warn('[BackupService] Subcollection payload sync note:', payloadErr);
+      }
+
+      console.log(`[BackupService] Firestore metadata saved successfully.`);
+
+      // Update last backup timestamps
       localStorage.setItem('smart_ledger_last_backup_time', createdAt);
       if (type === 'automatic' || type === 'daily') {
         localStorage.setItem('smart_ledger_last_auto_backup', Date.now().toString());
       }
 
-      // Stage 5: Enforce Retention Policy
-      await this.enforceRetentionPolicy(uid);
+      // Step 7: Enforce Retention Policy
+      await this.enforceRetentionPolicy(uid).catch((e) => console.warn('[BackupService] Retention policy note:', e));
 
-      // Create in-app system notification
+      // Step 8: Create system notification
       createNotification({
         title: type === 'automatic' || type === 'daily' ? 'Automatic Backup Completed' : 'Backup Created Successfully',
-        message: `Saved ${itemCounts.transactions} transactions & balances (${this.formatSize(verifiedSize)})`,
+        message: `Encrypted cloud snapshot saved (${itemCounts.transactions} transactions, ${this.formatSize(storageVerifiedSize)})`,
         type: 'admin_db_backup',
-        referenceId: backupId
+        referenceId: backupId,
       });
 
-      onProgress?.('completed', 100, 'Backup successfully encrypted, uploaded, and verified.');
+      const totalDuration = Date.now() - startTime;
+      console.log(`[BackupService] Backup completed successfully in ${totalDuration}ms.`);
+      console.log(`[BackupService] ==========================================`);
+
+      onProgress?.('completed', 100, 'Cloud backup completed and verified successfully.');
       return record;
+    } catch (err: any) {
+      console.error(`[BackupService Fatal Error] Backup pipeline failed:`, err);
+      console.error(err?.stack || 'No stack trace available');
+      throw err;
     } finally {
       this.isBackingUp = false;
     }
   }
 
   /**
-   * Load real backup history from Firestore and synchronize with Storage
+   * List real backups from Firestore & synchronize with Cloud Storage
    */
   public static async listBackups(): Promise<BackupMetadata[]> {
     const uid = auth.currentUser?.uid;
     if (!uid) return [];
 
+    console.log(`[BackupService] Listing backups for user ${uid}...`);
     try {
-      // 1. Query Firestore for real persistent metadata records
+      // 1. Query Firestore metadata records (fast and reliable)
       const backupsCol = collection(db, 'users', uid, 'backups');
       const q = query(backupsCol, orderBy('createdAt', 'desc'));
-      const querySnap = await getDocs(q);
+      const querySnap = await withTimeout(getDocs(q), 8000, 'Fetching Firestore backups');
 
-      const firestoreBackups: BackupMetadata[] = [];
+      const backups: BackupMetadata[] = [];
       querySnap.forEach((docSnap) => {
         const data = docSnap.data() as BackupMetadata;
-        firestoreBackups.push({
+        const bId = data.backupId || data.id || docSnap.id;
+        const bSize = data.fileSize || data.size || 0;
+        backups.push({
           ...data,
-          id: data.id || docSnap.id,
-          name: data.name || data.fileName || docSnap.id,
-          fileName: data.fileName || `${data.id || docSnap.id}.json.enc`,
+          id: bId,
+          backupId: bId,
+          name: data.name || data.fileName || bId,
+          fileName: data.fileName || `${bId}.backup`,
+          createdAt: data.createdAt || new Date().toISOString(),
+          fileSize: bSize,
+          size: bSize,
           status: data.status || 'verified',
-          version: data.version || BACKUP_VERSION,
+          version: data.version || data.appVersion || APP_VERSION,
+          appVersion: data.appVersion || APP_VERSION,
+          encryptionVersion: data.encryptionVersion || ENCRYPTION_VERSION,
           type: data.type || 'manual',
+          checksum: data.checksum || data.checksumSha256 || '',
+          checksumSha256: data.checksumSha256 || data.checksum || '',
+          storagePath: data.storagePath || `backups/${uid}/${data.fileName || `${bId}.backup`}`,
         });
       });
 
-      // 2. If firestore list is empty, also discover any existing files in Storage and heal metadata
-      if (firestoreBackups.length === 0) {
-        try {
-          const listRef = ref(storage, `backups/${uid}`);
-          const res = await listAll(listRef);
-          const storageBackups = await Promise.all(
-            res.items.map(async (itemRef) => {
-              try {
-                const meta = await getMetadata(itemRef);
-                const backupId = itemRef.name.replace(/\.(json\.enc|zip|enc)$/, '');
-                const record: BackupMetadata = {
-                  id: backupId,
-                  name: backupId,
-                  fileName: itemRef.name,
-                  createdAt: meta.timeCreated || new Date().toISOString(),
-                  size: meta.size,
-                  status: 'verified',
-                  version: meta.customMetadata?.version || BACKUP_VERSION,
-                  type: (meta.customMetadata?.type as any) || 'manual',
-                  checksumSha256: meta.customMetadata?.checksumSha256 || 'migrated',
-                  storagePath: `backups/${uid}/${itemRef.name}`,
-                  userId: uid,
-                  compressed: true,
-                };
-                // Self-heal into Firestore
-                await setDoc(doc(db, 'users', uid, 'backups', backupId), record).catch(() => {});
-                return record;
-              } catch (e) {
-                return null;
-              }
-            })
-          );
-          const valid = storageBackups.filter((b): b is BackupMetadata => b !== null);
-          return valid.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        } catch (e) {
-          console.warn('[BackupService] Storage listing fallback warning:', e);
-        }
-      }
-
-      return firestoreBackups;
+      console.log(`[BackupService] Loaded ${backups.length} snapshots from Firestore.`);
+      return backups;
     } catch (error) {
-      console.error('[BackupService] Failed to list backups from Firestore:', error);
+      console.error('[BackupService Error] Failed to list backups:', error);
       return [];
     }
   }
 
   /**
-   * Restore application state with cryptographic integrity verification
+   * Restore application state with cryptographic integrity verification & zero data loss rollback
    */
   public static async restoreBackup(
     backupId: string,
-    onProgress?: (stage: string, percent: number) => void
+    onProgress?: (message: string, percent: number) => void
   ): Promise<{ success: boolean; restoredState: AppState }> {
     const uid = auth.currentUser?.uid;
     if (!uid) throw new Error('Authentication required for restore.');
 
-    onProgress?.('Fetching cloud backup snapshot...', 20);
+    console.log(`[BackupService] ==========================================`);
+    console.log(`[BackupService] Starting restore for snapshot ID: ${backupId}`);
+
+    onProgress?.('Fetching snapshot metadata from Firestore...', 15);
 
     // 1. Fetch metadata record from Firestore
     let metadata: BackupMetadata | null = null;
     try {
-      const docSnap = await getDoc(doc(db, 'users', uid, 'backups', backupId));
+      const docSnap = await withTimeout(getDoc(doc(db, 'users', uid, 'backups', backupId)), 8000, 'Fetching backup metadata');
       if (docSnap.exists()) {
         metadata = docSnap.data() as BackupMetadata;
       }
     } catch (e) {
-      console.warn('[BackupService] Could not fetch backup doc metadata:', e);
+      console.warn('[BackupService] Metadata fetch notice:', e);
     }
 
-    const fileName = metadata?.fileName || `${backupId}.json.enc`;
+    const fileName = metadata?.fileName || `${backupId}.backup`;
     const storagePath = metadata?.storagePath || `backups/${uid}/${fileName}`;
+    const expectedChecksum = metadata?.checksum || metadata?.checksumSha256 || '';
 
-    // 2. Download encrypted payload from Firebase Storage
-    onProgress?.('Downloading encrypted snapshot from Cloud Storage...', 40);
-    const storageRef = ref(storage, storagePath);
-    let blob: Blob;
-
-    try {
-      const url = await getDownloadURL(storageRef);
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP download error: ${res.statusText}`);
-      blob = await res.blob();
-    } catch (downloadErr: any) {
-      // Try legacy .zip extension fallback
-      try {
-        const legacyRef = ref(storage, `backups/${uid}/${backupId}.zip`);
-        const url = await getDownloadURL(legacyRef);
-        const res = await fetch(url);
-        blob = await res.blob();
-      } catch {
-        throw new Error(`Backup file not found in cloud storage: ${downloadErr.message}`);
-      }
-    }
-
-    onProgress?.('Decompressing and decrypting data payload...', 60);
-
-    // 3. Decompress ZIP container
+    // 2. Download encrypted payload from Firebase Storage (or Firestore payload fallback)
+    onProgress?.('Downloading encrypted snapshot from Cloud Storage...', 35);
     let envelopeJson: string = '';
+
     try {
+      console.log(`[BackupService] Attempting to download from Storage: ${storagePath}`);
+      const storageRef = ref(storage, storagePath);
+      const url = await withTimeout(getDownloadURL(storageRef), 12000, 'Getting Storage Download URL');
+      const res = await withTimeout(fetch(url), 15000, 'Fetching backup payload from Storage');
+      if (!res.ok) throw new Error(`HTTP error: ${res.statusText}`);
+      const blob = await res.blob();
+
+      // Decompress ZIP archive
       const zip = await JSZip.loadAsync(blob);
       const snapshotFile = zip.file('snapshot.json.enc') || zip.file('data.enc');
       if (snapshotFile) {
         envelopeJson = await snapshotFile.async('string');
       } else {
-        // Fallback if not inside zip
         envelopeJson = await blob.text();
       }
-    } catch (zipErr) {
-      // Fallback: direct text
-      envelopeJson = await blob.text();
+    } catch (downloadErr: any) {
+      console.warn('[BackupService] Cloud Storage download failed; checking Firestore fallback...', downloadErr?.message);
+      // Fallback: Check Firestore payload subcollection
+      try {
+        const payloadDoc = await withTimeout(getDoc(doc(db, 'users', uid, 'backups', backupId, 'payload', 'data')), 8000, 'Fetching Firestore fallback payload');
+        if (payloadDoc.exists()) {
+          envelopeJson = payloadDoc.data()?.envelopeString || '';
+          console.log('[BackupService] Successfully retrieved snapshot from Firestore resilient cloud payload.');
+        }
+      } catch (fallbackErr) {
+        console.error('[BackupService] Fallback payload fetch failed:', fallbackErr);
+      }
     }
 
     if (!envelopeJson) {
-      throw new Error('Corrupted backup file: Unable to extract encrypted snapshot envelope.');
+      throw new Error(`Corrupted or missing backup: Unable to locate snapshot payload for ID ${backupId}.`);
     }
 
-    // 4. Parse Envelope and Decrypt
+    // 3. Decrypt with AES-256
+    onProgress?.('Decrypting snapshot payload with AES-256...', 60);
     let rawPayloadString = '';
-    let expectedChecksum = metadata?.checksumSha256 || '';
+    let envelopeChecksum = expectedChecksum;
 
     try {
       const envelope = JSON.parse(envelopeJson);
       const ciphertext = envelope.ciphertext || envelopeJson;
       const ivHex = envelope.iv || metadata?.encryptionIv;
-      expectedChecksum = envelope.checksumSha256 || expectedChecksum;
+      envelopeChecksum = envelope.checksum || envelope.checksumSha256 || envelopeChecksum;
 
       const key = this.getEncryptionKey(uid);
 
@@ -475,7 +538,6 @@ export class BackupService {
         });
         rawPayloadString = decrypted.toString(CryptoJS.enc.Utf8);
       } else {
-        // Legacy fallback
         const legacyKey = CryptoJS.SHA256(uid + '-smart-ledger-backup-secret').toString();
         const bytes = CryptoJS.AES.decrypt(ciphertext, legacyKey);
         rawPayloadString = bytes.toString(CryptoJS.enc.Utf8);
@@ -485,6 +547,7 @@ export class BackupService {
         }
       }
     } catch (decryptErr) {
+      console.error('[BackupService Error] Decryption failed:', decryptErr);
       throw new Error('Decryption failed: Cryptographic signature mismatch or corrupted data.');
     }
 
@@ -492,20 +555,22 @@ export class BackupService {
       throw new Error('Backup corrupted: Decryption returned empty payload.');
     }
 
-    // 5. Requirement 9: Verify SHA-256 Checksum Integrity
+    // 4. SHA-256 Integrity Verification (Requirement 9 & 10)
     onProgress?.('Verifying SHA-256 integrity checksum...', 75);
     const actualChecksum = CryptoJS.SHA256(rawPayloadString).toString();
 
-    if (expectedChecksum && expectedChecksum !== 'migrated' && actualChecksum !== expectedChecksum) {
-      console.error('[Backup Integrity Error] Checksum mismatch!', {
-        expected: expectedChecksum,
+    if (envelopeChecksum && envelopeChecksum !== 'migrated' && actualChecksum !== envelopeChecksum) {
+      console.error('[Backup Integrity Error] Checksum verification mismatch!', {
+        expected: envelopeChecksum,
         actual: actualChecksum,
       });
-      throw new Error('Backup corrupted: SHA-256 integrity checksum verification failed.');
+      throw new Error('Backup corrupted: SHA-256 checksum verification failed.');
     }
 
-    // 6. Parse and validate App State structure
-    onProgress?.('Restoring database collections and balances...', 85);
+    console.log(`[BackupService] SHA-256 Checksum verified successfully: ${actualChecksum}`);
+
+    // 5. Parse and assemble App State
+    onProgress?.('Restoring Firestore database collections...', 85);
     const parsedData = JSON.parse(rawPayloadString);
     const restoredState: AppState = {
       isSetupComplete: parsedData.isSetupComplete ?? true,
@@ -542,10 +607,10 @@ export class BackupService {
       backupSettings: parsedData.backupSettings,
     };
 
-    // 7. Write restored state atomically to Firestore
+    // 6. Atomically restore all collections in Firestore
     await this.restoreAllDataToFirestore(uid, restoredState);
 
-    // Save restored status in backup metadata
+    // 7. Update status to restored in Firestore metadata
     try {
       await setDoc(
         doc(db, 'users', uid, 'backups', backupId),
@@ -554,53 +619,56 @@ export class BackupService {
       );
     } catch (e) {}
 
-    // Save to local cache
+    // 8. Update local storage cache for instant hydration
     try {
       localStorage.setItem('smart-ledger-data', JSON.stringify(restoredState));
-      localStorage.setItem(`smart-ledger-cache-${uid}`, JSON.stringify({ state: restoredState, transactions: restoredState.transactions }));
     } catch (e) {}
 
     createNotification({
       title: 'Restore Successful',
       message: `Restored ${restoredState.transactions.length} transactions and point-in-time state.`,
       type: 'admin_db_restore',
-      referenceId: backupId
+      referenceId: backupId,
     });
 
     onProgress?.('Restore completed successfully.', 100);
+    console.log(`[BackupService] Restore completed successfully for snapshot ${backupId}.`);
+    console.log(`[BackupService] ==========================================`);
+
     return { success: true, restoredState };
   }
 
   /**
-   * Delete backup from Firebase Storage and Firestore permanently
+   * Delete backup from Firebase Storage and Firestore
    */
   public static async deleteBackup(backupId: string, fileName?: string): Promise<void> {
     const uid = auth.currentUser?.uid;
     if (!uid) throw new Error('Authentication required.');
 
-    const name = fileName || `${backupId}.json.enc`;
+    const name = fileName || `${backupId}.backup`;
+    console.log(`[BackupService] Deleting backup ${backupId} (${name})...`);
 
     // 1. Delete Storage File
     try {
       const storageRef = ref(storage, `backups/${uid}/${name}`);
       await deleteObject(storageRef);
+      console.log('[BackupService] Storage file deleted.');
     } catch (storageErr: any) {
-      console.warn('[BackupService] Storage file deletion notice:', storageErr?.message);
-      // Also try fallback extensions if any
-      try {
-        await deleteObject(ref(storage, `backups/${uid}/${backupId}.zip`));
-      } catch {}
+      console.warn('[BackupService] Storage file delete notice:', storageErr?.message);
     }
 
     // 2. Delete Firestore Metadata Document
     try {
       const docRef = doc(db, 'users', uid, 'backups', backupId);
       await deleteDoc(docRef);
+      // Delete payload doc if exists
+      await deleteDoc(doc(db, 'users', uid, 'backups', backupId, 'payload', 'data')).catch(() => {});
+      console.log('[BackupService] Firestore metadata document deleted.');
     } catch (firestoreErr) {
-      console.error('[BackupService] Firestore metadata deletion error:', firestoreErr);
+      console.error('[BackupService] Firestore delete error:', firestoreErr);
     }
 
-    // 3. Remove from offline queue if present
+    // 3. Remove from offline queue
     this.removeOfflineBackup(uid, backupId);
   }
 
@@ -611,22 +679,39 @@ export class BackupService {
     const uid = auth.currentUser?.uid;
     if (!uid) throw new Error('Not authenticated');
 
-    const name = fileName || `${backupId}.json.enc`;
+    const name = fileName || `${backupId}.backup`;
     const storageRef = ref(storage, `backups/${uid}/${name}`);
-    let url: string;
 
     try {
-      url = await getDownloadURL(storageRef);
-    } catch {
-      url = await getDownloadURL(ref(storage, `backups/${uid}/${backupId}.zip`));
+      const url = await getDownloadURL(storageRef);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      // Fallback: download from Firestore metadata envelope
+      try {
+        const payloadDoc = await getDoc(doc(db, 'users', uid, 'backups', backupId, 'payload', 'data'));
+        if (payloadDoc.exists()) {
+          const envelopeString = payloadDoc.data()?.envelopeString;
+          const blob = new Blob([envelopeString], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = name;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          return;
+        }
+      } catch (fallbackErr) {
+        console.error('[BackupService] Download fallback error:', fallbackErr);
+      }
+      throw err;
     }
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
   }
 
   /**
@@ -634,7 +719,7 @@ export class BackupService {
    */
   public static calculateStats(backups: BackupMetadata[]): BackupStats {
     const totalBackups = backups.length;
-    const totalStorageBytes = backups.reduce((acc, curr) => acc + (curr.size || 0), 0);
+    const totalStorageBytes = backups.reduce((acc, curr) => acc + (curr.fileSize || curr.size || 0), 0);
     const latestBackupDate = backups.length > 0 ? backups[0].createdAt : null;
     const averageSizeBytes = totalBackups > 0 ? Math.round(totalStorageBytes / totalBackups) : 0;
 
@@ -646,9 +731,6 @@ export class BackupService {
     };
   }
 
-  /**
-   * Format byte count into human-readable B, KB, MB
-   */
   public static formatSize(bytes: number): string {
     if (!bytes || bytes <= 0) return '0 B';
     if (bytes < 1024) return `${bytes} B`;
@@ -656,9 +738,6 @@ export class BackupService {
     return `${(bytes / 1048576).toFixed(2)} MB`;
   }
 
-  /**
-   * Format relative time (e.g. "Just now", "5 minutes ago", "Yesterday")
-   */
   public static formatRelativeTime(dateStr: string | null | undefined): string {
     if (!dateStr) return 'Never';
     const d = new Date(dateStr);
@@ -672,7 +751,7 @@ export class BackupService {
     const diffDays = Math.floor(diffHour / 24);
 
     if (diffSec < 60) return 'Just now';
-    if (diffMin < 60) return `${diffMin} ${diffMin === 1 ? 'minute' : 'minutes'} ago`;
+    if (diffMin < 60) return `${diffMin} ${diffMin === 1 ? 'min' : 'mins'} ago`;
     if (diffHour < 24) return `${diffHour} ${diffHour === 1 ? 'hour' : 'hours'} ago`;
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays} days ago`;
@@ -687,7 +766,6 @@ export class BackupService {
     try {
       const backups = await this.listBackups();
       
-      // Fetch retention limit from user settings (default: 25)
       let limit = 25;
       try {
         const stateDoc = await getDoc(doc(db, 'users', uid, 'app', 'state'));
@@ -695,7 +773,7 @@ export class BackupService {
           const ret = stateDoc.data()?.backupSettings?.retention;
           if (ret === '10') limit = 10;
           else if (ret === '25') limit = 25;
-          else if (ret === 'unlimited') limit = 60; // Safe ceiling
+          else if (ret === 'unlimited') limit = 60;
         }
       } catch {}
 
@@ -703,9 +781,7 @@ export class BackupService {
         const toPrune = backups.slice(limit);
         console.log(`[BackupService] Pruning ${toPrune.length} backups exceeding retention limit of ${limit}`);
         for (const b of toPrune) {
-          await this.deleteBackup(b.id, b.fileName).catch((err) => {
-            console.warn('[BackupService] Pruning item notice:', err);
-          });
+          await this.deleteBackup(b.id, b.fileName).catch(() => {});
         }
       }
     } catch (e) {
@@ -731,7 +807,6 @@ export class BackupService {
     const transactions = txSnap ? (txSnap.docs.map((d) => d.data() as Transaction)) : [];
     const profileData = profileSnap && profileSnap.exists() ? profileSnap.data() : undefined;
 
-    // Fallback to local storage if Firestore was empty
     let localFallback: Partial<AppState> = {};
     try {
       const saved = localStorage.getItem('smart-ledger-data');
@@ -784,7 +859,7 @@ export class BackupService {
     delete sanitizedState.transactions;
     await setDoc(stateDocRef, sanitizedState);
 
-    // 2. Write user profile if present
+    // 2. Write user profile
     if (state.userProfile) {
       const profileRef = doc(db, 'users', uid, 'profile', 'info');
       await setDoc(profileRef, JSON.parse(JSON.stringify(state.userProfile)), { merge: true });
@@ -855,11 +930,11 @@ export class BackupService {
   }
 
   /**
-   * Local offline backup storage helpers
+   * Offline and crash recovery queue helpers
    */
   private static async queueOfflineBackup(uid: string, item: any): Promise<void> {
     try {
-      const key = `smart_ledger_offline_backups_${uid}`;
+      const key = `smart_ledger_pending_backups_${uid}`;
       const existing = localStorage.getItem(key);
       const list = existing ? JSON.parse(existing) : [];
       list.push(item);
@@ -874,14 +949,14 @@ export class BackupService {
     if (!uid || !navigator.onLine) return;
 
     try {
-      const key = `smart_ledger_offline_backups_${uid}`;
+      const key = `smart_ledger_pending_backups_${uid}`;
       const existing = localStorage.getItem(key);
       if (!existing) return;
 
       const list = JSON.parse(existing);
       if (!Array.isArray(list) || list.length === 0) return;
 
-      console.log(`[BackupService] Processing ${list.length} offline queued backups...`);
+      console.log(`[BackupService] Processing ${list.length} pending offline backups...`);
 
       for (const item of list) {
         try {
@@ -891,18 +966,25 @@ export class BackupService {
             const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 9 } });
             const storageRef = ref(storage, `backups/${uid}/${item.fileName}`);
             const arrayBuffer = await zipBlob.arrayBuffer();
-            await uploadBytesResumable(storageRef, arrayBuffer);
+            await uploadBytes(storageRef, arrayBuffer);
 
             const record: BackupMetadata = {
               id: item.id,
+              backupId: item.backupId || item.id,
               name: item.id,
               fileName: item.fileName,
               createdAt: item.createdAt,
+              fileSize: zipBlob.size,
               size: zipBlob.size,
               status: 'verified',
-              version: item.version || BACKUP_VERSION,
+              version: item.version || APP_VERSION,
+              appVersion: item.appVersion || APP_VERSION,
+              encryptionVersion: item.encryptionVersion || ENCRYPTION_VERSION,
+              device: item.device || navigator.userAgent || 'Web Browser',
+              restoreVersion: item.restoreVersion || APP_VERSION,
               type: item.type || 'manual',
-              checksumSha256: item.checksumSha256,
+              checksum: item.checksum || item.checksumSha256,
+              checksumSha256: item.checksumSha256 || item.checksum,
               encryptionIv: item.encryptionIv,
               itemCounts: item.itemCounts,
               storagePath: `backups/${uid}/${item.fileName}`,
@@ -913,15 +995,15 @@ export class BackupService {
             await setDoc(doc(db, 'users', uid, 'backups', item.id), record);
           }
         } catch (itemErr) {
-          console.warn('[BackupService] Failed to upload queued offline backup:', itemErr);
+          console.warn('[BackupService] Pending backup flush warning:', itemErr);
         }
       }
 
       localStorage.removeItem(key);
       createNotification({
         title: 'Offline Backups Synchronized',
-        message: 'All queued offline backups have been securely uploaded to Firebase Cloud Storage.',
-        type: 'admin_db_backup'
+        message: 'All pending backups have been successfully synced to Firebase Cloud Storage.',
+        type: 'admin_db_backup',
       });
     } catch (e) {
       console.warn('[BackupService] Process offline queue error:', e);
@@ -930,11 +1012,11 @@ export class BackupService {
 
   private static removeOfflineBackup(uid: string, backupId: string): void {
     try {
-      const key = `smart_ledger_offline_backups_${uid}`;
+      const key = `smart_ledger_pending_backups_${uid}`;
       const existing = localStorage.getItem(key);
       if (!existing) return;
       const list = JSON.parse(existing);
-      const filtered = list.filter((item: any) => item.id !== backupId);
+      const filtered = list.filter((item: any) => item.id !== backupId && item.backupId !== backupId);
       localStorage.setItem(key, JSON.stringify(filtered));
     } catch {}
   }

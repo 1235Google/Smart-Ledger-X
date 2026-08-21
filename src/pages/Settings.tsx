@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useStore } from '../context/StoreContext';
-import { Download, Upload, Wallet, Trash2, Lock, Shield, Mail, Smartphone, Globe, User, Search, CheckCircle, Send, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Download, Upload, Wallet, Trash2, Lock, Shield, Mail, Smartphone, Globe, User, Search, CheckCircle, Send, Loader2, Cloud } from 'lucide-react';
 import { ReceivedMoney } from '../types';
 import { motion } from 'motion/react';
 import { cn, formatDate } from '../lib/utils';
@@ -15,6 +16,7 @@ import Switch from '../components/settings/Switch';
 import IdentityCard from '../components/IdentityCard';
 
 export default function Settings() {
+  const navigate = useNavigate();
   const { startingBalance, setStartingBalance, importData, securitySettings, emailSettings, updateEmailSettings, generalSettings, transactions, currentBalance, addEmailHistoryLog } = useStore();
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -170,6 +172,7 @@ export default function Settings() {
                 </SettingsSection>
 
                 <SettingsSection title="Data & Backup" delay={0.4}>
+                    <SettingsItem icon={Cloud} title="Cloud Backup & Recovery Hub" description="24-Hour automatic backups, encryption & recovery" onClick={() => navigate('/backup')} />
                     <SettingsItem icon={Download} title="Export Data" description="Backup your data to a file" onClick={handleExport} />
                     <SettingsItem icon={Upload} title="Import Data" description="Restore data from a file" onClick={() => fileInputRef.current?.click()} />
                     <SettingsItem icon={Trash2} title="Reset Data" description="Delete all data" variant="danger" onClick={() => setShowResetModal(true)} />

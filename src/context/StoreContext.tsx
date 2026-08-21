@@ -169,9 +169,11 @@ export const defaultState: AppState = {
   backupSettings: {
     autoBackupEnabled: true,
     frequency: '24h',
-    retention: '25',
+    retention: '30',
     backupOnLogin: false,
     backupBeforeLogout: false,
+    lastBackupStatus: 'healthy',
+    backupHealth: 'Optimal',
   }
 };
 

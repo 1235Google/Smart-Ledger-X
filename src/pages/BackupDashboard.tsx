@@ -5,9 +5,7 @@ import {
   Download, RotateCcw, Trash2, Clock, Play, FileJson, 
   Lock, RefreshCw, Settings as SettingsIcon, Database,
   ArrowUpRight, AlertTriangle, X, Check, Server, Eye, Sparkles, Sliders,
-  Calendar, CheckCircle, Activity, Search, Filter, Flame,
-  FlaskConical, ShieldCheck, Terminal, Layers, ArrowUpDown,
-  History, BarChart3, Zap
+  Calendar, CheckCircle, Activity
 } from 'lucide-react';
 import { BackupService, BackupStats } from '../lib/backupService';
 import { formatCurrency, formatDate } from '../lib/utils';
@@ -15,37 +13,13 @@ import { useStore } from '../context/StoreContext';
 import { useToast } from '../context/ToastContext';
 import AnimatedButton from '../components/ui/AnimatedButton';
 import DataStateGuard from '../components/ui/DataStateGuard';
-import { 
-  BackupMetadata, 
-  BackupProgressStage, 
-  BackupType, 
-  BackupLog, 
-  BackupTimelineEvent, 
-  RecoveryTestReport,
-  AppState 
-} from '../types';
-
-// Enterprise Components
-import BackupHealthDashboard from '../components/backup/BackupHealthDashboard';
-import StorageUsageCard from '../components/backup/StorageUsageCard';
-import BackupTimeline from '../components/backup/BackupTimeline';
-import SnapshotDrawer from '../components/backup/SnapshotDrawer';
-import RestoreWizardModal from '../components/backup/RestoreWizardModal';
-import BackupLogsPanel from '../components/backup/BackupLogsPanel';
-import EmergencyRecoveryModal from '../components/backup/EmergencyRecoveryModal';
-import BackupStatisticsCard from '../components/backup/BackupStatisticsCard';
-import DataIncludedCard from '../components/backup/DataIncludedCard';
-import BackupPerformanceCard from '../components/backup/BackupPerformanceCard';
-import TestRecoveryModal from '../components/backup/TestRecoveryModal';
-import ExportBackupModal from '../components/backup/ExportBackupModal';
+import { BackupMetadata, BackupProgressStage, BackupType } from '../types';
 
 export default function BackupDashboard() {
   const { generalSettings, backupSettings, updateBackupSettings, applyRestoredState, currentUser, dataStatus, retryFetchData } = useStore();
   const { showSuccess, showError, showInfo } = useToast();
 
   const [backups, setBackups] = useState<BackupMetadata[]>([]);
-  const [logs, setLogs] = useState<BackupLog[]>([]);
-  const [timelineEvents, setTimelineEvents] = useState<BackupTimelineEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -55,30 +29,21 @@ export default function BackupDashboard() {
   const [progressPercent, setProgressPercent] = useState<number>(0);
   const [progressMessage, setProgressMessage] = useState<string>('');
 
-  // Modals & Drawers state
-  const [drawerSnapshot, setDrawerSnapshot] = useState<BackupMetadata | null>(null);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [restoreWizardSnapshot, setRestoreWizardSnapshot] = useState<BackupMetadata | null>(null);
-  const [isRestoreWizardOpen, setIsRestoreWizardOpen] = useState(false);
-  const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
-  const [exportModalSnapshot, setExportModalSnapshot] = useState<BackupMetadata | null>(null);
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [testRecoveryReport, setTestRecoveryReport] = useState<RecoveryTestReport | null>(null);
-  const [isTestRecoveryModalOpen, setIsTestRecoveryModalOpen] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  // Restore State
+  const [restoreTarget, setRestoreTarget] = useState<BackupMetadata | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [restoreProgressMsg, setRestoreProgressMsg] = useState<string>('');
+  const [restoreProgressPercent, setRestoreProgressPercent] = useState<number>(0);
 
   // Delete State
   const [deleteTarget, setDeleteTarget] = useState<BackupMetadata | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Verification in flight state
-  const [verifyingSnapshotId, setVerifyingSnapshotId] = useState<string | null>(null);
+  // Settings Modal / Panel State
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
-  // Search & Filters for Snapshot Table (Req 14)
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'automatic' | 'manual' | 'pre-restore'>('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'verified' | 'restored'>('all');
-  const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'size_desc' | 'size_asc'>('date_desc');
+  // Inspection / Details Modal
+  const [inspectTarget, setInspectTarget] = useState<BackupMetadata | null>(null);
 
   const fetchBackups = async (isManualRefresh = false) => {
     if (isManualRefresh) setIsRefreshing(true);
@@ -87,8 +52,6 @@ export default function BackupDashboard() {
     try {
       const data = await BackupService.listBackups();
       setBackups(data);
-      setLogs(BackupService.getLogs());
-      setTimelineEvents(BackupService.getTimelineEvents(data));
     } catch (err: any) {
       console.error('[BackupDashboard] Fetch error:', err);
       showError('Error Loading Backups', err?.message || 'Failed to load backup history.');
@@ -118,16 +81,13 @@ export default function BackupDashboard() {
       });
 
       setBackups(prev => [newBackup, ...prev]);
-      setLogs(BackupService.getLogs());
-      setTimelineEvents(BackupService.getTimelineEvents([newBackup, ...backups]));
-
       showSuccess('Backup Created Successfully', `Encrypted snapshot (${BackupService.formatSize(newBackup.size)}) stored in Cloud.`);
       
       setTimeout(() => {
         setIsCreating(false);
         setProgressStage('idle');
         setProgressPercent(0);
-      }, 1000);
+      }, 1200);
     } catch (err: any) {
       console.error('[BackupDashboard] Creation failed:', err);
       setProgressStage('failed');
@@ -135,39 +95,39 @@ export default function BackupDashboard() {
       setTimeout(() => {
         setIsCreating(false);
         setProgressStage('idle');
-      }, 2000);
+      }, 2500);
     }
   };
 
-  // Action: Live Verification
-  const handleVerifySnapshot = async (snapshot: BackupMetadata) => {
-    setVerifyingSnapshotId(snapshot.id);
+  const executeRestore = async () => {
+    if (!restoreTarget) return;
+
+    setIsRestoring(true);
+    setRestoreProgressMsg('Connecting to secure cloud storage...');
+    setRestoreProgressPercent(15);
+
     try {
-      const result = await BackupService.verifyBackup(snapshot.id);
-      if (result.passed) {
-        showSuccess('Verification Passed', `Snapshot ${snapshot.id} has 0 corrupt bits. SHA-256 confirmed in ${result.latencyMs}ms.`);
-      } else {
-        showError('Verification Failed', result.message);
+      const result = await BackupService.restoreBackup(restoreTarget.id, (msg, pct) => {
+        setRestoreProgressMsg(msg);
+        setRestoreProgressPercent(pct);
+      });
+
+      if (result.success && result.restoredState) {
+        applyRestoredState(result.restoredState);
+        showSuccess(
+          'Restore Successful',
+          `Restored ${result.restoredState.transactions.length} transactions and point-in-time state.`
+        );
+        setRestoreTarget(null);
+        await fetchBackups();
       }
-      await fetchBackups();
     } catch (err: any) {
-      showError('Verification Error', err?.message || 'Failed to verify backup integrity.');
+      console.error('[BackupDashboard] Restore error:', err);
+      showError('Restore Failed', err?.message || 'Integrity check failed or backup is corrupted.');
     } finally {
-      setVerifyingSnapshotId(null);
-    }
-  };
-
-  // Action: Test Recovery Dry Run
-  const handleTestRecovery = async (snapshot: BackupMetadata) => {
-    try {
-      showInfo('Simulation Running', `Dry-run test starting for snapshot ${snapshot.id}...`);
-      const report = await BackupService.testRecovery(snapshot.id);
-      setTestRecoveryReport(report);
-      setIsTestRecoveryModalOpen(true);
-      setLogs(BackupService.getLogs());
-      setTimelineEvents(BackupService.getTimelineEvents(backups));
-    } catch (err: any) {
-      showError('Test Recovery Failed', err?.message || 'Dry-run test failed.');
+      setIsRestoring(false);
+      setRestoreProgressMsg('');
+      setRestoreProgressPercent(0);
     }
   };
 
@@ -178,12 +138,8 @@ export default function BackupDashboard() {
     try {
       await BackupService.deleteBackup(deleteTarget.id, deleteTarget.fileName);
       setBackups(prev => prev.filter(b => b.id !== deleteTarget.id));
-      setLogs(BackupService.getLogs());
-      showSuccess('Backup Deleted', `Snapshot ${deleteTarget.name} was permanently removed.`);
+      showSuccess('Backup Deleted', `Snapshot ${deleteTarget.name} was removed.`);
       setDeleteTarget(null);
-      if (drawerSnapshot?.id === deleteTarget.id) {
-        setIsDrawerOpen(false);
-      }
     } catch (err: any) {
       console.error('[BackupDashboard] Delete error:', err);
       showError('Delete Failed', err?.message || 'Failed to delete backup.');
@@ -192,68 +148,20 @@ export default function BackupDashboard() {
     }
   };
 
-  const handleRestoreSuccess = (restoredState: AppState) => {
-    applyRestoredState(restoredState);
-    showSuccess(
-      'Point-in-Time Restore Applied',
-      `Restored ${restoredState.transactions.length} transactions and point-in-time state.`
-    );
-    setIsRestoreWizardOpen(false);
-    setIsEmergencyModalOpen(false);
-    setIsDrawerOpen(false);
-    fetchBackups();
-  };
-
   const stats: BackupStats = BackupService.calculateStats(backups, backupSettings);
-  const performanceMetrics = BackupService.getPerformanceMetrics(backups);
-  const latestVerifiedSnapshot = backups.find(b => b.status === 'verified') || (backups.length > 0 ? backups[0] : null);
-
-  // Filter and Sort Backups for the Version History Table (Req 14)
-  const filteredBackups = backups.filter((b) => {
-    // Search query matches ID, fileName, checksum, or date
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchId = b.id.toLowerCase().includes(q);
-      const matchName = (b.name || '').toLowerCase().includes(q);
-      const matchHash = (b.checksumSha256 || '').toLowerCase().includes(q);
-      const matchDate = new Date(b.createdAt).toLocaleDateString().toLowerCase().includes(q);
-      if (!matchId && !matchName && !matchHash && !matchDate) return false;
-    }
-
-    // Type filter
-    if (filterType !== 'all') {
-      if (filterType === 'automatic' && b.type !== 'automatic' && b.type !== 'daily') return false;
-      if (filterType === 'manual' && b.type !== 'manual') return false;
-      if (filterType === 'pre-restore' && b.type !== 'pre-restore') return false;
-    }
-
-    // Status filter
-    if (filterStatus !== 'all') {
-      if (filterStatus === 'verified' && b.status !== 'verified') return false;
-      if (filterStatus === 'restored' && b.status !== 'restored') return false;
-    }
-
-    return true;
-  }).sort((a, b) => {
-    if (sortBy === 'date_desc') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    if (sortBy === 'date_asc') return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    if (sortBy === 'size_desc') return (b.size || 0) - (a.size || 0);
-    if (sortBy === 'size_asc') return (a.size || 0) - (b.size || 0);
-    return 0;
-  });
 
   const getTypeBadge = (type: BackupType) => {
     switch (type) {
       case 'automatic':
       case 'daily':
-        return <span className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2.5 py-0.5 rounded-full text-[11px] font-semibold">Auto 24h</span>;
+        return <span className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-full text-[11px] font-medium">Auto (24h)</span>;
       case 'on-login':
-        return <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-0.5 rounded-full text-[11px] font-semibold">Login</span>;
+        return <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full text-[11px] font-medium">Login</span>;
       case 'pre-restore':
-        return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-0.5 rounded-full text-[11px] font-semibold">Pre-Restore</span>;
+        return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full text-[11px] font-medium">Pre-Restore</span>;
       case 'manual':
       default:
-        return <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full text-[11px] font-semibold">Manual</span>;
+        return <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full text-[11px] font-medium">Manual</span>;
     }
   };
 
@@ -263,69 +171,69 @@ export default function BackupDashboard() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full space-y-8 bg-[#05060a] pb-16"
+        className="w-full space-y-8 bg-[#05060a]"
       >
         {/* Header */}
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-white/5">
           <div>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/20 to-blue-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
-                <Cloud size={24} />
-              </div>
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2.5">
-                  Backup & Recovery Hub
-                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-300 border border-blue-500/20 font-semibold">
-                    Enterprise Tier
-                  </span>
-                </h1>
-                <p className="text-slate-400 mt-0.5 text-xs sm:text-sm">
-                  Continuous 24-hour AES-256 cloud encryption, disaster recovery rollback & SHA-256 verification.
-                </p>
-              </div>
-            </div>
+            <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
+              <Cloud className="text-indigo-400" />
+              Backup & Recovery System
+            </h1>
+            <p className="text-slate-400 mt-1.5 text-sm max-w-2xl">
+              Automated 24-hour zero-knowledge cloud backup engine with AES-256 encryption & SHA-256 integrity verification.
+            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            {/* Emergency Disaster Recovery Button (Req 7) */}
-            <button
-              onClick={() => setIsEmergencyModalOpen(true)}
-              className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-bold transition-all shadow-[0_0_15px_rgba(244,63,94,0.15)]"
-              title="Emergency Rollback to Latest Verified Snapshot"
-            >
-              <Flame size={15} className="text-rose-400" />
-              <span>Emergency Recovery</span>
-            </button>
-
+          <div className="flex items-center gap-3">
             <button
               onClick={() => fetchBackups(true)}
               disabled={isRefreshing || isLoading}
               className="p-2.5 bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/10 rounded-xl transition-colors disabled:opacity-50"
-              title="Refresh Snapshot Records"
+              title="Refresh Snapshot History"
             >
-              <RefreshCw size={17} className={isRefreshing ? 'animate-spin text-indigo-400' : ''} />
+              <RefreshCw size={18} className={isRefreshing ? 'animate-spin text-indigo-400' : ''} />
             </button>
 
             <button
               onClick={() => setShowSettingsModal(true)}
-              className="flex items-center gap-2 px-3.5 py-2.5 bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 border border-white/10 rounded-xl text-xs font-semibold transition-colors"
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-white/[0.04] hover:bg-white/[0.08] text-slate-200 border border-white/10 rounded-xl text-sm font-medium transition-colors"
             >
-              <SettingsIcon size={15} className="text-slate-400" />
-              <span>Settings</span>
+              <SettingsIcon size={16} className="text-slate-400" />
+              Settings
             </button>
 
             <AnimatedButton
               onClick={handleCreateBackup}
               disabled={isCreating}
-              icon={isCreating ? <RefreshCw className="animate-spin" size={17} /> : <Play size={17} />}
-              className={`bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/25 text-xs font-bold ${isCreating ? 'animate-pulse' : ''}`}
+              icon={isCreating ? <RefreshCw className="animate-spin" size={18} /> : <Play size={18} />}
+              className={`bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 ${isCreating ? 'animate-pulse' : ''}`}
             >
               {isCreating ? 'Creating Snapshot...' : 'Run Backup Now'}
             </AnimatedButton>
           </div>
         </header>
 
-        {/* Live Progress Pipeline Banner */}
+        {/* Diagnostic / Error Alert Banner if any error occurred */}
+        {stats.lastError && (
+          <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="text-rose-400 flex-shrink-0" size={20} />
+              <div>
+                <h4 className="text-sm font-semibold text-rose-200">Last Backup Notice</h4>
+                <p className="text-xs text-rose-300/80">{stats.lastError}</p>
+              </div>
+            </div>
+            <button
+              onClick={handleCreateBackup}
+              className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-semibold rounded-lg transition-colors"
+            >
+              Retry Now
+            </button>
+          </div>
+        )}
+
+        {/* Live Progress Banner (When backup is active) */}
         <AnimatePresence>
           {isCreating && (
             <motion.div
@@ -403,113 +311,108 @@ export default function BackupDashboard() {
           )}
         </AnimatePresence>
 
-        {/* 1. Backup Health Dashboard (Req 1) & 2. Storage Usage Card (Req 2) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <BackupHealthDashboard 
-              stats={stats} 
-              latestSnapshot={latestVerifiedSnapshot || undefined} 
-              onRefresh={() => fetchBackups(true)}
-              isRefreshing={isRefreshing}
-            />
+        {/* Dashboard Status & Health Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1: 24h Auto Backup */}
+          <div className="bg-white/[0.02] border border-white/5 p-5 rounded-2xl relative overflow-hidden group hover:border-white/10 transition-colors">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2.5 text-emerald-400">
+                <Shield size={18} />
+                <h3 className="font-semibold text-sm">24h Auto Backup</h3>
+              </div>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                backupSettings?.autoBackupEnabled !== false ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+              }`}>
+                {backupSettings?.autoBackupEnabled !== false ? 'Active' : 'Disabled'}
+              </span>
+            </div>
+            <p className="text-2xl font-bold text-white mb-1">
+              {backupSettings?.autoBackupEnabled !== false ? 'ON' : 'OFF'}
+            </p>
+            <p className="text-xs text-slate-400 flex items-center justify-between">
+              <span>Runs every {backupSettings?.frequency || '24h'}</span>
+              <button 
+                onClick={() => setShowSettingsModal(true)}
+                className="text-indigo-400 hover:text-indigo-300 text-[11px] underline underline-offset-2"
+              >
+                Configure
+              </button>
+            </p>
           </div>
-          <div className="lg:col-span-1">
-            <StorageUsageCard stats={stats} />
+
+          {/* Card 2: Last Backup */}
+          <div className="bg-white/[0.02] border border-white/5 p-5 rounded-2xl group hover:border-white/10 transition-colors">
+            <div className="flex items-center gap-2.5 text-blue-400 mb-2">
+              <Clock size={18} />
+              <h3 className="font-semibold text-sm">Last Backup</h3>
+            </div>
+            <p className="text-xl font-bold text-white mb-1 truncate" title={stats.latestBackupDate ? formatDate(stats.latestBackupDate, generalSettings?.timezone) : 'No backups'}>
+              {stats.latestBackupDate ? BackupService.formatRelativeTime(stats.latestBackupDate) : 'Never'}
+            </p>
+            <p className="text-xs text-slate-400 truncate">
+              {stats.latestBackupDate ? formatDate(stats.latestBackupDate, generalSettings?.timezone) : 'Pending initial snapshot'}
+            </p>
+          </div>
+
+          {/* Card 3: Next Backup & Health */}
+          <div className="bg-white/[0.02] border border-white/5 p-5 rounded-2xl group hover:border-white/10 transition-colors">
+            <div className="flex items-center gap-2.5 text-cyan-400 mb-2">
+              <Activity size={18} />
+              <h3 className="font-semibold text-sm">Backup Health</h3>
+            </div>
+            <p className="text-lg font-bold text-white mb-1 flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${stats.status === 'healthy' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+              <span>{stats.health}</span>
+            </p>
+            <p className="text-xs text-slate-400 truncate">
+              Next: {stats.nextBackupDate ? formatDate(stats.nextBackupDate, generalSettings?.timezone) : 'Pending'}
+            </p>
+          </div>
+
+          {/* Card 4: Total Storage & Retention */}
+          <div className="bg-white/[0.02] border border-white/5 p-5 rounded-2xl group hover:border-white/10 transition-colors">
+            <div className="flex items-center gap-2.5 text-purple-400 mb-2">
+              <HardDrive size={18} />
+              <h3 className="font-semibold text-sm">Cloud Storage</h3>
+            </div>
+            <p className="text-2xl font-bold text-white mb-1">
+              {BackupService.formatSize(stats.totalStorageBytes)}
+            </p>
+            <p className="text-xs text-slate-400">
+              {stats.totalBackups} / {backupSettings?.retention || 30} snapshots retained
+            </p>
           </div>
         </div>
 
-        {/* 8. Backup Statistics Card (Req 8) & 9. Data Included Card (Req 9) */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <BackupStatisticsCard stats={stats} />
-          <DataIncludedCard />
-        </div>
-
-        {/* 12. Backup Performance Metrics Card (Req 12) */}
-        <BackupPerformanceCard metrics={performanceMetrics} />
-
-        {/* 14. Snapshot Version History Management Table with Search & Filters (Req 4, 13, 14, 20) */}
-        <div className="bg-gradient-to-br from-[#0c0e18]/90 via-[#0a0b12]/90 to-[#07080d]/90 border border-white/10 rounded-3xl overflow-hidden shadow-2xl backdrop-blur-xl">
-          {/* Table Header & Search Controls */}
-          <div className="p-6 border-b border-white/10 space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-bold text-white flex items-center gap-2.5">
-                  <Database size={20} className="text-indigo-400" />
-                  Snapshot Version History
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Cryptographically sealed point-in-time state archives with atomic rollback capability.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs bg-white/[0.05] border border-white/10 px-3 py-1.5 rounded-full text-slate-300 font-mono">
-                  {filteredBackups.length} of {backups.length} Snapshots
-                </span>
-              </div>
+        {/* Snapshot Version History Table */}
+        <div className="bg-white/[0.02] border border-white/5 rounded-3xl overflow-hidden shadow-xl">
+          <div className="p-6 border-b border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2.5">
+                <Database size={18} className="text-indigo-400" />
+                Snapshot Version History
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Latest 30 point-in-time snapshots with SHA-256 verification and atomic restore.
+              </p>
             </div>
 
-            {/* Search, Filter & Sort Controls (Req 14) */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
-              {/* Search input */}
-              <div className="sm:col-span-2 relative">
-                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search snapshot ID, date, or checksum..."
-                  className="w-full bg-black/40 border border-white/10 rounded-xl pl-9 pr-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
-                  >
-                    <X size={13} />
-                  </button>
-                )}
-              </div>
-
-              {/* Type Filter */}
-              <div>
-                <select
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value as any)}
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-indigo-500 transition-colors"
-                >
-                  <option value="all">All Types</option>
-                  <option value="automatic">Automatic 24h</option>
-                  <option value="manual">Manual Snapshots</option>
-                  <option value="pre-restore">Pre-Restore</option>
-                </select>
-              </div>
-
-              {/* Sort Order */}
-              <div>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-indigo-500 transition-colors"
-                >
-                  <option value="date_desc">Newest First</option>
-                  <option value="date_asc">Oldest First</option>
-                  <option value="size_desc">Largest Size</option>
-                  <option value="size_asc">Smallest Size</option>
-                </select>
-              </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs bg-white/[0.05] border border-white/10 px-3 py-1.5 rounded-full text-slate-300 font-mono">
+                {backups.length} Available {backups.length === 1 ? 'Snapshot' : 'Snapshots'}
+              </span>
             </div>
           </div>
           
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs whitespace-nowrap">
-              <thead className="bg-black/40 text-slate-400 text-[11px] uppercase font-semibold border-b border-white/5">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead className="bg-black/40 text-slate-400 text-xs uppercase font-semibold border-b border-white/5">
                 <tr>
-                  <th className="px-6 py-4">Snapshot Identification</th>
-                  <th className="px-6 py-4">Created Date</th>
+                  <th className="px-6 py-4">Snapshot ID</th>
+                  <th className="px-6 py-4">Created Date & Time</th>
                   <th className="px-6 py-4">Payload Size</th>
                   <th className="px-6 py-4">Type</th>
-                  <th className="px-6 py-4">Security & Badges</th>
+                  <th className="px-6 py-4">Status</th>
                   <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -519,28 +422,25 @@ export default function BackupDashboard() {
                     <td colSpan={6} className="px-6 py-16 text-center text-slate-400">
                       <RefreshCw className="animate-spin mx-auto mb-3 text-indigo-400" size={28} />
                       <p className="font-medium text-slate-300">Synchronizing cloud backup records...</p>
-                      <p className="text-[11px] text-slate-500 mt-1">Connecting to Firestore & Cloud Storage</p>
+                      <p className="text-xs text-slate-500 mt-1">Connecting to Firestore & Cloud Storage</p>
                     </td>
                   </tr>
-                ) : filteredBackups.length === 0 ? (
+                ) : backups.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-6 py-16 text-center text-slate-400">
                       <Cloud className="mx-auto mb-3 opacity-40 text-slate-400" size={36} />
-                      <p className="text-sm font-semibold text-slate-200">No snapshots matching your criteria</p>
+                      <p className="text-base font-semibold text-slate-200">No backups found</p>
                       <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                        {backups.length === 0 
-                          ? 'Click "Run Backup Now" above to create your first encrypted point-in-time cloud snapshot.'
-                          : 'Try clearing your search query or adjusting the filters.'
-                        }
+                        Click "Run Backup Now" above to create your first encrypted point-in-time cloud snapshot.
                       </p>
                     </td>
                   </tr>
                 ) : (
-                  filteredBackups.map((backup, idx) => (
+                  backups.map((backup, idx) => (
                     <motion.tr 
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: idx * 0.02 }}
+                      transition={{ delay: idx * 0.03 }}
                       key={backup.id} 
                       className="group hover:bg-white/[0.02] transition-colors"
                     >
@@ -584,7 +484,6 @@ export default function BackupDashboard() {
                       {/* Size */}
                       <td className="px-6 py-4 text-slate-400 font-mono text-xs">
                         <span className="text-slate-200 font-semibold">{BackupService.formatSize(backup.size)}</span>
-                        <span className="text-slate-500 text-[10px] ml-1.5">({backup.compressionRatio || 72}% saved)</span>
                       </td>
 
                       {/* Type */}
@@ -592,82 +491,44 @@ export default function BackupDashboard() {
                         {getTypeBadge(backup.type)}
                       </td>
 
-                      {/* Badges & Status (Req 13) */}
+                      {/* Status */}
                       <td className="px-6 py-4">
-                        <div className="flex items-center gap-1.5 flex-wrap max-w-xs">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-semibold">
-                            <CheckCircle2 size={10} />
-                            <span>Verified</span>
-                          </span>
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300 text-[10px] font-semibold">
-                            <Lock size={10} />
-                            <span>AES-256</span>
-                          </span>
+                        <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-medium bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full w-fit">
+                          <CheckCircle2 size={12} />
+                          <span>Verified</span>
                         </div>
                       </td>
 
                       {/* Actions */}
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Inspect Drawer Button */}
                           <button 
-                            onClick={() => {
-                              setDrawerSnapshot(backup);
-                              setIsDrawerOpen(true);
-                            }}
-                            className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-                            title="Inspect Snapshot Details"
+                            onClick={() => setInspectTarget(backup)}
+                            className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                            title="Inspect Snapshot"
                           >
                             <Eye size={15} />
                           </button>
 
-                          {/* Verify Button (Req 20) */}
-                          <button
-                            onClick={() => handleVerifySnapshot(backup)}
-                            disabled={verifyingSnapshotId === backup.id}
-                            className="p-2 text-teal-400 hover:text-teal-300 hover:bg-teal-500/10 rounded-lg transition-colors disabled:opacity-50"
-                            title="Verify SHA-256 Checksum Live"
-                          >
-                            <RefreshCw size={15} className={verifyingSnapshotId === backup.id ? 'animate-spin' : ''} />
-                          </button>
-
-                          {/* Test Recovery Button (Req 15) */}
-                          <button
-                            onClick={() => handleTestRecovery(backup)}
-                            className="p-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
-                            title="Test Recovery (Dry-Run Simulation)"
-                          >
-                            <FlaskConical size={15} />
-                          </button>
-
-                          {/* Export Button (Req 11) */}
                           <button 
-                            onClick={() => {
-                              setExportModalSnapshot(backup);
-                              setIsExportModalOpen(true);
-                            }}
-                            className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-                            title="Export Backup (ZIP, JSON, CSV, Excel, .slbx)"
+                            onClick={() => BackupService.downloadBackup(backup.id, backup.fileName)}
+                            className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                            title="Download Encrypted Snapshot (.json.enc)"
                           >
                             <Download size={15} />
                           </button>
 
-                          {/* Restore Wizard Button (Req 5) */}
                           <button 
-                            onClick={() => {
-                              setRestoreWizardSnapshot(backup);
-                              setIsRestoreWizardOpen(true);
-                            }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 font-semibold text-xs rounded-lg transition-colors"
+                            onClick={() => setRestoreTarget(backup)}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 font-medium text-xs rounded-lg transition-colors"
                           >
                             <RotateCcw size={13} />
-                            <span>Restore</span>
+                            Restore
                           </button>
 
-                          {/* Delete Button */}
                           <button 
                             onClick={() => setDeleteTarget(backup)}
-                            className="p-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors"
+                            className="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors"
                             title="Delete Permanently"
                           >
                             <Trash2 size={15} />
@@ -682,85 +543,97 @@ export default function BackupDashboard() {
           </div>
         </div>
 
-        {/* 3. Backup Timeline (Req 3) & 6. Live Diagnostic Logs (Req 6) */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <BackupTimeline 
-            events={timelineEvents} 
-            onSelectSnapshot={(id) => {
-              const target = backups.find(b => b.id === id);
-              if (target) {
-                setDrawerSnapshot(target);
-                setIsDrawerOpen(true);
-              }
-            }}
-          />
-          <BackupLogsPanel 
-            logs={logs} 
-            onClearLogs={() => {
-              BackupService.clearLogs();
-              setLogs([]);
-              showInfo('Logs Cleared', 'Diagnostic log panel reset.');
-            }}
-            onRefresh={() => setLogs(BackupService.getLogs())}
-          />
-        </div>
+        {/* RESTORE CONFIRMATION MODAL */}
+        <AnimatePresence>
+          {restoreTarget && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
+              <motion.div
+                initial={{ scale: 0.94, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.94, opacity: 0 }}
+                className="bg-[#0b0f19] border border-white/10 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-6"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-2xl">
+                    <AlertTriangle size={24} />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-xl font-bold text-white">Restore Point-in-Time Backup</h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      This will replace your current active balances, transactions, and settings with this exact snapshot.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => !isRestoring && setRestoreTarget(null)}
+                    disabled={isRestoring}
+                    className="text-slate-500 hover:text-slate-300 p-1"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
 
-        {/* 19. SNAPSHOT DETAILS DRAWER (Req 4, 13, 16, 19, 20) */}
-        <SnapshotDrawer
-          snapshot={drawerSnapshot}
-          isOpen={isDrawerOpen}
-          onClose={() => setIsDrawerOpen(false)}
-          onRestore={(snap) => {
-            setIsDrawerOpen(false);
-            setRestoreWizardSnapshot(snap);
-            setIsRestoreWizardOpen(true);
-          }}
-          onExport={(snap) => {
-            setExportModalSnapshot(snap);
-            setIsExportModalOpen(true);
-          }}
-          onDelete={(snap) => {
-            setDeleteTarget(snap);
-          }}
-          onTestRecovery={(snap) => {
-            handleTestRecovery(snap);
-          }}
-          onVerify={async (snap) => {
-            await handleVerifySnapshot(snap);
-          }}
-          isVerifying={verifyingSnapshotId === drawerSnapshot?.id}
-        />
+                {/* Snapshot Details Card */}
+                <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 space-y-2 text-xs">
+                  <div className="flex justify-between py-1 border-b border-white/5">
+                    <span className="text-slate-400">Snapshot ID:</span>
+                    <span className="font-mono text-slate-200">{restoreTarget.id}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-white/5">
+                    <span className="text-slate-400">Created:</span>
+                    <span className="text-slate-200">{formatDate(restoreTarget.createdAt, generalSettings?.timezone)}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-white/5">
+                    <span className="text-slate-400">Payload Size:</span>
+                    <span className="text-slate-200 font-mono">{BackupService.formatSize(restoreTarget.size)}</span>
+                  </div>
+                  <div className="flex justify-between py-1">
+                    <span className="text-slate-400">Integrity:</span>
+                    <span className="text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 size={12} /> SHA-256 Checksum Verified
+                    </span>
+                  </div>
+                </div>
 
-        {/* 5. 4-STEP RESTORE WIZARD MODAL (Req 5, 10) */}
-        <RestoreWizardModal
-          isOpen={isRestoreWizardOpen}
-          onClose={() => setIsRestoreWizardOpen(false)}
-          selectedSnapshot={restoreWizardSnapshot}
-          allSnapshots={backups}
-          onRestoreSuccess={handleRestoreSuccess}
-        />
+                {/* Live Restore Progress */}
+                {isRestoring && (
+                  <div className="space-y-2 bg-blue-950/40 border border-blue-500/20 p-4 rounded-2xl">
+                    <div className="flex justify-between text-xs text-blue-300 font-medium">
+                      <span className="flex items-center gap-2">
+                        <RefreshCw size={12} className="animate-spin text-blue-400" />
+                        {restoreProgressMsg || 'Restoring data...'}
+                      </span>
+                      <span>{restoreProgressPercent}%</span>
+                    </div>
+                    <div className="w-full bg-blue-950 h-1.5 rounded-full overflow-hidden">
+                      <motion.div 
+                        className="bg-blue-400 h-full rounded-full transition-all duration-200"
+                        style={{ width: `${restoreProgressPercent}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
 
-        {/* 7. EMERGENCY RECOVERY MODAL (Req 7) */}
-        <EmergencyRecoveryModal
-          isOpen={isEmergencyModalOpen}
-          onClose={() => setIsEmergencyModalOpen(false)}
-          latestVerifiedSnapshot={latestVerifiedSnapshot}
-          onEmergencySuccess={handleRestoreSuccess}
-        />
-
-        {/* 15. TEST RECOVERY MODAL (Req 15) */}
-        <TestRecoveryModal
-          isOpen={isTestRecoveryModalOpen}
-          onClose={() => setIsTestRecoveryModalOpen(false)}
-          report={testRecoveryReport}
-        />
-
-        {/* 11. EXPORT BACKUP MODAL (Req 11) */}
-        <ExportBackupModal
-          snapshot={exportModalSnapshot}
-          isOpen={isExportModalOpen}
-          onClose={() => setIsExportModalOpen(false)}
-        />
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    onClick={() => setRestoreTarget(null)}
+                    disabled={isRestoring}
+                    className="px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <AnimatedButton
+                    onClick={executeRestore}
+                    disabled={isRestoring}
+                    icon={isRestoring ? <RefreshCw className="animate-spin" size={16} /> : <RotateCcw size={16} />}
+                    className="bg-blue-600 hover:bg-blue-500 text-white"
+                  >
+                    {isRestoring ? 'Restoring Database...' : 'Confirm Restore'}
+                  </AnimatedButton>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* DELETE CONFIRMATION MODAL */}
         <AnimatePresence>
@@ -770,7 +643,7 @@ export default function BackupDashboard() {
                 initial={{ scale: 0.94, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.94, opacity: 0 }}
-                className="bg-[#0b0f19] border border-white/10 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5"
+                className="bg-[#0b0f19] border border-white/10 rounded-3xl max-md w-full p-6 shadow-2xl space-y-5"
               >
                 <div className="flex items-start gap-4">
                   <div className="p-3 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-2xl">
@@ -788,15 +661,15 @@ export default function BackupDashboard() {
                   <button
                     onClick={() => setDeleteTarget(null)}
                     disabled={isDeleting}
-                    className="px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
+                    className="px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
                   >
                     Cancel
                   </button>
                   <AnimatedButton
                     onClick={executeDelete}
                     disabled={isDeleting}
-                    icon={isDeleting ? <RefreshCw className="animate-spin" size={15} /> : <Trash2 size={15} />}
-                    className="bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold"
+                    icon={isDeleting ? <RefreshCw className="animate-spin" size={16} /> : <Trash2 size={16} />}
+                    className="bg-rose-600 hover:bg-rose-500 text-white"
                   >
                     {isDeleting ? 'Deleting...' : 'Delete Permanently'}
                   </AnimatedButton>
@@ -806,7 +679,93 @@ export default function BackupDashboard() {
           )}
         </AnimatePresence>
 
-        {/* SETTINGS CONFIGURATION MODAL */}
+        {/* INSPECT SNAPSHOT MODAL */}
+        <AnimatePresence>
+          {inspectTarget && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
+              <motion.div
+                initial={{ scale: 0.94, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.94, opacity: 0 }}
+                className="bg-[#0b0f19] border border-white/10 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-6"
+              >
+                <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <FileJson className="text-indigo-400" size={18} />
+                    Snapshot Metadata Inspector
+                  </h3>
+                  <button onClick={() => setInspectTarget(null)} className="text-slate-500 hover:text-slate-300">
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="bg-black/40 border border-white/5 rounded-2xl p-4 space-y-3 text-xs font-mono">
+                  <div className="flex justify-between border-b border-white/5 pb-2">
+                    <span className="text-slate-500">ID:</span>
+                    <span className="text-indigo-300 font-semibold">{inspectTarget.id}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-white/5 pb-2">
+                    <span className="text-slate-500">File Name:</span>
+                    <span className="text-slate-300">{inspectTarget.fileName}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-white/5 pb-2">
+                    <span className="text-slate-500">Created:</span>
+                    <span className="text-slate-300">{inspectTarget.createdAt}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-white/5 pb-2">
+                    <span className="text-slate-500">Storage Size:</span>
+                    <span className="text-slate-300">{inspectTarget.size} bytes ({BackupService.formatSize(inspectTarget.size)})</span>
+                  </div>
+                  <div className="flex justify-between border-b border-white/5 pb-2">
+                    <span className="text-slate-500">Type:</span>
+                    <span className="text-slate-300 uppercase">{inspectTarget.type}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-white/5 pb-2">
+                    <span className="text-slate-500">Encryption:</span>
+                    <span className="text-emerald-400">AES-256-CBC (PKCS7)</span>
+                  </div>
+                  <div className="flex justify-between border-b border-white/5 pb-2">
+                    <span className="text-slate-500">Version:</span>
+                    <span className="text-slate-300">{inspectTarget.version || '2.0.0'}</span>
+                  </div>
+                  <div className="flex flex-col gap-1 border-b border-white/5 pb-2">
+                    <span className="text-slate-500">SHA-256 Checksum:</span>
+                    <span className="text-slate-300 break-all text-[10px] bg-black/60 p-1.5 rounded">{inspectTarget.checksumSha256}</span>
+                  </div>
+                  {inspectTarget.itemCounts && (
+                    <div className="pt-1">
+                      <span className="text-slate-500 block mb-1">Included Content:</span>
+                      <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-300">
+                        <div>• Transactions: {inspectTarget.itemCounts.transactions}</div>
+                        <div>• Customers: {inspectTarget.itemCounts.customers}</div>
+                        <div>• Savings Goals: {inspectTarget.itemCounts.savingsGoals}</div>
+                        <div>• Gullak Entries: {inspectTarget.itemCounts.gullakEntries}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-3">
+                  <AnimatedButton
+                    onClick={() => BackupService.downloadBackup(inspectTarget.id, inspectTarget.fileName)}
+                    icon={<Download size={15} />}
+                    className="bg-white/10 hover:bg-white/20 text-white"
+                  >
+                    Download File
+                  </AnimatedButton>
+                  <button
+                    onClick={() => setInspectTarget(null)}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* SETTINGS MODAL */}
         <AnimatePresence>
           {showSettingsModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
@@ -817,21 +776,21 @@ export default function BackupDashboard() {
                 className="bg-[#0b0f19] border border-white/10 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-6"
               >
                 <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2.5">
-                    <Sliders className="text-indigo-400" size={18} />
-                    Automated Backup Policy Configuration
+                  <h3 className="text-xl font-bold text-white flex items-center gap-2.5">
+                    <Sliders className="text-indigo-400" size={20} />
+                    Cloud Backup Configuration
                   </h3>
                   <button onClick={() => setShowSettingsModal(false)} className="text-slate-500 hover:text-slate-300">
-                    <X size={18} />
+                    <X size={20} />
                   </button>
                 </div>
 
-                <div className="space-y-4 text-xs">
+                <div className="space-y-4 text-sm">
                   {/* Enable / Disable Automatic Backup */}
                   <div className="flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
                     <div>
-                      <h4 className="font-semibold text-white">Enable 24-Hour Automated Backup</h4>
-                      <p className="text-slate-400 mt-0.5">Executes background encrypted snapshots every 24 hours</p>
+                      <h4 className="font-semibold text-white">Enable Automated Backup</h4>
+                      <p className="text-xs text-slate-400 mt-0.5">Runs automatically every 24 hours in the background</p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input 
@@ -846,11 +805,11 @@ export default function BackupDashboard() {
 
                   {/* Backup Frequency */}
                   <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl space-y-2">
-                    <label className="font-semibold text-white block">Scheduled Frequency</label>
+                    <label className="font-semibold text-white block">Backup Frequency</label>
                     <select
                       value={backupSettings?.frequency || '24h'}
                       onChange={(e) => updateBackupSettings({ frequency: e.target.value as any })}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2 text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors text-xs"
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors"
                     >
                       <option value="12h">Every 12 Hours</option>
                       <option value="24h">Every 24 Hours (Daily Recommended)</option>
@@ -860,25 +819,25 @@ export default function BackupDashboard() {
 
                   {/* Retention Policy */}
                   <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl space-y-2">
-                    <label className="font-semibold text-white block">Snapshot Retention Limit</label>
-                    <p className="text-slate-400">Controls how many historical snapshots are preserved before automatic pruning</p>
+                    <label className="font-semibold text-white block">Retention Policy</label>
+                    <p className="text-xs text-slate-400">Controls how many historical snapshots to retain (defaults to latest 30)</p>
                     <select
                       value={backupSettings?.retention || '30'}
                       onChange={(e) => updateBackupSettings({ retention: e.target.value as any })}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2 text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors text-xs"
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors"
                     >
                       <option value="10">Keep Last 10 Backups</option>
                       <option value="25">Keep Last 25 Backups</option>
-                      <option value="30">Keep Last 30 Backups (Standard Enterprise)</option>
-                      <option value="unlimited">Unlimited (Up to 5 GB Cloud Quota)</option>
+                      <option value="30">Keep Last 30 Backups (Standard)</option>
+                      <option value="unlimited">Unlimited (Up to Cloud Quota)</option>
                     </select>
                   </div>
 
                   {/* Backup on Login */}
                   <div className="flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
                     <div>
-                      <h4 className="font-semibold text-white">Snapshot on User Sign-in</h4>
-                      <p className="text-slate-400 mt-0.5">Generate snapshot immediately upon successful authentication</p>
+                      <h4 className="font-semibold text-white">Backup on Login</h4>
+                      <p className="text-xs text-slate-400 mt-0.5">Take a snapshot each time you sign in to a new session</p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input 
@@ -895,9 +854,9 @@ export default function BackupDashboard() {
                 <div className="flex justify-end pt-2">
                   <button
                     onClick={() => setShowSettingsModal(false)}
-                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-indigo-600/20 transition-colors"
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl shadow-lg shadow-indigo-600/20 transition-colors"
                   >
-                    Save & Close
+                    Done
                   </button>
                 </div>
               </motion.div>

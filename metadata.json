@@ -1,6 +1,6 @@
 {
   "name": "Remix: Smart Ledger",
-  "description": "Smart financial ledger with enterprise-grade 24-hour AES-256 cloud backup, disaster recovery rollback, and SHA-256 integrity verification.",
+  "description": "A smart financial ledger with AI assistant to track balances, pending payments, and money received.",
   "requestFramePermissions": [
     "publickey-credentials-create",
     "publickey-credentials-get"

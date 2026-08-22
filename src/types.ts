@@ -267,9 +267,6 @@ export interface BackupSettings {
   lastBackupSize?: number;
   lastBackupChecksum?: string;
   lastBackupLocation?: string;
-  lastVerificationTime?: string;
-  totalBackupsCreated?: number;
-  totalRestoresCount?: number;
 }
 
 export type BackupType = 'manual' | 'automatic' | 'pre-restore' | 'on-login' | 'on-logout' | 'daily';
@@ -283,9 +280,6 @@ export interface BackupItemCounts {
   gullakEntries: number;
   investments: number;
   reports: number;
-  pendingCount?: number;
-  receivedCount?: number;
-  categoriesCount?: number;
 }
 
 export interface BackupMetadata {
@@ -311,62 +305,6 @@ export interface BackupMetadata {
   userId?: string;
   compressed?: boolean;
   lastRestoredAt?: string;
-  verifiedAt?: string;
-  verificationStatus?: 'passed' | 'failed' | 'unverified';
-  durationMs?: number;
-  compressionRatio?: number; // e.g. 72.4%
-  uncompressedSize?: number;
-  encryptionTimeMs?: number;
-  compressionTimeMs?: number;
-  uploadSpeedKbps?: number;
-}
-
-export interface BackupLog {
-  id: string;
-  timestamp: string;
-  level: 'info' | 'success' | 'warning' | 'error';
-  event: string;
-  details?: string;
-  durationMs?: number;
-  size?: number;
-  checksum?: string;
-}
-
-export interface BackupTimelineEvent {
-  id: string;
-  timestamp: string;
-  type: 'backup_auto' | 'backup_manual' | 'restore' | 'verify' | 'failed' | 'test_recovery' | 'prune';
-  title: string;
-  description: string;
-  status: 'success' | 'warning' | 'error' | 'info';
-  snapshotId?: string;
-  size?: number;
-  checksum?: string;
-  durationMs?: number;
-}
-
-export interface BackupPerformanceMetrics {
-  backupDurationMs: number;
-  restoreDurationMs: number;
-  compressionTimeMs: number;
-  encryptionTimeMs: number;
-  uploadSpeedKbps: number;
-  downloadSpeedKbps: number;
-  averageBackupSpeedKbps: number;
-  compressionRatio: number;
-}
-
-export interface RecoveryTestReport {
-  passed: boolean;
-  testedAt: string;
-  snapshotId: string;
-  checksumMatch: boolean;
-  decryptionSuccess: boolean;
-  recordCount: number;
-  parsedSize: number;
-  estimatedRestoreTimeSec: number;
-  diagnostics: string[];
-  latencyMs: number;
 }
 
 export interface AppState {
@@ -455,13 +393,7 @@ export type NotificationType =
   | 'admin_user_blocked'
   | 'admin_user_restored'
   | 'admin_db_backup'
-  | 'admin_db_restore'
-  | 'backup_started'
-  | 'backup_completed'
-  | 'backup_failed'
-  | 'backup_verified'
-  | 'backup_restored'
-  | 'cloud_sync_completed';
+  | 'admin_db_restore';
 
 export interface AppNotification {
   id: string;

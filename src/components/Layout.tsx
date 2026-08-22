@@ -24,8 +24,6 @@ import Lenis from 'lenis';
 import NotificationDropdown, { NotificationDropdownRef } from './NotificationDropdown';
 import UserProfileDropdown from './UserProfileDropdown';
 import SyncStatusBadge from './SyncStatusBadge';
-import FloatingProtectionStatus from './FloatingProtectionStatus';
-import { useNavigate } from 'react-router-dom';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
@@ -44,7 +42,6 @@ const navItems = [
 export default function Layout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
-  const navigate = useNavigate();
   
   // Persisted Collapsed State
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
@@ -406,10 +403,7 @@ export default function Layout() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-h-screen z-10 relative w-full min-w-0 transition-all duration-200">
         {/* Desktop Header */}
-        <header className="hidden md:flex h-20 items-center justify-between px-8 border-b border-white/5 bg-[#05060a]/80 backdrop-blur-md flex-shrink-0 sticky top-0 z-30">
-          <div className="flex items-center gap-3">
-            <FloatingProtectionStatus onClick={() => navigate('/backup')} />
-          </div>
+        <header className="hidden md:flex h-20 items-center justify-end px-8 border-b border-white/5 bg-[#05060a]/80 backdrop-blur-md flex-shrink-0 sticky top-0 z-30">
           <div className="flex items-center gap-3">
             <SyncStatusBadge />
             <NotificationDropdown ref={desktopNotifRef} />

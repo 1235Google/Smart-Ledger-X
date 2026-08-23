@@ -15,13 +15,24 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // User-isolated namespace (Profile, Ledger, App State, Transactions, etc.)
+    // User-isolated namespace (Profile, Ledger, App State, Transactions, Backups, etc.)
     match /users/{userId} {
       allow read, write: if isOwner(userId);
     }
     
     match /users/{userId}/{allPaths=**} {
       allow read, write: if isOwner(userId);
+    }
+
+    // Admin Users Collection (RBAC & Whitelist Access Control)
+    match /adminUsers/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Admin Security Audit Logs
+    match /adminSecurityLogs/{logId} {
+      allow read, write: if isSignedIn();
     }
 
     // Notifications collection - strictly scoped to recipient or broadcast

@@ -170,66 +170,64 @@ export default function Layout() {
         ))}
       </div>
 
-      {/* Desktop Sidebar */}
+      {/* Desktop Sidebar (Material 3 Navigation Rail / Drawer) */}
       <motion.aside
         initial={false}
-        animate={{ width: isCollapsed ? 72 : 248 }}
-        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-        className="hidden md:flex flex-col h-screen sticky top-0 bg-[#070812]/90 backdrop-blur-2xl border-r border-white/[0.08] flex-shrink-0 z-20 overflow-visible select-none shadow-[4px_0_30px_rgba(0,0,0,0.6)] relative"
+        animate={{ width: isCollapsed ? 76 : 256 }}
+        transition={{ duration: 0.28, ease: [0.2, 0, 0, 1] }}
+        className="hidden md:flex flex-col h-screen sticky top-0 bg-[#111318]/95 backdrop-blur-2xl border-r border-white/[0.08] flex-shrink-0 z-20 overflow-visible select-none shadow-[2px_0_24px_rgba(0,0,0,0.5)] relative"
         aria-label="Main Navigation"
       >
         {/* Faint Ambient Glow inside Sidebar */}
-        <div className="absolute inset-0 bg-gradient-to-b from-blue-600/[0.07] via-indigo-600/[0.03] to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#a8c7fa]/[0.04] via-[#0842a0]/[0.02] to-transparent pointer-events-none" />
 
         {/* Sidebar Header */}
-        <div className={cn("p-5 flex items-center relative z-10 transition-all", isCollapsed ? "justify-center flex-col gap-4" : "justify-between")}>
+        <div className={cn("p-4 flex items-center relative z-10 transition-all", isCollapsed ? "justify-center flex-col gap-4" : "justify-between")}>
           <Link 
             to="/" 
             aria-label="SmartLedger Dashboard"
-            className="group flex items-center gap-3 overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-xl p-1"
+            className="group flex items-center gap-3 overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa] rounded-2xl p-1"
           >
             <motion.div 
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
               transition={{ type: 'spring', stiffness: 400, damping: 25 }}
               className="relative flex-shrink-0"
             >
-              <motion.div 
-                animate={{ opacity: [0.2, 0.5, 0.2] }} 
-                transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
-                className="absolute -inset-1 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 blur-md pointer-events-none" 
-              />
-              <div className="relative w-10 h-10 bg-gradient-to-br from-blue-500 via-indigo-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25 border border-white/20">
-                <Wallet className="text-white" size={22} />
+              <div className="w-10 h-10 bg-gradient-to-br from-[#0842a0] via-[#0b57d0] to-[#a8c7fa] rounded-2xl flex items-center justify-center shadow-lg shadow-[#0b57d0]/25 border border-white/20">
+                <Wallet className="text-white" size={20} />
               </div>
             </motion.div>
             {!isCollapsed && (
-              <motion.span
-                initial={{ opacity: 0, x: -10 }}
+              <motion.div
+                initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
+                exit={{ opacity: 0, x: -8 }}
                 transition={{ duration: 0.2 }}
-                className="text-xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent whitespace-nowrap"
+                className="flex flex-col"
               >
-                SmartLedger
-              </motion.span>
+                <span className="text-lg font-bold tracking-tight text-[#e2e2e9] whitespace-nowrap">
+                  SmartLedger <span className="text-[#a8c7fa] text-xs font-black uppercase tracking-wider ml-0.5">X</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-semibold tracking-wider uppercase">Fintech Ledger</span>
+              </motion.div>
             )}
           </Link>
 
           <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.92 }}
             onClick={toggleSidebar}
             aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 flex-shrink-0 relative z-10"
+            className="p-2 rounded-full text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa] flex-shrink-0 relative z-10"
           >
-            {isCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+            {isCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
           </motion.button>
         </div>
 
         {/* Navigation List */}
-        <nav className="flex-1 px-3 py-2 space-y-1.5 overflow-y-auto overflow-x-hidden custom-sidebar-scrollbar relative z-10 pb-8">
+        <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto overflow-x-hidden custom-sidebar-scrollbar relative z-10 pb-8">
           {navItems.map((item) => (
             <NavLink
               key={item.path}
@@ -237,50 +235,45 @@ export default function Layout() {
               aria-label={item.label}
               className={({ isActive }) =>
                 cn(
-                  "group relative flex items-center rounded-xl transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
-                  isCollapsed ? "justify-center h-11 w-11 mx-auto" : "px-3.5 py-2.5 gap-3 w-full",
+                  "group relative flex items-center rounded-full transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa]",
+                  isCollapsed ? "justify-center h-12 w-12 mx-auto my-0.5" : "px-4 py-3 gap-3.5 w-full",
                   isActive 
-                    ? "text-white font-semibold" 
+                    ? "text-[#d3e3fd] font-semibold" 
                     : "text-slate-400 hover:text-white"
                 )
               }
             >
               {({ isActive }) => (
                 <>
-                  {/* Active Gradient Background with Shared Layout Animation */}
+                  {/* Material 3 Active Pill Container with Spring Layout Animation */}
                   {isActive && (
                     <motion.div
-                      layoutId="sidebarActiveBg"
-                      className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-500/20 via-indigo-500/10 to-transparent border border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.15)]"
-                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                    />
-                  )}
-
-                  {/* Active Vertical 3.5px Accent Bar */}
-                  {isActive && (
-                    <motion.div
-                      layoutId="sidebarActiveBar"
-                      className="absolute left-0 top-1.5 bottom-1.5 w-[3.5px] bg-gradient-to-b from-blue-400 to-indigo-500 rounded-r-full shadow-[0_0_12px_rgba(59,130,246,0.9)]"
+                      layoutId="m3SidebarActivePill"
+                      className="absolute inset-0 rounded-full bg-[#004a77]/50 border border-[#a8c7fa]/30 shadow-[0_2px_12px_rgba(168,199,250,0.15)]"
                       transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                     />
                   )}
 
                   {/* Subtle hover background for non-active items */}
                   {!isActive && (
-                    <div className="absolute inset-0 rounded-xl bg-white/0 group-hover:bg-white/[0.04] transition-colors duration-200" />
+                    <div className="absolute inset-0 rounded-full bg-white/0 group-hover:bg-white/[0.05] transition-colors duration-200" />
                   )}
 
-                  {/* Icon with Spring Hover */}
+                  {/* Material 3 Pill Indicator around Icon */}
                   <motion.div 
-                    whileHover={{ scale: 1.1, rotate: 4 }} 
+                    whileHover={{ scale: 1.08 }} 
                     whileTap={{ scale: 0.94 }}
                     transition={{ type: 'spring', stiffness: 450, damping: 24 }}
-                    className="relative z-10 flex items-center justify-center"
+                    className={cn(
+                      "relative z-10 flex items-center justify-center transition-all duration-200",
+                      isCollapsed && isActive && "w-10 h-7 rounded-full bg-[#a8c7fa] text-[#042e6f]",
+                      isCollapsed && !isActive && "w-10 h-7 rounded-full text-slate-400"
+                    )}
                   >
                     {isActive ? (
-                      <item.icon size={20} className="text-blue-400 flex-shrink-0 transition-colors duration-200" />
+                      <item.icon size={20} className={cn("shrink-0 transition-colors duration-200", isCollapsed ? "text-[#042e6f]" : "text-[#a8c7fa]")} />
                     ) : (
-                      <item.icon size={20} className="text-slate-400 flex-shrink-0 transition-colors duration-200 group-hover:text-slate-100" />
+                      <item.icon size={20} className="text-slate-400 shrink-0 transition-colors duration-200 group-hover:text-slate-200" />
                     )}
                   </motion.div>
                   
@@ -288,17 +281,17 @@ export default function Layout() {
                   {!isCollapsed && (
                     <span className={cn(
                       "font-medium text-sm whitespace-nowrap overflow-hidden transition-colors duration-200 z-10",
-                      isActive ? "text-white font-semibold" : "text-slate-400 group-hover:text-slate-200"
+                      isActive ? "text-[#e2e2e9] font-bold" : "text-slate-400 group-hover:text-slate-200"
                     )}>
                       {item.label}
                     </span>
                   )}
 
-                  {/* Premium Floating Tooltip for Collapsed State */}
+                  {/* Material 3 Floating Tooltip for Collapsed State */}
                   {isCollapsed && (
                     <div 
                       role="tooltip" 
-                      className="absolute left-full ml-3 px-3 py-1.5 bg-[#0e101a]/95 backdrop-blur-md border border-white/15 text-white text-xs font-semibold rounded-lg shadow-[0_10px_25px_rgba(0,0,0,0.8)] whitespace-nowrap pointer-events-none opacity-0 scale-95 -translate-x-1.5 group-hover:opacity-100 group-hover:scale-100 group-hover:translate-x-0 transition-all duration-150 ease-out z-50 flex items-center gap-1.5"
+                      className="absolute left-full ml-3 px-3 py-1.5 bg-[#1e2029]/95 backdrop-blur-md border border-white/15 text-white text-xs font-semibold rounded-full shadow-[0_10px_25px_rgba(0,0,0,0.8)] whitespace-nowrap pointer-events-none opacity-0 scale-95 -translate-x-1.5 group-hover:opacity-100 group-hover:scale-100 group-hover:translate-x-0 transition-all duration-150 ease-out z-50 flex items-center gap-1.5"
                     >
                       <span>{item.label}</span>
                     </div>
@@ -310,19 +303,19 @@ export default function Layout() {
         </nav>
       </motion.aside>
 
-      {/* Mobile Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 bg-[#05060a]/85 backdrop-blur-xl border-b border-white/10 z-30 pt-[env(safe-area-inset-top)]">
+      {/* Mobile Header (Material 3 Top App Bar) */}
+      <div className="md:hidden fixed top-0 left-0 right-0 bg-[#111318]/90 backdrop-blur-xl border-b border-white/[0.08] z-30 pt-[env(safe-area-inset-top)]">
         <div className="h-16 flex items-center justify-between px-4">
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setMobileMenuOpen(true)} 
               aria-label="Open Navigation Menu"
-              className="min-w-[44px] min-h-[44px] flex items-center justify-center -ml-2 text-slate-300 hover:text-white rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center -ml-2 text-slate-300 hover:text-white rounded-full hover:bg-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa]"
             >
               <Menu size={24} />
             </button>
             <Link to="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <div className="w-8 h-8 bg-gradient-to-br from-[#0842a0] to-[#0b57d0] rounded-xl flex items-center justify-center shadow-lg shadow-[#0b57d0]/20">
                 <Wallet className="text-white" size={16} />
               </div>
               <span className="font-bold tracking-tight text-white text-base">SmartLedger</span>
@@ -337,7 +330,7 @@ export default function Layout() {
         </div>
       </div>
 
-      {/* Mobile Slide-out Drawer */}
+      {/* Mobile Slide-out Drawer (Material 3 Modal Navigation Drawer) */}
       <AnimatePresence>
         {mobileMenuOpen && (
           <>
@@ -346,7 +339,7 @@ export default function Layout() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="md:hidden fixed inset-0 z-40 bg-black/70 backdrop-blur-md"
+              className="md:hidden fixed inset-0 z-40 bg-black/75 backdrop-blur-md"
               onClick={() => setMobileMenuOpen(false)}
             />
             <motion.div
@@ -355,24 +348,24 @@ export default function Layout() {
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 250 }}
-              className="md:hidden fixed inset-y-0 left-0 w-[82%] max-w-sm bg-[#090a12]/95 backdrop-blur-2xl border-r border-white/10 z-50 flex flex-col shadow-2xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+              className="md:hidden fixed inset-y-0 left-0 w-[84%] max-w-xs bg-[#191b22]/98 backdrop-blur-2xl border-r border-white/10 z-50 flex flex-col shadow-2xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] rounded-r-[28px]"
             >
               <div className="p-6 flex items-center justify-between border-b border-white/10">
                 <Link to="/" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-                    <Wallet className="text-white" size={22} />
+                  <div className="w-10 h-10 bg-gradient-to-br from-[#0842a0] to-[#0b57d0] rounded-2xl flex items-center justify-center shadow-lg shadow-[#0b57d0]/20">
+                    <Wallet className="text-white" size={20} />
                   </div>
                   <span className="text-xl font-bold tracking-tight text-white">SmartLedger</span>
                 </Link>
                 <button 
                   onClick={() => setMobileMenuOpen(false)} 
                   aria-label="Close Navigation Menu"
-                  className="min-w-[44px] min-h-[44px] flex items-center justify-center -mr-2 text-slate-400 hover:text-white rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="min-w-[44px] min-h-[44px] flex items-center justify-center -mr-2 text-slate-400 hover:text-white rounded-full hover:bg-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa]"
                 >
-                  <X size={24} />
+                  <X size={22} />
                 </button>
               </div>
-              <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto custom-sidebar-scrollbar">
+              <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto custom-sidebar-scrollbar">
                 {navItems.map((item) => (
                   <NavLink
                     key={item.path}
@@ -381,14 +374,16 @@ export default function Layout() {
                     aria-label={item.label}
                     className={({ isActive }) =>
                       cn(
-                        "relative flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
-                        isActive ? "bg-gradient-to-r from-blue-500/20 via-indigo-500/10 to-transparent text-white border border-blue-500/30 font-semibold" : "text-slate-400 hover:text-white hover:bg-white/5"
+                        "relative flex items-center gap-3.5 px-4 py-3.5 rounded-full transition-all outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa]",
+                        isActive 
+                          ? "bg-[#004a77]/50 text-[#d3e3fd] border border-[#a8c7fa]/30 font-bold shadow-md" 
+                          : "text-slate-400 hover:text-white hover:bg-white/5"
                       )
                     }
                   >
                     {({ isActive }) => (
                       <>
-                        <item.icon size={22} className={cn("transition-colors", isActive ? "text-blue-400" : "text-slate-400")} />
+                        <item.icon size={20} className={cn("transition-colors", isActive ? "text-[#a8c7fa]" : "text-slate-400")} />
                         <span className="font-semibold text-sm">{item.label}</span>
                       </>
                     )}
@@ -402,8 +397,8 @@ export default function Layout() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-h-screen z-10 relative w-full min-w-0 transition-all duration-200">
-        {/* Desktop Header */}
-        <header className="hidden md:flex h-20 items-center justify-end px-8 border-b border-white/5 bg-[#05060a]/80 backdrop-blur-md flex-shrink-0 sticky top-0 z-30">
+        {/* Desktop Top App Bar */}
+        <header className="hidden md:flex h-20 items-center justify-end px-8 border-b border-white/[0.06] bg-[#111318]/80 backdrop-blur-md flex-shrink-0 sticky top-0 z-30">
           <div className="flex items-center gap-3">
             <SyncStatusBadge />
             <NotificationDropdown ref={desktopNotifRef} />

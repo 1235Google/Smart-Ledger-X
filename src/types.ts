@@ -59,6 +59,7 @@ export interface SecuritySettings {
   autoLockTime: number; // in minutes
   registeredDevices: RegisteredDevice[];
   adminPasswordHash?: string;
+  fallbackPassword?: string;
 }
 
 export interface EmailSettings {
@@ -404,5 +405,45 @@ export interface AppNotification {
   read: boolean;
   userId: string;
   referenceId?: string;
+}
+
+export type AdminRole = 'Owner' | 'Super Admin' | 'Admin' | 'Manager';
+export type AdminStatus = 'Active' | 'Disabled';
+
+export interface AdminUser {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL?: string;
+  role: AdminRole;
+  status: AdminStatus;
+  createdAt: string;
+  lastLogin: string;
+  createdById?: string;
+  createdByEmail?: string;
+}
+
+export type AdminSecurityAction = 
+  | 'LOGIN_SUCCESS' 
+  | 'LOGIN_FAILED' 
+  | 'LOGIN_DENIED_UNAUTHORIZED' 
+  | 'LOGIN_DENIED_DISABLED' 
+  | 'LOGOUT' 
+  | 'ADMIN_ADDED' 
+  | 'ADMIN_ROLE_UPDATED' 
+  | 'ADMIN_STATUS_CHANGED' 
+  | 'ADMIN_REMOVED'
+  | 'PASSWORD_LOGIN';
+
+export interface AdminSecurityLog {
+  id: string;
+  email: string;
+  uid: string;
+  ip: string;
+  device: string;
+  browser: string;
+  timestamp: string;
+  action: AdminSecurityAction;
+  details?: string;
 }
 

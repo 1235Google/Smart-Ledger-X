@@ -35,6 +35,8 @@ import AdminAnalytics from './pages/admin/AdminAnalytics';
 import AdminReports from './pages/admin/AdminReports';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminGullak from './pages/admin/AdminGullak';
+import AdminLogs from './pages/admin/AdminLogs';
+import AdminBackup from './pages/admin/AdminBackup';
 
 import Login from './pages/Login';
 
@@ -95,7 +97,9 @@ function AppRoutes() {
         <Route path="reminders" element={<AdminReminders />} />
         <Route path="analytics" element={<AdminAnalytics />} />
         <Route path="reports" element={<AdminReports />} />
+        <Route path="backup" element={<AdminBackup />} />
         <Route path="gullak" element={<AdminGullak />} />
+        <Route path="logs" element={<AdminLogs />} />
         <Route path="settings" element={<AdminSettings />} />
       </Route>
       <Route path="/login" element={
@@ -126,6 +130,7 @@ function AppRoutes() {
         <Route path="security" element={<SecurityCenter />} />
         <Route path="profile" element={<Profile />} />
         <Route path="backup" element={<BackupDashboard />} />
+        <Route path="backups" element={<BackupDashboard />} />
         <Route path="help" element={<Help />} />
         <Route path="about" element={<About />} />
       </Route>

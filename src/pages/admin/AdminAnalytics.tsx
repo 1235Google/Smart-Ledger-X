@@ -1,124 +1,370 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { BarChart3, TrendingUp, DollarSign, Users, Activity } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { 
+  BarChart3, 
+  TrendingUp, 
+  TrendingDown, 
+  Wallet, 
+  Users, 
+  Activity, 
+  Calendar, 
+  PieChart as PieIcon,
+  Sparkles,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Layers
+} from 'lucide-react';
+import { 
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis, 
+  Tooltip, 
+  ResponsiveContainer, 
+  BarChart, 
+  Bar, 
+  PieChart, 
+  Pie, 
+  Cell 
+} from 'recharts';
 import { useStore } from '../../context/StoreContext';
-import DataStateGuard from '../../components/ui/DataStateGuard';
-import { formatCurrency } from '../../lib/utils';
+import { cn, formatCurrency } from '../../lib/utils';
+import { M3Card } from '../../components/admin/material3/M3Card';
+import { M3StatCard } from '../../components/admin/material3/M3StatCard';
+import { M3Chip } from '../../components/admin/material3/M3Chip';
+import { useM3Theme } from '../../components/admin/material3/M3ThemeContext';
 
 export default function AdminAnalytics() {
-  const { transactions, dataStatus, dataError, retryFetchData } = useStore();
+  const { transactions, customers, currentBalance, totalReceived, totalSent, totalPending } = useStore();
+  const { resolvedTheme } = useM3Theme();
+  const isDark = resolvedTheme === 'dark';
+
+  const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | '1y'>('7d');
+
+  const safeTransactions = transactions || [];
+
+  // Filter transactions within selected timeRange
+  const filteredTransactions = useMemo(() => {
+    const now = Date.now();
+    let daysLimit = 7;
+    if (timeRange === '30d') daysLimit = 30;
+    if (timeRange === '90d') daysLimit = 90;
+    if (timeRange === '1y') daysLimit = 365;
+
+    const cutoff = now - daysLimit * 24 * 60 * 60 * 1000;
+
+    return safeTransactions.filter((tx: any) => {
+      const txDateStr = tx.date || tx.createdAt;
+      if (!txDateStr) return true;
+      const t = new Date(txDateStr).getTime();
+      return isNaN(t) || t >= cutoff;
+    });
+  }, [safeTransactions, timeRange]);
+
+  const periodReceived = useMemo(() => {
+    return filteredTransactions
+      .filter((tx: any) => tx.type === 'received' || tx.type === 'income')
+      .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+  }, [filteredTransactions]);
+
+  const periodSent = useMemo(() => {
+    return filteredTransactions
+      .filter((tx: any) => tx.type === 'sent' || tx.type === 'expense')
+      .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+  }, [filteredTransactions]);
+
+  const periodMargin = periodReceived - periodSent;
 
   const analyticsData = useMemo(() => {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const summary: Record<string, { day: string; received: number; sent: number }> = {};
-    
-    // Initialize standard week order Mon-Sun
-    ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(d => {
-      summary[d] = { day: d, received: 0, sent: 0 };
-    });
-
-    if (transactions && transactions.length > 0) {
-      transactions.forEach(tx => {
-        const txDateStr = (tx as any).date || (tx as any).dueDate;
+    if (timeRange === '1y') {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const summary: Record<string, { day: string; received: number; sent: number }> = {};
+      months.forEach((m) => {
+        summary[m] = { day: m, received: 0, sent: 0 };
+      });
+      filteredTransactions.forEach((tx: any) => {
+        const txDateStr = tx.date || tx.createdAt;
         if (txDateStr) {
           const d = new Date(txDateStr);
           if (!isNaN(d.getTime())) {
-            const dayName = days[d.getDay()];
-            if (summary[dayName]) {
-              if (tx.type === 'received') {
-                summary[dayName].received += (tx.amount || 0);
-              } else if (tx.type === 'sent') {
-                summary[dayName].sent += (tx.amount || 0);
+            const m = months[d.getMonth()];
+            if (summary[m]) {
+              if (tx.type === 'received' || tx.type === 'income') {
+                summary[m].received += Number(tx.amount) || 0;
+              } else if (tx.type === 'sent' || tx.type === 'expense') {
+                summary[m].sent += Number(tx.amount) || 0;
               }
             }
           }
         }
       });
+      return Object.values(summary);
     }
 
-    const result = Object.values(summary);
-    // If all are zero, provide default realistic visual baseline
-    const hasData = result.some(item => item.received > 0 || item.sent > 0);
-    if (!hasData) {
-      return [
-        { day: 'Mon', received: 45000, sent: 12000 },
-        { day: 'Tue', received: 52000, sent: 18000 },
-        { day: 'Wed', received: 38000, sent: 15000 },
-        { day: 'Thu', received: 65000, sent: 22000 },
-        { day: 'Fri', received: 89000, sent: 30000 },
-        { day: 'Sat', received: 74000, sent: 25000 },
-        { day: 'Sun', received: 95000, sent: 35000 },
-      ];
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const summary: Record<string, { day: string; received: number; sent: number }> = {};
+    
+    days.forEach((d) => {
+      summary[d] = { day: d, received: 0, sent: 0 };
+    });
+
+    filteredTransactions.forEach((tx: any) => {
+      const txDateStr = tx.date || tx.createdAt;
+      if (txDateStr) {
+        const d = new Date(txDateStr);
+        if (!isNaN(d.getTime())) {
+          const dayIndex = (d.getDay() + 6) % 7;
+          const dayName = days[dayIndex];
+          if (summary[dayName]) {
+            if (tx.type === 'received' || tx.type === 'income') {
+              summary[dayName].received += Number(tx.amount) || 0;
+            } else if (tx.type === 'sent' || tx.type === 'expense') {
+              summary[dayName].sent += Number(tx.amount) || 0;
+            }
+          }
+        }
+      }
+    });
+
+    return Object.values(summary);
+  }, [filteredTransactions, timeRange]);
+
+  // Category distribution from real filtered transactions
+  const categoryData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    filteredTransactions.forEach((tx: any) => {
+      const cat = tx.category || tx.purpose || 'General';
+      counts[cat] = (counts[cat] || 0) + (Number(tx.amount) || 0);
+    });
+
+    const colors = isDark
+      ? ['#a8c7fa', '#6dd58c', '#ffe082', '#ffaed0', '#c2e7ff', '#85e197']
+      : ['#0b57d0', '#1e8e3e', '#e37400', '#835368', '#004a77', '#137333'];
+
+    const entries = Object.entries(counts);
+    if (entries.length === 0) {
+      return [{ name: 'No Data Recorded', value: 0, color: isDark ? '#3c4043' : '#e1e3e1' }];
     }
 
-    return result;
-  }, [transactions]);
+    return entries.map(([name, value], idx) => ({
+      name,
+      value,
+      color: colors[idx % colors.length],
+    }));
+  }, [filteredTransactions, isDark]);
 
   return (
-    <DataStateGuard
-      status={dataStatus}
-      error={dataError}
-      onRetry={retryFetchData}
-      loadingMessage="Loading platform analytics..."
-      skeletonType="cards"
-    >
-      <div className="space-y-8 max-w-7xl mx-auto pb-16">
+    <div className="space-y-8 max-w-7xl mx-auto pb-16">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Platform Analytics</h1>
-          <p className="text-neutral-400 text-sm mt-1">Deep dive into financial inflows, outflows, and user activity metrics.</p>
+          <h1 className={cn('text-2xl sm:text-3xl font-extrabold tracking-tight', isDark ? 'text-white' : 'text-[#1f1f1f]')}>
+            Platform Analytics & Insights
+          </h1>
+          <p className={cn('text-xs sm:text-sm mt-0.5', isDark ? 'text-[#8e918f]' : 'text-[#5f6368]')}>
+            Comprehensive metrics on financial volume, weekly cash velocities, and category distributions.
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 backdrop-blur-xl">
-            <h2 className="text-xl font-bold text-white mb-2">Weekly Cash Flow Analysis</h2>
-            <p className="text-neutral-400 text-sm mb-6">Comparison of money received vs money sent</p>
-            <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={analyticsData}>
-                  <defs>
-                    <linearGradient id="colorRec" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorSent" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="day" stroke="#737373" />
-                  <YAxis stroke="#737373" tickFormatter={(v) => `₹${v >= 1000 ? (v/1000).toFixed(0) + 'k' : v}`} />
-                  <Tooltip 
-                    formatter={(value: any) => [formatCurrency(Number(value)), '']}
-                    contentStyle={{ backgroundColor: '#121212', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '1rem', color: '#fff' }} 
-                  />
-                  <Area type="monotone" dataKey="received" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorRec)" name="Received" />
-                  <Area type="monotone" dataKey="sent" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorSent)" name="Sent" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 backdrop-blur-xl">
-            <h2 className="text-xl font-bold text-white mb-2">Daily Transaction Volume</h2>
-            <p className="text-neutral-400 text-sm mb-6">Total volume processed across days</p>
-            <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={analyticsData}>
-                  <XAxis dataKey="day" stroke="#737373" />
-                  <YAxis stroke="#737373" tickFormatter={(v) => `₹${v >= 1000 ? (v/1000).toFixed(0) + 'k' : v}`} />
-                  <Tooltip 
-                    formatter={(value: any) => [formatCurrency(Number(value)), '']}
-                    contentStyle={{ backgroundColor: '#121212', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '1rem', color: '#fff' }} 
-                  />
-                  <Bar dataKey="received" fill="#10b981" radius={[8, 8, 0, 0]} name="Received" />
-                  <Bar dataKey="sent" fill="#3b82f6" radius={[8, 8, 0, 0]} name="Sent" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+        {/* Time Range Chips */}
+        <div className="flex items-center gap-1.5">
+          {(['7d', '30d', '90d', '1y'] as const).map((range) => (
+            <M3Chip
+              key={range}
+              label={range === '7d' ? '7 Days' : range === '30d' ? '30 Days' : range === '90d' ? '3 Months' : '1 Year'}
+              selected={timeRange === range}
+              onClick={() => setTimeRange(range)}
+            />
+          ))}
         </div>
       </div>
-    </DataStateGuard>
+
+      {/* Key Metric Stat Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <M3StatCard
+          title="Period Inflow (Received)"
+          value={periodReceived}
+          isCurrency
+          subtitle={`Customer payments (${timeRange.toUpperCase()})`}
+          icon={ArrowDownLeft}
+          tone="emerald"
+        />
+
+        <M3StatCard
+          title="Period Outflow (Sent)"
+          value={periodSent}
+          isCurrency
+          subtitle={`Disbursements (${timeRange.toUpperCase()})`}
+          icon={ArrowUpRight}
+          tone="rose"
+        />
+
+        <M3StatCard
+          title="Period Net Margin"
+          value={periodMargin}
+          isCurrency
+          subtitle="Net cash flow surplus"
+          icon={Wallet}
+          tone="primary"
+        />
+
+        <M3StatCard
+          title="Pending Receivables"
+          value={totalPending}
+          isCurrency
+          subtitle="Outstanding dues to collect"
+          icon={Activity}
+          tone="amber"
+        />
+      </div>
+
+      {/* Charts Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Area Chart: Cash Flow */}
+        <M3Card variant="elevated" padding="lg" className="lg:col-span-2 flex flex-col justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div>
+              <h2 className={cn('text-lg font-bold tracking-tight', isDark ? 'text-white' : 'text-[#1f1f1f]')}>
+                Weekly Cash Velocity Curve
+              </h2>
+              <p className={cn('text-xs mt-0.5', isDark ? 'text-[#8e918f]' : 'text-[#5f6368]')}>
+                Dynamic inflow vs outflow timeline
+              </p>
+            </div>
+          </div>
+
+          <div className="h-80 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={analyticsData}>
+                <defs>
+                  <linearGradient id="anColorRec" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={isDark ? '#6dd58c' : '#1e8e3e'} stopOpacity={0.4} />
+                    <stop offset="95%" stopColor={isDark ? '#6dd58c' : '#1e8e3e'} stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="anColorSent" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={isDark ? '#a8c7fa' : '#0b57d0'} stopOpacity={0.4} />
+                    <stop offset="95%" stopColor={isDark ? '#a8c7fa' : '#0b57d0'} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="day" stroke={isDark ? '#8e918f' : '#747775'} tickLine={false} />
+                <YAxis stroke={isDark ? '#8e918f' : '#747775'} tickLine={false} tickFormatter={(v) => `₹${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
+                <Tooltip
+                  formatter={(value: any) => [`₹${Number(value).toLocaleString()}`, '']}
+                  contentStyle={{
+                    backgroundColor: isDark ? '#1e1f20' : '#ffffff',
+                    borderColor: isDark ? '#3c4043' : '#e1e3e1',
+                    borderRadius: '1rem',
+                    color: isDark ? '#ffffff' : '#1f1f1f',
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="received"
+                  stroke={isDark ? '#6dd58c' : '#1e8e3e'}
+                  strokeWidth={3}
+                  fillOpacity={1}
+                  fill="url(#anColorRec)"
+                  name="Inflow"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="sent"
+                  stroke={isDark ? '#a8c7fa' : '#0b57d0'}
+                  strokeWidth={3}
+                  fillOpacity={1}
+                  fill="url(#anColorSent)"
+                  name="Outflow"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </M3Card>
+
+        {/* Category Breakdown Pie */}
+        <M3Card variant="elevated" padding="lg" className="flex flex-col justify-between">
+          <div>
+            <h2 className={cn('text-lg font-bold tracking-tight', isDark ? 'text-white' : 'text-[#1f1f1f]')}>
+              Category Allocation
+            </h2>
+            <p className={cn('text-xs mt-0.5', isDark ? 'text-[#8e918f]' : 'text-[#5f6368]')}>
+              Financial volume distributed across categories
+            </p>
+          </div>
+
+          <div className="h-60 w-full flex items-center justify-center my-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={categoryData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={55}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {categoryData.map((entry, index) => (
+                    <Cell key={`cat-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value: any) => [`₹${Number(value).toLocaleString()}`, 'Volume']}
+                  contentStyle={{
+                    backgroundColor: isDark ? '#1e1f20' : '#ffffff',
+                    borderColor: isDark ? '#3c4043' : '#e1e3e1',
+                    borderRadius: '1rem',
+                    color: isDark ? '#ffffff' : '#1f1f1f',
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="space-y-1.5 text-xs">
+            {categoryData.slice(0, 4).map((c) => (
+              <div key={c.name} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c.color }} />
+                  <span className="truncate">{c.name}</span>
+                </div>
+                <span className="font-mono font-bold">₹{c.value.toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        </M3Card>
+      </div>
+
+      {/* Bar Chart: Daily Volume */}
+      <M3Card variant="elevated" padding="lg">
+        <div className="mb-6">
+          <h2 className={cn('text-lg font-bold tracking-tight', isDark ? 'text-white' : 'text-[#1f1f1f]')}>
+            Comparative Daily Volume Breakdown
+          </h2>
+          <p className={cn('text-xs mt-0.5', isDark ? 'text-[#8e918f]' : 'text-[#5f6368]')}>
+            Side-by-side bar analysis of customer payments received vs disbursements made
+          </p>
+        </div>
+
+        <div className="h-72 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={analyticsData}>
+              <XAxis dataKey="day" stroke={isDark ? '#8e918f' : '#747775'} tickLine={false} />
+              <YAxis stroke={isDark ? '#8e918f' : '#747775'} tickLine={false} tickFormatter={(v) => `₹${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
+              <Tooltip
+                formatter={(value: any) => [`₹${Number(value).toLocaleString()}`, '']}
+                contentStyle={{
+                  backgroundColor: isDark ? '#1e1f20' : '#ffffff',
+                  borderColor: isDark ? '#3c4043' : '#e1e3e1',
+                  borderRadius: '1rem',
+                  color: isDark ? '#ffffff' : '#1f1f1f',
+                }}
+              />
+              <Bar dataKey="received" fill={isDark ? '#6dd58c' : '#1e8e3e'} radius={[8, 8, 0, 0]} name="Received" />
+              <Bar dataKey="sent" fill={isDark ? '#a8c7fa' : '#0b57d0'} radius={[8, 8, 0, 0]} name="Sent" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </M3Card>
+    </div>
   );
 }

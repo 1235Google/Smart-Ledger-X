@@ -1,9 +1,12 @@
 import React, { useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
-import { Download, Upload, Wallet, Trash2, Lock, Shield, Mail, Smartphone, Globe, User, Search, CheckCircle, Send, Loader2 } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
+import { Download, Upload, Wallet, Trash2, Lock, Shield, Mail, Smartphone, Globe, User, Search, CheckCircle, Send, Loader2, Cloud, Database, ArrowUpRight } from 'lucide-react';
 import { ReceivedMoney } from '../types';
 import { motion } from 'motion/react';
 import { cn, formatDate } from '../lib/utils';
+import { BackupService } from '../lib/backupService';
 
 import BiometricSettings from '../components/BiometricSettings';
 import ResetDataModal from "../components/ResetDataModal";
@@ -15,7 +18,36 @@ import Switch from '../components/settings/Switch';
 import IdentityCard from '../components/IdentityCard';
 
 export default function Settings() {
-  const { startingBalance, setStartingBalance, importData, securitySettings, emailSettings, updateEmailSettings, generalSettings, transactions, currentBalance, addEmailHistoryLog } = useStore();
+  const store = useStore();
+  const { showSuccess, showError, showInfo } = useToast();
+  const navigate = useNavigate();
+  const { 
+    startingBalance, 
+    setStartingBalance, 
+    importData, 
+    securitySettings, 
+    emailSettings, 
+    updateEmailSettings, 
+    generalSettings, 
+    transactions, 
+    currentBalance, 
+    addEmailHistoryLog,
+    customers,
+    gullakEntries,
+    savingsGoals,
+    securityLogs,
+    automationRules,
+    investments,
+    financeHabits,
+    gullakSettings,
+    aiRecognitionSettings,
+    aiRecognitionHistory,
+    posterTemplates,
+    unlockedAchievements,
+    generatedReports,
+    userProfile,
+    backupSettings,
+  } = store;
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showPinSetup, setShowPinSetup] = useState(false);
@@ -23,6 +55,7 @@ export default function Settings() {
   const [emailInput, setEmailInput] = useState(emailSettings.emailAddress || '');
   const [statusMessage, setStatusMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [isBackingUp, setIsBackingUp] = useState(false);
 
   const handleSaveEmail = () => {
     if (!/^\S+@\S+\.\S+$/.test(emailInput)) {
@@ -101,16 +134,61 @@ export default function Settings() {
   };
 
   const handleExport = () => {
-    const data = { isSetupComplete: true, startingBalance };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `smart-ledger-export-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    try {
+      const fullBackupData = {
+        isSetupComplete: store.isSetupComplete,
+        startingBalance: store.startingBalance,
+        customers: customers || [],
+        transactions: transactions || [],
+        gullakEntries: gullakEntries || [],
+        savingsGoals: savingsGoals || [],
+        securityLogs: securityLogs || [],
+        automationRules: automationRules || [],
+        investments: investments || [],
+        financeHabits: financeHabits || [],
+        gullakSettings: gullakSettings,
+        securitySettings: securitySettings,
+        emailSettings: emailSettings,
+        generalSettings: generalSettings,
+        aiRecognitionSettings: aiRecognitionSettings,
+        aiRecognitionHistory: aiRecognitionHistory || [],
+        posterTemplates: posterTemplates || [],
+        unlockedAchievements: unlockedAchievements || [],
+        generatedReports: generatedReports || [],
+        userProfile: userProfile,
+        backupSettings: backupSettings,
+        exportedAt: new Date().toISOString(),
+        version: '2.0.0'
+      };
+
+      const blob = new Blob([JSON.stringify(fullBackupData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `SmartLedger_Full_Backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showSuccess('Backup Downloaded', `Successfully exported ${transactions.length} transactions and full ledger state.`);
+    } catch (err: any) {
+      showError('Export Failed', err?.message || 'Unable to generate ledger backup file.');
+    }
+  };
+
+  const handleRunCloudBackup = async () => {
+    if (isBackingUp || BackupService.isOperationActive()) return;
+    setIsBackingUp(true);
+    showInfo('Creating Backup...', 'Collecting ledger data and encrypting snapshot...');
+
+    try {
+      const backup = await BackupService.createBackup('manual');
+      showSuccess('Backup Created', `Snapshot (${BackupService.formatSize(backup.size)}) saved and verified.`);
+    } catch (err: any) {
+      showError('Backup Error', err?.message || 'Failed to complete cloud backup.');
+    } finally {
+      setIsBackingUp(false);
+    }
   };
 
   return (
@@ -170,8 +248,38 @@ export default function Settings() {
                 </SettingsSection>
 
                 <SettingsSection title="Data & Backup" delay={0.4}>
-                    <SettingsItem icon={Download} title="Export Data" description="Backup your data to a file" onClick={handleExport} />
-                    <SettingsItem icon={Upload} title="Import Data" description="Restore data from a file" onClick={() => fileInputRef.current?.click()} />
+                    <SettingsItem 
+                      icon={Cloud} 
+                      title={isBackingUp ? "Creating Backup..." : "Run Backup Now"} 
+                      description="Create instant AES-256 cloud snapshot" 
+                      onClick={handleRunCloudBackup}
+                      action={
+                        <button 
+                          disabled={isBackingUp}
+                          onClick={(e) => { e.stopPropagation(); handleRunCloudBackup(); }}
+                          className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                        >
+                          {isBackingUp ? <Loader2 size={13} className="animate-spin" /> : <Cloud size={13} />}
+                          {isBackingUp ? 'Backing up...' : 'Run Backup'}
+                        </button>
+                      }
+                    />
+                    <SettingsItem 
+                      icon={Database} 
+                      title="Backup & Recovery Center" 
+                      description="View history, restore points, & automatic sync" 
+                      onClick={() => navigate('/backup')}
+                      action={
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); navigate('/backup'); }}
+                          className="p-2 text-slate-400 hover:text-white transition-colors"
+                        >
+                          <ArrowUpRight size={16} />
+                        </button>
+                      }
+                    />
+                    <SettingsItem icon={Download} title="Export Complete Data (JSON)" description="Download all transactions, customers & settings" onClick={handleExport} />
+                    <SettingsItem icon={Upload} title="Import / Restore Data" description="Restore data from a JSON file" onClick={() => fileInputRef.current?.click()} />
                     <SettingsItem icon={Trash2} title="Reset Data" description="Delete all data" variant="danger" onClick={() => setShowResetModal(true)} />
                 </SettingsSection>
             </div>
@@ -182,13 +290,17 @@ export default function Settings() {
                     reader.onload = (event) => {
                         try {
                             const json = JSON.parse(event.target?.result as string);
-                            if (json && typeof json.startingBalance === 'number') {
-                                if (confirm('Are you sure you want to import this data? It will overwrite your current data.')) {
+                            if (json && (typeof json.startingBalance === 'number' || Array.isArray(json.transactions))) {
+                                if (confirm('Are you sure you want to import this data? It will overwrite your current ledger.')) {
                                     importData(json);
-                                    alert('Data imported successfully.');
+                                    showSuccess('Restore Completed', 'Your data was imported successfully.');
                                 }
+                            } else {
+                              showError('Invalid Backup File', 'The file structure is not recognized as SmartLedger data.');
                             }
-                        } catch (err) { alert('Failed to parse file.'); }
+                        } catch (err) { 
+                          showError('Import Error', 'Failed to parse JSON file.'); 
+                        }
                     };
                     reader.readAsText(file);
                 }
@@ -198,3 +310,4 @@ export default function Settings() {
     </div>
   );
 }
+

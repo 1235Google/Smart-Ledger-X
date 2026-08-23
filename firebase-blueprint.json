@@ -61,6 +61,41 @@
         "userId": { "type": "string" }
       },
       "required": ["id", "fileName", "createdAt", "size", "status", "version", "type", "checksumSha256", "userId"]
+    },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Authorized admin users for SmartLedger Admin Panel",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["Owner", "Super Admin", "Admin", "Manager"] },
+        "status": { "type": "string", "enum": ["Active", "Disabled"] },
+        "createdAt": { "type": "string" },
+        "lastLogin": { "type": "string" },
+        "createdById": { "type": "string" },
+        "createdByEmail": { "type": "string" }
+      },
+      "required": ["email", "role", "status", "createdAt"]
+    },
+    "AdminSecurityLog": {
+      "title": "AdminSecurityLog",
+      "description": "Audit security log for admin logins, logouts and access changes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "uid": { "type": "string" },
+        "ip": { "type": "string" },
+        "device": { "type": "string" },
+        "browser": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" }
+      },
+      "required": ["id", "email", "timestamp", "action"]
     }
   },
   "firestore": {
@@ -83,6 +118,14 @@
     "/users/{uid}/backups/{backupId}": {
       "schema": "BackupRecord",
       "description": "User backup metadata records"
+    },
+    "/adminUsers/{adminId}": {
+      "schema": "AdminUser",
+      "description": "SmartLedger Admin Users list and RBAC configuration"
+    },
+    "/adminSecurityLogs/{logId}": {
+      "schema": "AdminSecurityLog",
+      "description": "SmartLedger Admin audit logs"
     }
   }
 }

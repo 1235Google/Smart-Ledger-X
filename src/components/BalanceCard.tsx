@@ -83,27 +83,26 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
       }
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={handleMouseLeave}
-      className={`relative p-8 rounded-[2rem] border overflow-hidden backdrop-blur-2xl transition-all duration-300 group select-none shadow-2xl perspective-1000 ${
+      className={`relative p-7 sm:p-9 rounded-[28px] sm:rounded-[32px] border overflow-hidden backdrop-blur-2xl transition-all duration-300 group select-none shadow-[0_20px_50px_rgba(0,0,0,0.6)] ${
         pulseState === 'increase'
-          ? 'border-emerald-500/60 bg-gradient-to-br from-[#0B1026] via-[#10322b] to-[#04422e] shadow-[0_0_50px_rgba(16,185,129,0.35)] animate-[pulseGlowGreen_1.2s_ease-in-out_infinite]'
+          ? 'border-emerald-400/50 bg-[#12281e] shadow-[0_0_50px_rgba(16,185,129,0.35)]'
           : pulseState === 'decrease'
-          ? 'border-rose-500/60 bg-gradient-to-br from-[#0B1026] via-[#3d1822] to-[#4c0d18] shadow-[0_0_50px_rgba(244,63,94,0.35)] animate-[pulseGlowRed_1.2s_ease-in-out_infinite]'
-          : 'border-white/15 bg-gradient-to-br from-[#0B1026] via-[#161a38] to-[#2D4DFF]/80 shadow-[0_20px_50px_-15px_rgba(45,77,255,0.4)]'
+          ? 'border-rose-400/50 bg-[#2d1218] shadow-[0_0_50px_rgba(244,63,94,0.35)]'
+          : 'border-white/[0.12] bg-[#161822] shadow-[0_16px_40px_-8px_rgba(0,0,0,0.6)]'
       }`}
     >
-      {/* Background Glow Orbs */}
-      <div className="absolute -bottom-32 -right-32 w-72 h-72 bg-blue-500/25 rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute -top-32 -left-32 w-72 h-72 bg-indigo-500/20 rounded-full blur-[100px] pointer-events-none" />
-
-      {/* Static Glass Reflection Effect */}
-      {!shouldReduceMotion && (
-        <motion.div
-          className="pointer-events-none absolute inset-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-700"
-          style={{
-            background: `radial-gradient(500px circle at 50% 0%, rgba(255, 255, 255, 0.15), transparent 70%)`,
-          }}
-        />
-      )}
+      {/* Ambient Radial Highlights */}
+      <div className="absolute top-0 right-0 w-80 h-80 bg-[#0842a0]/25 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-72 h-72 bg-[#004a77]/20 rounded-full blur-[100px] pointer-events-none" />
+      
+      {/* Decorative Grid Pattern Overlay */}
+      <div 
+        className="absolute inset-0 opacity-[0.03] pointer-events-none"
+        style={{
+          backgroundImage: `radial-gradient(rgba(255, 255, 255, 0.8) 1px, transparent 1px)`,
+          backgroundSize: '24px 24px'
+        }}
+      />
 
       {/* Floating Pill Animation (+₹Amount or -₹Amount) */}
       <AnimatePresence>
@@ -111,14 +110,14 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
           <motion.div
             key={pill.id}
             initial={{ opacity: 0, y: 20, scale: 0.8 }}
-            animate={{ opacity: 1, y: -40, scale: 1.1 }}
+            animate={{ opacity: 1, y: -40, scale: 1.05 }}
             exit={{ opacity: 0, y: -80, scale: 0.9 }}
             transition={{ duration: 1.8, ease: [0.16, 1, 0.3, 1] }}
             onAnimationComplete={() => removePill(pill.id)}
-            className={`absolute top-12 right-12 z-30 px-4 py-2 rounded-full font-bold text-sm md:text-base border shadow-2xl backdrop-blur-xl flex items-center gap-1.5 pointer-events-none ${
+            className={`absolute top-8 right-8 z-30 px-4 py-2 rounded-full font-bold text-sm md:text-base border shadow-2xl backdrop-blur-xl flex items-center gap-1.5 pointer-events-none ${
               pill.isIncrease
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-emerald-500/30'
-                : 'bg-rose-500/20 text-rose-300 border-rose-500/50 shadow-rose-500/30'
+                ? 'bg-[#00522b] text-[#a8f5ba] border-emerald-400/50 shadow-emerald-500/30'
+                : 'bg-[#601410] text-[#f9dedc] border-rose-400/50 shadow-rose-500/30'
             }`}
           >
             {pill.isIncrease ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
@@ -128,19 +127,26 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
       </AnimatePresence>
 
       <div className="relative z-20 flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div>
-          <div className="flex items-center gap-2 text-white/70 text-xs font-semibold uppercase tracking-widest mb-1.5">
-            <span
-              className={`w-2 h-2 rounded-full animate-pulse ${
-                pulseState === 'increase'
-                  ? 'bg-emerald-400 shadow-[0_0_10px_#10b981]'
-                  : pulseState === 'decrease'
-                  ? 'bg-rose-400 shadow-[0_0_10px_#f43f5e]'
-                  : 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
-              }`}
-            />
-            Available Balance
-            <Sparkles size={14} className="text-blue-400 ml-1 opacity-80" />
+        <div className="w-full">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2 text-[#c2e7ff] text-xs font-bold tracking-wider uppercase">
+              <span
+                className={`w-2.5 h-2.5 rounded-full ${
+                  pulseState === 'increase'
+                    ? 'bg-emerald-400 shadow-[0_0_10px_#10b981]'
+                    : pulseState === 'decrease'
+                    ? 'bg-rose-400 shadow-[0_0_10px_#f43f5e]'
+                    : 'bg-[#a8c7fa] shadow-[0_0_8px_rgba(168,199,250,0.8)]'
+                }`}
+              />
+              Available Balance
+              <Sparkles size={14} className="text-[#a8c7fa] ml-1 opacity-80" />
+            </div>
+
+            <div className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white/[0.08] text-slate-300 border border-white/10 flex items-center gap-1.5">
+              <Wallet size={12} className="text-[#a8c7fa]" />
+              <span>Smart Ledger Active</span>
+            </div>
           </div>
 
           <div className="text-4xl sm:text-5xl md:text-6xl font-[800] tracking-tight text-white mb-6 flex items-baseline gap-1 font-tabular">
@@ -148,32 +154,33 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
               value={currentBalance}
               duration={1000}
               formatter={(val) => formatCurrency(val)}
-              className="bg-gradient-to-b from-white via-slate-100 to-slate-300 bg-clip-text text-transparent drop-shadow-sm"
+              className="text-white drop-shadow-sm"
             />
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <div className="bg-white/[0.06] backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
-              <p className="text-[10px] text-white/70 uppercase tracking-[0.1em] font-bold">
+          {/* Material 3 Tonal Chips */}
+          <div className="flex flex-wrap gap-2.5 sm:gap-3">
+            <div className="bg-[#20222a] px-4 py-2.5 rounded-2xl border border-white/10 shadow-sm flex flex-col justify-center">
+              <p className="text-[10px] text-slate-400 uppercase tracking-[0.1em] font-bold">
                 Starting
               </p>
-              <p className="text-base font-bold text-white/95 font-tabular">
+              <p className="text-sm sm:text-base font-bold text-white font-tabular mt-0.5">
                 {formatCurrency(startingBalance)}
               </p>
             </div>
-            <div className="bg-emerald-500/[0.12] backdrop-blur-md px-4 py-2.5 rounded-2xl border border-emerald-500/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-              <p className="text-[10px] text-emerald-400 uppercase tracking-[0.1em] font-bold">
-                Total In
+            <div className="bg-[#00391c]/80 px-4 py-2.5 rounded-2xl border border-[#6dd58c]/30 shadow-sm flex flex-col justify-center">
+              <p className="text-[10px] text-[#a8f5ba] uppercase tracking-[0.1em] font-bold flex items-center gap-1">
+                <TrendingUp size={11} /> Total In
               </p>
-              <p className="text-base font-bold text-emerald-300 font-tabular">
+              <p className="text-sm sm:text-base font-bold text-[#a8f5ba] font-tabular mt-0.5">
                 +{formatCurrency(totalReceived)}
               </p>
             </div>
-            <div className="bg-rose-500/[0.12] backdrop-blur-md px-4 py-2.5 rounded-2xl border border-rose-500/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-              <p className="text-[10px] text-rose-400 uppercase tracking-[0.1em] font-bold">
-                Total Out
+            <div className="bg-[#4c0d18]/80 px-4 py-2.5 rounded-2xl border border-[#f2b8b5]/30 shadow-sm flex flex-col justify-center">
+              <p className="text-[10px] text-[#f9dedc] uppercase tracking-[0.1em] font-bold flex items-center gap-1">
+                <TrendingDown size={11} /> Total Out
               </p>
-              <p className="text-base font-bold text-rose-300 font-tabular">
+              <p className="text-sm sm:text-base font-bold text-[#f9dedc] font-tabular mt-0.5">
                 -{formatCurrency(totalSent)}
               </p>
             </div>

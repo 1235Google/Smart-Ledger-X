@@ -1,10 +1,40 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Calendar, Plus, Edit2, Trash2, X, ArrowUpDown, ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { 
+  Search, 
+  Calendar, 
+  Plus, 
+  Edit2, 
+  Trash2, 
+  X, 
+  ArrowUpDown, 
+  Download, 
+  Filter, 
+  Wallet, 
+  ArrowDownLeft, 
+  ArrowUpRight, 
+  Eye, 
+  CheckCircle2, 
+  AlertCircle,
+  FileSpreadsheet,
+  FileText,
+  CreditCard,
+  Building,
+  Banknote,
+  Smartphone
+} from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
+import { useToast } from '../../context/ToastContext';
 import { Transaction } from '../../types';
+import { cn, formatDate } from '../../lib/utils';
+import { M3DataTable, Column } from '../../components/admin/material3/M3DataTable';
+import { M3Card } from '../../components/admin/material3/M3Card';
+import { M3Button } from '../../components/admin/material3/M3Button';
+import { M3TextField } from '../../components/admin/material3/M3TextField';
+import { M3Dialog } from '../../components/admin/material3/M3Dialog';
+import { M3Chip } from '../../components/admin/material3/M3Chip';
+import { useM3Theme } from '../../components/admin/material3/M3ThemeContext';
 import ExportModal from '../../components/ExportModal';
-import DataStateGuard from '../../components/ui/DataStateGuard';
 
 export default function AdminLedger() {
   const { 
@@ -12,82 +42,58 @@ export default function AdminLedger() {
     addReceivedMoney, 
     addSentMoney, 
     deleteTransaction, 
-    updateTransaction,
-    dataStatus,
-    dataError,
-    retryFetchData
+    updateTransaction 
   } = useStore();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [dateFilter, setDateFilter] = useState('');
-  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
-  const [currentPage, setCurrentPage] = useState(1);
+  const { showSuccess, showError } = useToast();
+  const { resolvedTheme } = useM3Theme();
+  const isDark = resolvedTheme === 'dark';
+
+  const [typeFilter, setTypeFilter] = useState<'all' | 'received' | 'sent'>('all');
+  const [methodFilter, setMethodFilter] = useState<'all' | 'UPI' | 'Cash' | 'Card' | 'Bank Transfer'>('all');
+  const [dateFilter, setDateFilter] = useState<string>('');
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [viewingEntry, setViewingEntry] = useState<Transaction | null>(null);
   const [editingEntry, setEditingEntry] = useState<Transaction | null>(null);
+  const [deletingEntry, setDeletingEntry] = useState<Transaction | null>(null);
 
   // Form states for Add / Edit
   const [formName, setFormName] = useState('');
   const [formAmount, setFormAmount] = useState('');
   const [formCategory, setFormCategory] = useState('Sales');
-  const [formMethod, setFormMethod] = useState('UPI');
+  const [formMethod, setFormMethod] = useState<'UPI' | 'Cash' | 'Card' | 'Bank Transfer'>('UPI');
   const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
   const [formType, setFormType] = useState<'received' | 'sent'>('received');
+  const [formNote, setFormNote] = useState('');
+  const [formError, setFormError] = useState('');
 
   const safeTransactions = transactions || [];
 
-  // Filter ONLY completed/received transactions (exclude pending records)
-  const completedEntriesOnly = safeTransactions.filter((tx: any) => {
-    // 1. Exclude any pending payment
-    if (
-      tx.type === 'pending' ||
-      tx.status === 'pending' ||
-      tx.status === 'overdue' ||
-      tx.isPending === true
-    ) {
+  // Filter completed ledger records
+  const completedEntries = safeTransactions.filter((tx: any) => {
+    if (tx.type === 'pending' || tx.status === 'pending' || tx.status === 'overdue' || tx.isPending === true) {
       return false;
     }
-
-    // 2. Only show completed, received, income, sent, or paid transactions
-    const isCompleted =
-      tx.status === 'completed' ||
-      tx.status === 'received' ||
-      tx.status === 'paid' ||
-      tx.type === 'income' ||
-      tx.type === 'received' ||
-      tx.type === 'sent' ||
-      tx.type === 'expense' ||
-      tx.type === 'completed';
-
-    return isCompleted;
+    return true;
   });
 
-  // Filtering
-  const filtered = completedEntriesOnly.filter((tx: any) => {
-    const q = searchQuery.toLowerCase();
-    const personName = (tx.personName || '').toLowerCase();
-    const category = (tx.category || tx.purpose || tx.reason || tx.type || '').toLowerCase();
-    const method = (tx.method || tx.paymentMethod || '').toLowerCase();
-    const amountStr = String(tx.amount || '');
+  // Apply chip filters
+  const filteredData = completedEntries.filter((tx: any) => {
+    const isReceived = tx.type === 'received' || tx.type === 'income';
+    const isSent = tx.type === 'sent' || tx.type === 'expense';
 
-    const matchesSearch = !q || personName.includes(q) || category.includes(q) || method.includes(q) || amountStr.includes(q);
-    const matchesDate = !dateFilter || (tx.date && tx.date.startsWith(dateFilter));
-    return matchesSearch && matchesDate;
+    if (typeFilter === 'received' && !isReceived) return false;
+    if (typeFilter === 'sent' && !isSent) return false;
+
+    const txMethod = tx.method || tx.paymentMethod || 'UPI';
+    if (methodFilter !== 'all' && txMethod !== methodFilter) return false;
+
+    if (dateFilter && (!tx.date || !tx.date.startsWith(dateFilter))) return false;
+
+    return true;
   });
-
-  // Sorting
-  const sorted = [...filtered].sort((a: any, b: any) => {
-    const dateA = new Date(a.date || 0).getTime();
-    const dateB = new Date(b.date || 0).getTime();
-    return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
-  });
-
-  // Pagination (25 records per page)
-  const itemsPerPage = 25;
-  const totalPages = Math.max(1, Math.ceil(sorted.length / itemsPerPage));
-  const pageIndex = Math.min(currentPage, totalPages);
-  const paginatedEntries = sorted.slice((pageIndex - 1) * itemsPerPage, pageIndex * itemsPerPage);
 
   const resetForm = () => {
     setFormName('');
@@ -96,6 +102,8 @@ export default function AdminLedger() {
     setFormMethod('UPI');
     setFormDate(new Date().toISOString().split('T')[0]);
     setFormType('received');
+    setFormNote('');
+    setFormError('');
   };
 
   const openAddModal = () => {
@@ -110,457 +118,512 @@ export default function AdminLedger() {
     setFormCategory(entry.category || entry.purpose || 'Sales');
     setFormMethod(entry.method || entry.paymentMethod || 'UPI');
     setFormDate(entry.date ? entry.date.split(' ')[0] : new Date().toISOString().split('T')[0]);
-    setFormType(entry.type === 'sent' ? 'sent' : 'received');
+    setFormType(entry.type === 'sent' || entry.type === 'expense' ? 'sent' : 'received');
+    setFormNote(entry.note || entry.description || '');
+    setFormError('');
   };
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formName || !formAmount) return;
+    setFormError('');
 
-    if (formType === 'received') {
-      addReceivedMoney({
-        personName: formName,
-        amount: Number(formAmount),
-        date: formDate,
-        purpose: formCategory,
-      });
-    } else {
-      addSentMoney({
-        personName: formName,
-        amount: Number(formAmount),
-        date: formDate,
-        purpose: formCategory,
-      });
+    if (!formName.trim()) {
+      setFormError('Please enter a party / customer name.');
+      return;
     }
-    setShowAddModal(false);
-    resetForm();
+    const num = Number(formAmount);
+    if (isNaN(num) || num <= 0) {
+      setFormError('Please enter a valid positive numerical amount.');
+      return;
+    }
+
+    try {
+      if (editingEntry) {
+        updateTransaction(editingEntry.id, {
+          personName: formName.trim(),
+          amount: num,
+          purpose: formCategory || formNote || 'General',
+          date: formDate,
+          type: formType,
+        } as any);
+        showSuccess('Transaction Updated', 'Ledger record modified successfully.');
+        setEditingEntry(null);
+      } else {
+        if (formType === 'received') {
+          addReceivedMoney({
+            personName: formName.trim(),
+            amount: num,
+            purpose: formCategory || formNote || 'General',
+            date: formDate,
+          });
+          showSuccess('Payment Recorded', `Received ₹${num.toLocaleString()} from ${formName}`);
+        } else {
+          addSentMoney({
+            personName: formName.trim(),
+            amount: num,
+            purpose: formCategory || formNote || 'General',
+            date: formDate,
+          });
+          showSuccess('Expense Recorded', `Disbursed ₹${num.toLocaleString()} to ${formName}`);
+        }
+        setShowAddModal(false);
+      }
+    } catch (err: any) {
+      showError('Action Failed', err?.message || 'Unable to save transaction.');
+    }
   };
 
-  const handleEditSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingEntry || !formName || !formAmount) return;
-
-    updateTransaction(editingEntry.id, {
-      personName: formName,
-      amount: Number(formAmount),
-      date: formDate,
-      type: formType as any,
-      ...(formCategory ? { category: formCategory, purpose: formCategory } : {}),
-      ...(formMethod ? { method: formMethod, paymentMethod: formMethod } : {})
-    } as any);
-
-    setEditingEntry(null);
-    resetForm();
+  const handleDelete = () => {
+    if (!deletingEntry) return;
+    try {
+      deleteTransaction(deletingEntry.id);
+      showSuccess('Transaction Deleted', 'Record was removed from the ledger.');
+      setDeletingEntry(null);
+    } catch (err: any) {
+      showError('Delete Failed', err?.message || 'Could not delete entry.');
+    }
   };
+
+  const columns: Column<any>[] = [
+    {
+      key: 'personName',
+      header: 'Customer / Party',
+      sortable: true,
+      render: (tx) => (
+        <div className="flex items-center gap-3">
+          <div className={cn(
+            'w-9 h-9 rounded-2xl flex items-center justify-center font-bold text-xs shrink-0 shadow-sm',
+            tx.type === 'received' || tx.type === 'income'
+              ? isDark ? 'bg-[#0f5223] text-[#b4f3b8]' : 'bg-[#c4eed0] text-[#073814]'
+              : isDark ? 'bg-[#601410] text-[#f9dedc]' : 'bg-[#f9dedc] text-[#410e0b]'
+          )}>
+            {tx.personName ? tx.personName.substring(0, 2).toUpperCase() : 'TX'}
+          </div>
+          <div>
+            <div className="font-bold text-sm tracking-tight">{tx.personName || 'Direct Ledger Entry'}</div>
+            <div className="text-[11px] text-slate-400 font-medium">ID: {tx.id?.slice(0, 8) || 'N/A'}</div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'type',
+      header: 'Flow Type',
+      render: (tx) => {
+        const isRec = tx.type === 'received' || tx.type === 'income';
+        return (
+          <span className={cn(
+            'px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider inline-flex items-center gap-1',
+            isRec
+              ? isDark ? 'bg-[#0f5223]/50 text-[#85e197]' : 'bg-[#e6f4ea] text-[#137333]'
+              : isDark ? 'bg-[#601410]/50 text-[#f2b8b5]' : 'bg-[#fce8e6] text-[#c5221f]'
+          )}>
+            {isRec ? <ArrowDownLeft size={12} /> : <ArrowUpRight size={12} />}
+            <span>{isRec ? 'Received' : 'Sent'}</span>
+          </span>
+        );
+      },
+    },
+    {
+      key: 'amount',
+      header: 'Amount',
+      sortable: true,
+      align: 'right',
+      render: (tx) => {
+        const isRec = tx.type === 'received' || tx.type === 'income';
+        return (
+          <div className="text-right">
+            <span className={cn(
+              'font-mono font-extrabold text-sm',
+              isRec ? 'text-[#6dd58c] dark:text-[#85e197]' : 'text-[#f2b8b5]'
+            )}>
+              {isRec ? '+' : '-'}₹{(tx.amount || 0).toLocaleString('en-IN')}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      render: (tx) => (
+        <span className={cn(
+          'px-2.5 py-1 rounded-lg text-xs font-medium',
+          isDark ? 'bg-[#282a2d] text-[#c4c7c5]' : 'bg-[#f0f4f9] text-[#444746]'
+        )}>
+          {tx.category || tx.purpose || 'General'}
+        </span>
+      ),
+    },
+    {
+      key: 'method',
+      header: 'Method',
+      render: (tx) => {
+        const method = tx.method || tx.paymentMethod || 'UPI';
+        return (
+          <div className="flex items-center gap-1.5 text-xs text-slate-300">
+            {method === 'UPI' && <Smartphone size={14} className="text-[#a8c7fa]" />}
+            {method === 'Cash' && <Banknote size={14} className="text-[#6dd58c]" />}
+            {method === 'Card' && <CreditCard size={14} className="text-[#ffe082]" />}
+            {method === 'Bank Transfer' && <Building size={14} className="text-[#ffaed0]" />}
+            <span>{method}</span>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'date',
+      header: 'Date & Time',
+      sortable: true,
+      render: (tx) => (
+        <span className="text-xs text-slate-400">
+          {formatDate(tx.date || tx.createdAt || new Date().toISOString())}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      render: (tx) => (
+        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => setViewingEntry(tx)}
+            title="View Details"
+            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <Eye size={16} />
+          </button>
+          <button
+            onClick={() => openEditModal(tx)}
+            title="Edit Entry"
+            className="p-2 rounded-xl text-slate-400 hover:text-[#a8c7fa] hover:bg-[#a8c7fa]/10 transition-colors"
+          >
+            <Edit2 size={16} />
+          </button>
+          <button
+            onClick={() => setDeletingEntry(tx)}
+            title="Delete Entry"
+            className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
+      ),
+    },
+  ];
 
   return (
-    <DataStateGuard
-      status={dataStatus}
-      error={dataError}
-      onRetry={retryFetchData}
-      loadingMessage="Loading ledger entries..."
-      skeletonType="table"
-    >
-      <div className="space-y-6 max-w-7xl mx-auto pb-16">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      {/* Top Action Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Entries</h1>
-          <p className="text-neutral-400 text-sm mt-1">Manage and track all ledger transaction records.</p>
+          <h1 className={cn('text-2xl sm:text-3xl font-extrabold tracking-tight', isDark ? 'text-white' : 'text-[#1f1f1f]')}>
+            Transactions Ledger
+          </h1>
+          <p className={cn('text-xs sm:text-sm mt-0.5', isDark ? 'text-[#8e918f]' : 'text-[#5f6368]')}>
+            Search, verify, disburse, and export complete customer and vendor cash flow records.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <M3Button
+            variant="tonal"
+            icon={Download}
+            onClick={() => setShowExportModal(true)}
+          >
+            Export Ledger
+          </M3Button>
+          <M3Button
+            variant="filled"
+            icon={Plus}
+            onClick={openAddModal}
+          >
+            New Transaction
+          </M3Button>
         </div>
       </div>
 
-      {/* Top Toolbar */}
-      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 backdrop-blur-xl flex flex-col md:flex-row gap-3 items-center justify-between">
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500" size={18} />
-          <input 
-            type="text" 
-            value={searchQuery}
-            onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-            placeholder="Search Entries..." 
-            className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500 transition-colors"
-          />
+      {/* Filter Row: Type & Method Filter Chips */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">Flow:</span>
+          {(['all', 'received', 'sent'] as const).map((t) => (
+            <M3Chip
+              key={t}
+              label={t === 'all' ? 'All Flows' : t === 'received' ? 'Received Only' : 'Sent Only'}
+              selected={typeFilter === t}
+              onClick={() => setTypeFilter(t)}
+            />
+          ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-          {/* Date Filter */}
-          <div className="flex items-center gap-2 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-neutral-300">
-            <Calendar size={16} className="text-neutral-400 shrink-0" />
-            <input 
-              type="date" 
-              value={dateFilter}
-              onChange={e => { setDateFilter(e.target.value); setCurrentPage(1); }}
-              className="bg-transparent border-0 text-sm text-white focus:outline-none cursor-pointer"
+        <div className="h-4 w-[1px] bg-slate-700 hidden sm:block mx-1" />
+
+        <div className="flex items-center gap-1.5 overflow-x-auto">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">Method:</span>
+          {(['all', 'UPI', 'Cash', 'Card', 'Bank Transfer'] as const).map((m) => (
+            <M3Chip
+              key={m}
+              label={m === 'all' ? 'All Rails' : m}
+              selected={methodFilter === m}
+              onClick={() => setMethodFilter(m)}
             />
-            {dateFilter && (
-              <button onClick={() => setDateFilter('')} className="text-neutral-500 hover:text-white ml-1">
-                <X size={14} />
-              </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Main Material 3 Data Table */}
+      <M3DataTable
+        title="Ledger Entries"
+        subtitle={`${filteredData.length} total settled records logged`}
+        data={filteredData}
+        columns={columns}
+        keyExtractor={(item) => item.id}
+        searchPlaceholder="Search customer, category, amount, or payment method..."
+        searchFields={['personName', 'category', 'method', 'amount', 'note']}
+        emptyMessage="No ledger transactions match criteria"
+        emptySubtitle="Try resetting your active filters or create a new transaction entry above."
+        emptyAction={{
+          label: 'Create Transaction',
+          onClick: openAddModal,
+        }}
+      />
+
+      {/* Add / Edit Transaction M3 Dialog */}
+      <M3Dialog
+        isOpen={showAddModal || Boolean(editingEntry)}
+        onClose={() => {
+          setShowAddModal(false);
+          setEditingEntry(null);
+        }}
+        title={editingEntry ? 'Edit Ledger Entry' : 'Record New Transaction'}
+        subtitle={editingEntry ? 'Update transaction details' : 'Save a customer settlement or disbursement'}
+        icon={Wallet}
+        iconTone="primary"
+        maxWidth="lg"
+        actions={
+          <>
+            <M3Button
+              variant="text"
+              onClick={() => {
+                setShowAddModal(false);
+                setEditingEntry(null);
+              }}
+            >
+              Cancel
+            </M3Button>
+            <M3Button variant="filled" onClick={handleSave}>
+              {editingEntry ? 'Update Entry' : 'Record Transaction'}
+            </M3Button>
+          </>
+        }
+      >
+        <form onSubmit={handleSave} className="space-y-4 pt-2">
+          {/* Flow Type Switcher */}
+          <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-black/10 dark:bg-white/5 border border-white/5">
+            <button
+              type="button"
+              onClick={() => setFormType('received')}
+              className={cn(
+                'py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2',
+                formType === 'received'
+                  ? isDark ? 'bg-[#0f5223] text-[#b4f3b8] shadow-md' : 'bg-[#c4eed0] text-[#073814] shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              )}
+            >
+              <ArrowDownLeft size={16} />
+              <span>Money Received (In)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormType('sent')}
+              className={cn(
+                'py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2',
+                formType === 'sent'
+                  ? isDark ? 'bg-[#601410] text-[#f9dedc] shadow-md' : 'bg-[#f9dedc] text-[#410e0b] shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              )}
+            >
+              <ArrowUpRight size={16} />
+              <span>Money Sent (Out)</span>
+            </button>
+          </div>
+
+          <M3TextField
+            label="Party / Customer Name"
+            value={formName}
+            onChange={(e) => setFormName(e.target.value)}
+            placeholder="e.g. Acme Enterprises, Rajesh Sharma"
+            required
+          />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <M3TextField
+              label="Amount (₹)"
+              type="number"
+              value={formAmount}
+              onChange={(e) => setFormAmount(e.target.value)}
+              placeholder="0.00"
+              required
+            />
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-400">Payment Rail</label>
+              <select
+                value={formMethod}
+                onChange={(e) => setFormMethod(e.target.value as any)}
+                className={cn(
+                  'w-full h-14 px-3.5 rounded-2xl border text-sm outline-none transition-all cursor-pointer',
+                  isDark ? 'bg-[#1e1f20] text-white border-[#3c4043]' : 'bg-[#f0f4f9] text-black border-[#c4c7c5]'
+                )}
+              >
+                <option value="UPI">UPI (Google Pay, PhonePe, Paytm)</option>
+                <option value="Cash">Cash Handover</option>
+                <option value="Card">Debit / Credit Card</option>
+                <option value="Bank Transfer">Bank Transfer (NEFT/RTGS/IMPS)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-400">Category</label>
+              <select
+                value={formCategory}
+                onChange={(e) => setFormCategory(e.target.value)}
+                className={cn(
+                  'w-full h-14 px-3.5 rounded-2xl border text-sm outline-none transition-all cursor-pointer',
+                  isDark ? 'bg-[#1e1f20] text-white border-[#3c4043]' : 'bg-[#f0f4f9] text-black border-[#c4c7c5]'
+                )}
+              >
+                <option value="Sales">Sales & Invoicing</option>
+                <option value="Consulting">Consulting / Services</option>
+                <option value="Supplies">Inventory & Supplies</option>
+                <option value="Rent">Rent & Utilities</option>
+                <option value="Salary">Salaries & Payroll</option>
+                <option value="General">General / Miscellaneous</option>
+              </select>
+            </div>
+
+            <M3TextField
+              label="Transaction Date"
+              type="date"
+              value={formDate}
+              onChange={(e) => setFormDate(e.target.value)}
+            />
+          </div>
+
+          <M3TextField
+            label="Notes & Invoice Reference"
+            value={formNote}
+            onChange={(e) => setFormNote(e.target.value)}
+            placeholder="Optional reference memo..."
+          />
+
+          {formError && (
+            <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 flex items-center gap-2">
+              <AlertCircle size={14} />
+              <span>{formError}</span>
+            </div>
+          )}
+        </form>
+      </M3Dialog>
+
+      {/* View Details M3 Dialog */}
+      <M3Dialog
+        isOpen={Boolean(viewingEntry)}
+        onClose={() => setViewingEntry(null)}
+        title="Transaction Ledger Audit Details"
+        subtitle={`Audit ID: ${viewingEntry?.id || 'N/A'}`}
+        icon={Eye}
+        iconTone="primary"
+        actions={
+          <M3Button variant="filled" onClick={() => setViewingEntry(null)}>
+            Done
+          </M3Button>
+        }
+      >
+        {viewingEntry && (
+          <div className="space-y-4 text-xs sm:text-sm">
+            <div className="p-4 rounded-2xl bg-black/10 dark:bg-white/5 border border-white/5 flex items-center justify-between">
+              <div>
+                <span className="text-slate-400 text-xs">Total Amount</span>
+                <div className="text-2xl font-extrabold font-mono text-white">
+                  ₹{(viewingEntry.amount || 0).toLocaleString()}
+                </div>
+              </div>
+              <span className={cn(
+                'px-3 py-1 rounded-full text-xs font-bold uppercase',
+                viewingEntry.type === 'received'
+                  ? 'bg-emerald-500/20 text-emerald-400'
+                  : 'bg-rose-500/20 text-rose-400'
+              )}>
+                {viewingEntry.type}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-white/5">
+                <div className="text-slate-400">Customer / Party</div>
+                <div className="font-bold text-sm mt-0.5">{viewingEntry.personName}</div>
+              </div>
+              <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-white/5">
+                <div className="text-slate-400">Payment Rail</div>
+                <div className="font-bold text-sm mt-0.5">{(viewingEntry as any).method || (viewingEntry as any).paymentMethod || 'UPI / Cash'}</div>
+              </div>
+              <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-white/5">
+                <div className="text-slate-400">Category / Purpose</div>
+                <div className="font-bold text-sm mt-0.5">{(viewingEntry as any).category || (viewingEntry as any).purpose || (viewingEntry as any).reason || 'General'}</div>
+              </div>
+              <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-white/5">
+                <div className="text-slate-400">Timestamp</div>
+                <div className="font-bold text-sm mt-0.5">{formatDate((viewingEntry as any).date || (viewingEntry as any).dueDate || (viewingEntry as any).createdAt || '')}</div>
+              </div>
+            </div>
+
+            {(viewingEntry as any).note && (
+              <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-white/5">
+                <div className="text-slate-400 text-xs">Memo / Description</div>
+                <p className="mt-1 text-slate-200">{(viewingEntry as any).note}</p>
+              </div>
             )}
           </div>
-
-          {/* Sort */}
-          <div className="flex items-center gap-2 bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-neutral-300">
-            <ArrowUpDown size={16} className="text-neutral-400 shrink-0" />
-            <select 
-              value={sortOrder}
-              onChange={e => { setSortOrder(e.target.value as 'newest' | 'oldest'); setCurrentPage(1); }}
-              className="bg-transparent border-0 text-sm text-white focus:outline-none cursor-pointer"
-            >
-              <option value="newest" className="bg-neutral-900 text-white">Newest First</option>
-              <option value="oldest" className="bg-neutral-900 text-white">Oldest First</option>
-            </select>
-          </div>
-
-          {/* Export Entries Button */}
-          <button 
-            onClick={() => setShowExportModal(true)}
-            className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-semibold text-sm rounded-xl flex items-center gap-2 transition-all border border-white/10 hover:border-white/20 shrink-0 min-h-[44px]"
-            title="Export Entries as Excel or PDF"
-          >
-            <Download size={18} className="text-emerald-400" />
-            <span>Export Entries</span>
-          </button>
-
-          {/* Add Entry Button */}
-          <button 
-            onClick={openAddModal}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm rounded-xl flex items-center gap-2 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] shrink-0 min-h-[44px]"
-          >
-            <Plus size={18} />
-            <span>Add Entry</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Entries Table Container */}
-      <div className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden backdrop-blur-xl shadow-xl">
-        <div className="overflow-x-auto max-h-[650px] relative">
-          <table className="w-full text-left border-collapse">
-            <thead className="sticky top-0 bg-[#0c0c0c] z-20 border-b border-white/10 shadow-md">
-              <tr className="text-neutral-400 text-xs font-semibold uppercase tracking-wider">
-                <th className="py-4 px-6">Date & Time</th>
-                <th className="py-4 px-6">Added By</th>
-                <th className="py-4 px-6">Amount</th>
-                <th className="py-4 px-6">Category</th>
-                <th className="py-4 px-6">Method</th>
-                <th className="py-4 px-6 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5 text-sm">
-              {paginatedEntries.length > 0 ? (
-                paginatedEntries.map((entry: any, idx) => {
-                  const categoryName = entry.category || entry.purpose || entry.reason || (entry.type === 'sent' ? 'Expense' : 'Sales');
-                  const methodName = entry.method || entry.paymentMethod || 'UPI';
-                  return (
-                    <tr 
-                      key={entry.id || idx} 
-                      className="hover:bg-white/[0.04] transition-colors duration-150 group"
-                    >
-                      <td className="py-4 px-6 text-neutral-300 font-mono text-xs whitespace-nowrap">
-                        {entry.date || 'Today'}
-                      </td>
-                      <td className="py-4 px-6 font-bold text-white whitespace-nowrap">
-                        {entry.personName || 'Unknown'}
-                      </td>
-                      <td className="py-4 px-6 font-bold text-emerald-400 whitespace-nowrap">
-                        ₹{(Number(entry.amount) || 0).toLocaleString('en-IN')}
-                      </td>
-                      <td className="py-4 px-6 whitespace-nowrap">
-                        <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 inline-block">
-                          {categoryName}
-                        </span>
-                      </td>
-                      <td className="py-4 px-6 text-neutral-300 font-medium whitespace-nowrap">
-                        {methodName}
-                      </td>
-                      <td className="py-4 px-6 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-2">
-                          <button 
-                            onClick={() => openEditModal(entry)}
-                            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white transition-colors"
-                            title="Edit Entry"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button 
-                            onClick={() => { if (confirm("Delete this entry record?")) deleteTransaction(entry.id); }}
-                            className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors"
-                            title="Delete Entry"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={6} className="text-center py-16 text-neutral-400 font-medium">
-                    No completed entries found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination Bar */}
-        {sorted.length > itemsPerPage && (
-          <div className="p-4 border-t border-white/10 flex items-center justify-between bg-black/40 text-xs text-neutral-400">
-            <div>
-              Showing {((pageIndex - 1) * itemsPerPage) + 1} to {Math.min(pageIndex * itemsPerPage, sorted.length)} of {sorted.length} records
-            </div>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={pageIndex === 1}
-                className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 transition-colors"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <span className="px-3 py-1 bg-white/10 rounded-lg text-white font-medium">
-                {pageIndex} / {totalPages}
-              </span>
-              <button 
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={pageIndex === totalPages}
-                className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 transition-colors"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
         )}
-      </div>
+      </M3Dialog>
 
-      {/* Add Entry Modal */}
-      <AnimatePresence>
-        {showAddModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }} 
-              animate={{ scale: 1, opacity: 1 }} 
-              exit={{ scale: 0.95, opacity: 0 }} 
-              className="bg-[#121212] border border-white/10 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-white">Add New Entry</h3>
-                <button onClick={() => setShowAddModal(false)} className="p-1.5 text-neutral-400 hover:text-white rounded-lg hover:bg-white/10">
-                  <X size={20} />
-                </button>
-              </div>
+      {/* Delete Confirmation M3 Dialog */}
+      <M3Dialog
+        isOpen={Boolean(deletingEntry)}
+        onClose={() => setDeletingEntry(null)}
+        title="Delete Transaction Record"
+        subtitle="Irreversible ledger adjustment"
+        icon={Trash2}
+        iconTone="rose"
+        actions={
+          <>
+            <M3Button variant="text" onClick={() => setDeletingEntry(null)}>
+              Cancel
+            </M3Button>
+            <M3Button variant="danger" onClick={handleDelete}>
+              Confirm Delete
+            </M3Button>
+          </>
+        }
+      >
+        <p className="text-sm text-slate-300">
+          Are you sure you want to delete transaction of <strong className="text-white">₹{(deletingEntry?.amount || 0).toLocaleString()}</strong> with{' '}
+          <strong className="text-white">{deletingEntry?.personName}</strong>?
+        </p>
+      </M3Dialog>
 
-              <form onSubmit={handleAddSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">Added By / Name</label>
-                  <input 
-                    type="text" 
-                    value={formName} 
-                    onChange={e => setFormName(e.target.value)}
-                    placeholder="Customer or Entity Name"
-                    required
-                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500 text-sm"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">Amount (₹)</label>
-                    <input 
-                      type="number" 
-                      value={formAmount} 
-                      onChange={e => setFormAmount(e.target.value)}
-                      placeholder="0.00"
-                      required
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500 text-sm font-bold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">Date</label>
-                    <input 
-                      type="date" 
-                      value={formDate} 
-                      onChange={e => setFormDate(e.target.value)}
-                      required
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-emerald-500 text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">Category</label>
-                    <select 
-                      value={formCategory}
-                      onChange={e => setFormCategory(e.target.value)}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-emerald-500 text-sm"
-                    >
-                      <option value="Sales" className="bg-neutral-900">Sales</option>
-                      <option value="Services" className="bg-neutral-900">Services</option>
-                      <option value="Consulting" className="bg-neutral-900">Consulting</option>
-                      <option value="Retail" className="bg-neutral-900">Retail</option>
-                      <option value="Vendor" className="bg-neutral-900">Vendor</option>
-                      <option value="Retainer" className="bg-neutral-900">Retainer</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">Payment Method</label>
-                    <select 
-                      value={formMethod}
-                      onChange={e => setFormMethod(e.target.value)}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-emerald-500 text-sm"
-                    >
-                      <option value="UPI" className="bg-neutral-900">UPI</option>
-                      <option value="Cash" className="bg-neutral-900">Cash</option>
-                      <option value="Bank Transfer" className="bg-neutral-900">Bank Transfer</option>
-                      <option value="Card" className="bg-neutral-900">Card</option>
-                      <option value="Net Banking" className="bg-neutral-900">Net Banking</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="pt-4 flex gap-3">
-                  <button 
-                    type="button" 
-                    onClick={() => setShowAddModal(false)}
-                    className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 rounded-xl font-medium text-sm text-neutral-300"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    type="submit" 
-                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-semibold text-sm text-white shadow-lg"
-                  >
-                    Save Entry
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Edit Entry Modal */}
-      <AnimatePresence>
-        {editingEntry && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }} 
-              animate={{ scale: 1, opacity: 1 }} 
-              exit={{ scale: 0.95, opacity: 0 }} 
-              className="bg-[#121212] border border-white/10 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-white">Edit Entry</h3>
-                <button onClick={() => setEditingEntry(null)} className="p-1.5 text-neutral-400 hover:text-white rounded-lg hover:bg-white/10">
-                  <X size={20} />
-                </button>
-              </div>
-
-              <form onSubmit={handleEditSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">Added By / Name</label>
-                  <input 
-                    type="text" 
-                    value={formName} 
-                    onChange={e => setFormName(e.target.value)}
-                    required
-                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500 text-sm"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">Amount (₹)</label>
-                    <input 
-                      type="number" 
-                      value={formAmount} 
-                      onChange={e => setFormAmount(e.target.value)}
-                      required
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500 text-sm font-bold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">Date</label>
-                    <input 
-                      type="date" 
-                      value={formDate} 
-                      onChange={e => setFormDate(e.target.value)}
-                      required
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-emerald-500 text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">Category</label>
-                    <select 
-                      value={formCategory}
-                      onChange={e => setFormCategory(e.target.value)}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-emerald-500 text-sm"
-                    >
-                      <option value="Sales" className="bg-neutral-900">Sales</option>
-                      <option value="Services" className="bg-neutral-900">Services</option>
-                      <option value="Consulting" className="bg-neutral-900">Consulting</option>
-                      <option value="Retail" className="bg-neutral-900">Retail</option>
-                      <option value="Vendor" className="bg-neutral-900">Vendor</option>
-                      <option value="Retainer" className="bg-neutral-900">Retainer</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-1">Payment Method</label>
-                    <select 
-                      value={formMethod}
-                      onChange={e => setFormMethod(e.target.value)}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-emerald-500 text-sm"
-                    >
-                      <option value="UPI" className="bg-neutral-900">UPI</option>
-                      <option value="Cash" className="bg-neutral-900">Cash</option>
-                      <option value="Bank Transfer" className="bg-neutral-900">Bank Transfer</option>
-                      <option value="Card" className="bg-neutral-900">Card</option>
-                      <option value="Net Banking" className="bg-neutral-900">Net Banking</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="pt-4 flex gap-3">
-                  <button 
-                    type="button" 
-                    onClick={() => setEditingEntry(null)}
-                    className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 rounded-xl font-medium text-sm text-neutral-300"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    type="submit" 
-                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-semibold text-sm text-white shadow-lg"
-                  >
-                    Update Entry
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Export Entries Modal */}
+      {/* Export Modal Component */}
       <ExportModal
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
         reportType="entries"
-        title="Export SmartLedger Entries Report"
-        records={completedEntriesOnly}
+        records={completedEntries}
       />
     </div>
-    </DataStateGuard>
   );
 }
-

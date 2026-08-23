@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { AppState, PendingMoney, ReceivedMoney, SentMoney, Transaction, SecuritySettings, EmailSettings, EmailHistoryLog, GeneralSettings, GullakEntry, GullakSettings, UnlockedAchievement, AiRecognitionSettings, AiRecognitionHistory, PosterTemplate, Customer, ReportSettings, GeneratedReport, UserProfile, ReminderHistoryLog, SavingsGoal, SecurityLog, AutomationRule, Investment, FinanceHabit, DataLoadStatus, BackupSettings } from '../types';
+import { AppState, PendingMoney, ReceivedMoney, SentMoney, Transaction, SecuritySettings, EmailSettings, EmailHistoryLog, GeneralSettings, GullakEntry, GullakSettings, UnlockedAchievement, AiRecognitionSettings, AiRecognitionHistory, PosterTemplate, Customer, ReportSettings, GeneratedReport, UserProfile, ReminderHistoryLog, SavingsGoal, SecurityLog, AutomationRule, Investment, FinanceHabit, DataLoadStatus, BackupSettings, AdminUser } from '../types';
 import CryptoJS from 'crypto-js';
 import { calculateProgress, ACHIEVEMENTS } from '../lib/achievements';
 import { DEFAULT_REMINDER_TEMPLATE } from '../lib/utils';
@@ -7,6 +7,14 @@ import { auth } from '../lib/firebase';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { subscribeToState, queueStateSync, migrateLocalDataToCloud, syncUserProfile, fetchUserState } from "../lib/cloudSync";
 import { createNotification } from '../lib/notificationService';
+import { 
+  signInAdminWithGoogle, 
+  checkAdminRedirectAuth, 
+  subscribeToAdminUser, 
+  performAdminLogout, 
+  verifyOrBootstrapAdminUser,
+  logAdminSecurityEvent 
+} from '../lib/adminAuthService';
 
 const SECRET_KEY = 'smart-ledger-secure-key-2026';
 
@@ -82,8 +90,11 @@ interface StoreContextType extends AppState {
   updateBackupSettings: (settings: Partial<BackupSettings>) => void;
   applyRestoredState: (restored: AppState) => void;
   isAdminAuthenticated: boolean;
+  isAdminLoading: boolean;
+  adminUser: AdminUser | null;
   adminLogin: (pass: string, email?: string) => Promise<{ success: boolean; error?: string }>;
-  adminLogout: () => void;
+  adminGoogleLogin: () => Promise<{ success: boolean; adminUser?: AdminUser; error?: string }>;
+  adminLogout: () => Promise<void>;
   updateAdminPassword: (currentPass: string, newPass: string) => Promise<{ success: boolean; error?: string }>;
   isLocked: boolean;
   unlockApp: (pin: string) => boolean;
@@ -468,6 +479,87 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
     return sessionStorage.getItem('smartledger-admin-auth') === 'true';
   });
+  const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
+  const [isAdminLoading, setIsAdminLoading] = useState<boolean>(true);
+
+  // Check redirect login result and restore admin session
+  useEffect(() => {
+    let unsubscribeAdminDoc: (() => void) | null = null;
+
+    const initAdminAuth = async () => {
+      setIsAdminLoading(true);
+      try {
+        // 1. Check if returning from redirect
+        const redirectRes = await checkAdminRedirectAuth();
+        if (redirectRes && redirectRes.success && redirectRes.adminUser) {
+          setAdminUser(redirectRes.adminUser);
+          setIsAdminAuthenticated(true);
+          sessionStorage.setItem('smartledger-admin-auth', 'true');
+        }
+      } catch (e) {
+        console.warn('[AdminAuth] Redirect check error:', e);
+      }
+
+      // 2. Watch auth state for admin user
+      const unsubAuth = onAuthStateChanged(auth, async (user) => {
+        if (user) {
+          const isSessionFlagged = sessionStorage.getItem('smartledger-admin-auth') === 'true';
+          // Check admin verification
+          const verification = await verifyOrBootstrapAdminUser(user);
+          if (verification.authorized && verification.adminUser) {
+            setAdminUser(verification.adminUser);
+            if (isSessionFlagged || window.location.pathname.startsWith('/admin')) {
+              setIsAdminAuthenticated(true);
+              sessionStorage.setItem('smartledger-admin-auth', 'true');
+            }
+
+            // Real-time admin user document sync
+            if (unsubscribeAdminDoc) unsubscribeAdminDoc();
+            unsubscribeAdminDoc = subscribeToAdminUser(verification.adminUser.uid, (updatedAdmin) => {
+              if (updatedAdmin) {
+                if (updatedAdmin.status === 'Disabled') {
+                  setAdminUser(null);
+                  setIsAdminAuthenticated(false);
+                  sessionStorage.removeItem('smartledger-admin-auth');
+                  createNotification({
+                    title: 'Admin Access Disabled',
+                    message: 'Your administrator account has been disabled by the Owner.',
+                    type: 'admin_user_blocked'
+                  });
+                } else {
+                  setAdminUser(updatedAdmin);
+                }
+              }
+            });
+          } else {
+            // Not an authorized admin
+            if (sessionStorage.getItem('smartledger-admin-auth') === 'true' && !sessionStorage.getItem('smartledger-admin-session')) {
+              setIsAdminAuthenticated(false);
+              setAdminUser(null);
+              sessionStorage.removeItem('smartledger-admin-auth');
+            }
+          }
+        } else {
+          // If no firebase user, check if logged in via server session token
+          const token = sessionStorage.getItem('smartledger-admin-session');
+          if (!token) {
+            setAdminUser(null);
+            if (sessionStorage.getItem('smartledger-admin-auth') !== 'true') {
+              setIsAdminAuthenticated(false);
+            }
+          }
+        }
+        setIsAdminLoading(false);
+      });
+
+      return () => {
+        unsubAuth();
+        if (unsubscribeAdminDoc) unsubscribeAdminDoc();
+      };
+    };
+
+    initAdminAuth();
+  }, []);
 
   useEffect(() => {
     if (isInitialized && state.securitySettings.pinEnabled) {
@@ -518,6 +610,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const adminGoogleLogin = async (): Promise<{ success: boolean; adminUser?: AdminUser; error?: string }> => {
+    setIsAdminLoading(true);
+    try {
+      const result = await signInAdminWithGoogle();
+      if (result.success && result.adminUser) {
+        setAdminUser(result.adminUser);
+        setIsAdminAuthenticated(true);
+        createNotification({
+          title: 'Admin Signed In',
+          message: `Logged in as ${result.adminUser.displayName} (${result.adminUser.role})`,
+          type: 'auth_google_login'
+        });
+        return { success: true, adminUser: result.adminUser };
+      } else {
+        return { success: false, error: result.error || 'Authentication failed.' };
+      }
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Google sign-in encountered an issue.' };
+    } finally {
+      setIsAdminLoading(false);
+    }
+  };
+
   const adminLogin = async (pass: string, email?: string) => {
     try {
       const res = await fetch('/api/admin/login', {
@@ -535,6 +650,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             sessionStorage.setItem('smartledger-admin-session', data.token);
           }
           sessionStorage.setItem('smartledger-admin-auth', 'true');
+          
+          // Setup fallback admin profile
+          const fallbackAdmin: AdminUser = {
+            uid: 'admin_server_session',
+            email: email || 'admin@smartledgerx.io',
+            displayName: 'System Admin',
+            role: 'Super Admin',
+            status: 'Active',
+            createdAt: new Date().toISOString(),
+            lastLogin: new Date().toISOString()
+          };
+          setAdminUser(fallbackAdmin);
+          logAdminSecurityEvent('PASSWORD_LOGIN', fallbackAdmin.email, fallbackAdmin.uid, 'Logged in via Admin Password');
+
           return { success: true };
         } else {
           return { success: false, error: data.error || 'Invalid Admin Password' };
@@ -549,6 +678,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (pass === storedPass) {
       setIsAdminAuthenticated(true);
       sessionStorage.setItem('smartledger-admin-auth', 'true');
+      const fallbackAdmin: AdminUser = {
+        uid: 'admin_local_session',
+        email: email || 'admin@smartledgerx.io',
+        displayName: 'Master Administrator',
+        role: 'Owner',
+        status: 'Active',
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString()
+      };
+      setAdminUser(fallbackAdmin);
       return { success: true };
     } else {
       return { success: false, error: 'Invalid Admin Password' };
@@ -590,7 +729,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return { success: true };
   };
 
-  const adminLogout = () => {
+  const adminLogout = async () => {
     const token = sessionStorage.getItem('smartledger-admin-session');
     if (token) {
       fetch('/api/admin/logout', {
@@ -599,9 +738,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ token })
       }).catch(() => {});
     }
+
+    await performAdminLogout(adminUser);
+    setAdminUser(null);
     setIsAdminAuthenticated(false);
     sessionStorage.removeItem('smartledger-admin-auth');
     sessionStorage.removeItem('smartledger-admin-session');
+    sessionStorage.removeItem('smartledger-admin-email');
+    sessionStorage.removeItem('smartledger-admin-role');
+
+    createNotification({
+      title: 'Admin Session Ended',
+      message: 'You have been signed out of the Admin Panel.',
+      type: 'auth_google_logout'
+    });
   };
 
   const clearNewlyUnlocked = () => setNewlyUnlocked(null);
@@ -1200,7 +1350,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       newlyUnlocked,
       clearNewlyUnlocked,
       isAdminAuthenticated,
+      isAdminLoading,
+      adminUser,
       adminLogin,
+      adminGoogleLogin,
       adminLogout,
       updateAdminPassword,
       isLocked,

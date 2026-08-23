@@ -1,28 +1,51 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Search, Calendar, Plus, Edit2, Trash2, X, ArrowUpDown, Download, Filter, Eye } from 'lucide-react';
+import { motion } from 'motion/react';
+import { 
+  Database, 
+  Plus, 
+  Edit2, 
+  Trash2, 
+  ArrowDownLeft, 
+  ArrowUpRight, 
+  Download, 
+  Search, 
+  PiggyBank,
+  Wallet,
+  Sparkles
+} from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
+import { useToast } from '../../context/ToastContext';
 import { GullakEntry } from '../../types';
-import ExportModal from '../../components/ExportModal';
-import DataStateGuard from '../../components/ui/DataStateGuard';
+import { cn, formatDate } from '../../lib/utils';
+import { M3DataTable, Column } from '../../components/admin/material3/M3DataTable';
+import { M3Card } from '../../components/admin/material3/M3Card';
+import { M3Button } from '../../components/admin/material3/M3Button';
+import { M3TextField } from '../../components/admin/material3/M3TextField';
+import { M3Dialog } from '../../components/admin/material3/M3Dialog';
+import { M3Chip } from '../../components/admin/material3/M3Chip';
+import { useM3Theme } from '../../components/admin/material3/M3ThemeContext';
 
 export default function AdminGullak() {
   const { 
     gullakEntries, 
     addGullakEntry, 
     updateGullakEntry, 
-    deleteGullakEntry,
-    dataStatus,
-    dataError,
-    retryFetchData
+    deleteGullakEntry 
   } = useStore();
-  const [searchQuery, setSearchQuery] = useState('');
+  const { showSuccess, showError } = useToast();
+  const { resolvedTheme } = useM3Theme();
+  const isDark = resolvedTheme === 'dark';
+
+  const gullakBalance = (gullakEntries || []).reduce((acc: number, curr: any) => {
+    if (curr.category === 'deposit' || curr.category === 'transfer_in') return acc + (curr.amount || 0);
+    if (curr.category === 'withdrawal' || curr.category === 'transfer_out') return acc - (curr.amount || 0);
+    return acc;
+  }, 0);
+
   const [typeFilter, setTypeFilter] = useState<'all' | 'deposit' | 'withdrawal' | 'transfer_in' | 'transfer_out'>('all');
-  const [dateFilter, setDateFilter] = useState('');
-  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showExportModal, setShowExportModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<GullakEntry | null>(null);
+  const [deletingEntry, setDeletingEntry] = useState<GullakEntry | null>(null);
 
   // Form states
   const [formAmount, setFormAmount] = useState('');
@@ -31,147 +54,304 @@ export default function AdminGullak() {
   const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
 
   const filtered = gullakEntries.filter((entry) => {
-    const q = searchQuery.toLowerCase();
-    const matchesSearch = !q || entry.note.toLowerCase().includes(q) || String(entry.amount).includes(q) || entry.category.toLowerCase().includes(q);
-    const matchesType = typeFilter === 'all' || entry.category === typeFilter;
-    const matchesDate = !dateFilter || entry.date.startsWith(dateFilter);
-    return matchesSearch && matchesType && matchesDate;
+    if (typeFilter !== 'all' && entry.category !== typeFilter) return false;
+    return true;
   });
 
-  const sorted = [...filtered].sort((a, b) => {
-    const dateA = new Date(a.date).getTime();
-    const dateB = new Date(b.date).getTime();
-    return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingEntry) {
-        updateGullakEntry(editingEntry.id, {
-            amount: Number(formAmount),
-            category: formType,
-            note: formNotes,
-            date: formDate
-        });
-        setEditingEntry(null);
-    } else {
-        addGullakEntry({
-            personName: 'Admin',
-            amount: Number(formAmount),
-            date: formDate,
-            time: new Date().toLocaleTimeString(),
-            paymentMethod: 'Cash',
-            category: formType,
-            note: formNotes
-        });
+    const num = Number(formAmount);
+    if (isNaN(num) || num <= 0) {
+      showError('Validation Error', 'Please enter a valid amount.');
+      return;
     }
-    setShowAddModal(false);
-    setFormAmount('');
-    setFormNotes('');
+
+    try {
+      if (editingEntry) {
+        updateGullakEntry(editingEntry.id, {
+          amount: num,
+          category: formType,
+          note: formNotes,
+          date: formDate,
+        });
+        showSuccess('Gullak Updated', 'Savings entry updated.');
+        setEditingEntry(null);
+      } else {
+        addGullakEntry({
+          personName: 'Admin',
+          amount: num,
+          date: formDate,
+          time: new Date().toLocaleTimeString(),
+          paymentMethod: 'Cash',
+          category: formType,
+          note: formNotes || 'Gullak Allocation',
+        });
+        showSuccess('Gullak Saved', `Saved ₹${num.toLocaleString()} to Gullak.`);
+        setShowAddModal(false);
+      }
+      setFormAmount('');
+      setFormNotes('');
+    } catch (err: any) {
+      showError('Error', err?.message || 'Failed to save gullak entry.');
+    }
   };
 
-  return (
-    <DataStateGuard
-      status={dataStatus}
-      error={dataError}
-      onRetry={retryFetchData}
-      loadingMessage="Loading Gullak entries..."
-      skeletonType="table"
-    >
-      <div className="space-y-6 max-w-7xl mx-auto pb-16">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Gullak Entries</h1>
-          <p className="text-neutral-400 text-sm mt-1">Manage all gullak transactions and monitor balances.</p>
-        </div>
-      </div>
+  const handleDelete = () => {
+    if (!deletingEntry) return;
+    try {
+      deleteGullakEntry(deletingEntry.id);
+      showSuccess('Entry Removed', 'Gullak entry deleted.');
+      setDeletingEntry(null);
+    } catch (err: any) {
+      showError('Error', err?.message || 'Failed to delete entry.');
+    }
+  };
 
-      {/* Toolbar */}
-      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 backdrop-blur-xl flex flex-col md:flex-row gap-3 items-center justify-between">
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500" size={18} />
-          <input 
-            type="text" 
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search entries..." 
-            className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-emerald-500"
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-            <button onClick={() => setShowExportModal(true)} className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl flex items-center gap-2 text-sm">
-                <Download size={16}/> Export
-            </button>
-            <button onClick={() => setShowAddModal(true)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl flex items-center gap-2 text-sm">
-                <Plus size={16}/> Add Entry
-            </button>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden backdrop-blur-xl">
-        <table className="w-full text-left">
-            <thead className="bg-[#0c0c0c] border-b border-white/10">
-                <tr className="text-neutral-400 text-xs uppercase">
-                    <th className="py-4 px-6">Date</th>
-                    <th className="py-4 px-6">Type</th>
-                    <th className="py-4 px-6">Amount</th>
-                    <th className="py-4 px-6">Notes</th>
-                    <th className="py-4 px-6 text-right">Actions</th>
-                </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5 text-sm">
-                {sorted.map(entry => (
-                    <tr key={entry.id} className="hover:bg-white/[0.04]">
-                        <td className="py-4 px-6">{entry.date}</td>
-                        <td className="py-4 px-6 capitalize">{entry.category.replace('_', ' ')}</td>
-                        <td className="py-4 px-6 font-bold text-emerald-400">₹{entry.amount.toLocaleString('en-IN')}</td>
-                        <td className="py-4 px-6 text-neutral-300">{entry.note}</td>
-                        <td className="py-4 px-6 text-right flex justify-end gap-2">
-                            <button onClick={() => { setEditingEntry(entry); setFormAmount(String(entry.amount)); setFormNotes(entry.note); setFormType(entry.category as any); setFormDate(entry.date); setShowAddModal(true); }} className="p-2 hover:bg-white/10 rounded-lg"><Edit2 size={16}/></button>
-                            <button onClick={() => deleteGullakEntry(entry.id)} className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg"><Trash2 size={16}/></button>
-                        </td>
-                    </tr>
-                ))}
-            </tbody>
-        </table>
-      </div>
-
-      {/* Add/Edit Modal */}
-      <AnimatePresence>
-        {showAddModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-                <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-[#121212] border border-white/10 rounded-3xl p-6 w-full max-w-sm">
-                    <h3 className="text-xl font-bold mb-4">{editingEntry ? 'Edit' : 'Add'} Gullak Entry</h3>
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <input type="number" value={formAmount} onChange={e => setFormAmount(e.target.value)} placeholder="Amount" required className="w-full bg-black/40 border rounded-xl p-2.5"/>
-                        <select value={formType} onChange={e => setFormType(e.target.value as any)} className="w-full bg-black/40 border rounded-xl p-2.5">
-                            <option value="deposit">Deposit</option>
-                            <option value="withdrawal">Withdrawal</option>
-                            <option value="transfer_in">Transfer In</option>
-                            <option value="transfer_out">Transfer Out</option>
-                        </select>
-                        <input type="text" value={formNotes} onChange={e => setFormNotes(e.target.value)} placeholder="Notes" className="w-full bg-black/40 border rounded-xl p-2.5"/>
-                        <input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} required className="w-full bg-black/40 border rounded-xl p-2.5"/>
-                        <div className="flex gap-3">
-                            <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-2 bg-white/5 rounded-xl">Cancel</button>
-                            <button type="submit" className="flex-1 py-2 bg-emerald-600 rounded-xl">Save</button>
-                        </div>
-                    </form>
-                </motion.div>
+  const columns: Column<GullakEntry>[] = [
+    {
+      key: 'category',
+      header: 'Type & Operation',
+      render: (item) => {
+        const isDeposit = item.category === 'deposit' || item.category === 'transfer_in';
+        return (
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              'w-9 h-9 rounded-2xl flex items-center justify-center font-bold text-xs shrink-0',
+              isDeposit
+                ? isDark ? 'bg-[#0f5223] text-[#b4f3b8]' : 'bg-[#c4eed0] text-[#073814]'
+                : isDark ? 'bg-[#601410] text-[#f9dedc]' : 'bg-[#f9dedc] text-[#410e0b]'
+            )}>
+              {isDeposit ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
             </div>
-        )}
-      </AnimatePresence>
+            <div>
+              <span className={cn(
+                'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider',
+                isDeposit
+                  ? isDark ? 'bg-[#0f5223]/50 text-[#85e197]' : 'bg-[#e6f4ea] text-[#137333]'
+                  : isDark ? 'bg-[#601410]/50 text-[#f2b8b5]' : 'bg-[#fce8e6] text-[#c5221f]'
+              )}>
+                {item.category}
+              </span>
+              <div className="text-[11px] text-slate-400 mt-0.5">{item.note || 'Gullak Allocation'}</div>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'amount',
+      header: 'Amount',
+      align: 'right',
+      sortable: true,
+      render: (item) => {
+        const isDeposit = item.category === 'deposit' || item.category === 'transfer_in';
+        return (
+          <span className={cn(
+            'font-mono font-bold text-sm',
+            isDeposit ? 'text-[#6dd58c]' : 'text-[#f2b8b5]'
+          )}>
+            {isDeposit ? '+' : '-'}₹{item.amount.toLocaleString('en-IN')}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'date',
+      header: 'Date Recorded',
+      sortable: true,
+      render: (item) => (
+        <span className="text-xs text-slate-400">{formatDate(item.date)}</span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      render: (item) => (
+        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => {
+              setEditingEntry(item);
+              setFormAmount(String(item.amount));
+              setFormType(item.category as any);
+              setFormNotes(item.note || '');
+              setFormDate(item.date);
+            }}
+            className="p-2 rounded-xl text-slate-400 hover:text-white transition-colors"
+          >
+            <Edit2 size={16} />
+          </button>
+          <button
+            onClick={() => setDeletingEntry(item)}
+            className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
+      ),
+    },
+  ];
 
-        <ExportModal
-            isOpen={showExportModal}
-            onClose={() => setShowExportModal(false)}
-            reportType="entries"
-            title="Export Gullak Entries Report"
-            records={gullakEntries}
-        />
+  return (
+    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className={cn('text-2xl sm:text-3xl font-extrabold tracking-tight', isDark ? 'text-white' : 'text-[#1f1f1f]')}>
+            Gullak Digital Vault
+          </h1>
+          <p className={cn('text-xs sm:text-sm mt-0.5', isDark ? 'text-[#8e918f]' : 'text-[#5f6368]')}>
+            Manage emergency reserve funds, vault allocations, and micro-savings balances.
+          </p>
+        </div>
+
+        <M3Button
+          variant="filled"
+          icon={Plus}
+          onClick={() => {
+            setEditingEntry(null);
+            setFormAmount('');
+            setFormNotes('');
+            setShowAddModal(true);
+          }}
+        >
+          Add Vault Entry
+        </M3Button>
       </div>
-    </DataStateGuard>
+
+      {/* Vault Balance Card */}
+      <M3Card variant="filled" padding="lg">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+            Total Vault Balance
+          </span>
+          <div className="w-8 h-8 rounded-xl bg-[#004a77] text-[#c2e7ff] flex items-center justify-center">
+            <PiggyBank size={18} />
+          </div>
+        </div>
+        <div className="text-3xl font-extrabold font-mono text-[#6dd58c] mt-2">
+          ₹{(gullakBalance || 0).toLocaleString('en-IN')}
+        </div>
+        <div className="text-xs text-slate-400 mt-1">{gullakEntries.length} total vault allocations</div>
+      </M3Card>
+
+      {/* Type Filter Chips */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">Type:</span>
+        {['all', 'deposit', 'withdrawal', 'transfer_in', 'transfer_out'].map((t) => (
+          <M3Chip
+            key={t}
+            label={t === 'all' ? 'All Entries' : t}
+            selected={typeFilter === t}
+            onClick={() => setTypeFilter(t as any)}
+          />
+        ))}
+      </div>
+
+      {/* Main Table */}
+      <M3DataTable
+        title="Vault Ledger Entries"
+        subtitle={`${filtered.length} total savings records`}
+        data={filtered}
+        columns={columns}
+        keyExtractor={(item) => item.id}
+        searchPlaceholder="Search notes, amount, type..."
+        searchFields={['note', 'amount', 'category']}
+        emptyMessage="No vault entries found"
+      />
+
+      {/* Add / Edit Dialog */}
+      <M3Dialog
+        isOpen={showAddModal || Boolean(editingEntry)}
+        onClose={() => {
+          setShowAddModal(false);
+          setEditingEntry(null);
+        }}
+        title={editingEntry ? 'Edit Vault Entry' : 'New Vault Allocation'}
+        icon={PiggyBank}
+        iconTone="emerald"
+        actions={
+          <>
+            <M3Button
+              variant="text"
+              onClick={() => {
+                setShowAddModal(false);
+                setEditingEntry(null);
+              }}
+            >
+              Cancel
+            </M3Button>
+            <M3Button variant="filled" onClick={handleSave}>
+              Save Entry
+            </M3Button>
+          </>
+        }
+      >
+        <form onSubmit={handleSave} className="space-y-4 pt-2">
+          <M3TextField
+            label="Amount (₹)"
+            type="number"
+            value={formAmount}
+            onChange={(e) => setFormAmount(e.target.value)}
+            placeholder="0.00"
+            required
+          />
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-400">Vault Operation</label>
+            <select
+              value={formType}
+              onChange={(e) => setFormType(e.target.value as any)}
+              className={cn(
+                'w-full h-14 px-3.5 rounded-2xl border text-sm outline-none transition-all cursor-pointer',
+                isDark ? 'bg-[#1e1f20] text-white border-[#3c4043]' : 'bg-[#f0f4f9] text-black border-[#c4c7c5]'
+              )}
+            >
+              <option value="deposit">Deposit to Vault</option>
+              <option value="withdrawal">Withdrawal from Vault</option>
+              <option value="transfer_in">Transfer In</option>
+              <option value="transfer_out">Transfer Out</option>
+            </select>
+          </div>
+
+          <M3TextField
+            label="Date"
+            type="date"
+            value={formDate}
+            onChange={(e) => setFormDate(e.target.value)}
+          />
+
+          <M3TextField
+            label="Purpose / Memo"
+            value={formNotes}
+            onChange={(e) => setFormNotes(e.target.value)}
+            placeholder="e.g. Monthly emergency reserve"
+          />
+        </form>
+      </M3Dialog>
+
+      {/* Delete Dialog */}
+      <M3Dialog
+        isOpen={Boolean(deletingEntry)}
+        onClose={() => setDeletingEntry(null)}
+        title="Delete Vault Record"
+        icon={Trash2}
+        iconTone="rose"
+        actions={
+          <>
+            <M3Button variant="text" onClick={() => setDeletingEntry(null)}>
+              Cancel
+            </M3Button>
+            <M3Button variant="danger" onClick={handleDelete}>
+              Delete
+            </M3Button>
+          </>
+        }
+      >
+        <p className="text-sm text-slate-300">
+          Are you sure you want to delete this vault entry?
+        </p>
+      </M3Dialog>
+    </div>
   );
 }

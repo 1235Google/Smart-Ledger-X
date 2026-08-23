@@ -42,8 +42,8 @@ export const AnimatedInput: React.FC<AnimatedInputProps> = ({
         <label
           htmlFor={inputId}
           className={cn(
-            'block text-xs font-semibold tracking-wider uppercase transition-colors duration-200',
-            isFocused ? 'text-blue-400' : 'text-slate-400'
+            'block text-xs font-bold tracking-wider uppercase transition-colors duration-200',
+            isFocused ? 'text-[#a8c7fa]' : 'text-slate-400'
           )}
         >
           {label}
@@ -71,14 +71,14 @@ export const AnimatedInput: React.FC<AnimatedInputProps> = ({
           onFocus={handleFocus}
           onBlur={handleBlur}
           className={cn(
-            'w-full bg-white/[0.05] border rounded-2xl py-3 px-4 text-sm text-white placeholder-slate-500 transition-all duration-300 outline-none backdrop-blur-md',
+            'w-full bg-[#1e2029] border rounded-2xl py-3.5 px-4 text-sm text-white placeholder-slate-500 transition-all duration-200 outline-none',
             icon ? 'pl-10' : '',
             (error || isSuccess) ? 'pr-10' : '',
             error
-              ? 'border-rose-500/80 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/30 shadow-[0_0_12px_rgba(244,63,94,0.2)]'
+              ? 'border-[#f2b8b5] focus:border-[#f2b8b5] focus:ring-2 focus:ring-[#f2b8b5]/30'
               : isSuccess
-              ? 'border-emerald-500/80 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
-              : 'border-white/10 hover:border-white/20 focus:border-blue-500/80 focus:ring-2 focus:ring-blue-500/40 focus:shadow-[0_0_18px_rgba(59,130,246,0.25)]',
+              ? 'border-[#6dd58c] focus:border-[#6dd58c] focus:ring-2 focus:ring-[#6dd58c]/30'
+              : 'border-white/10 hover:border-white/20 focus:border-[#a8c7fa] focus:ring-2 focus:ring-[#a8c7fa]/30',
             className
           )}
           {...props}

@@ -166,18 +166,38 @@ export default function ImportExport() {
 
   const createBackup = () => {
     setIsProcessing(true);
-    updateProgress(50, 'Generating secure backup JSON...');
+    updateProgress(30, 'Exporting complete SmartLedger state...');
     
     setTimeout(() => {
-      const backupData = JSON.stringify({
+      const fullBackupPayload = {
         isSetupComplete: store.isSetupComplete,
         startingBalance: store.startingBalance,
+        customers: store.customers,
         transactions: store.transactions,
-        securitySettings: store.securitySettings
-      }, null, 2);
+        gullakEntries: store.gullakEntries,
+        savingsGoals: store.savingsGoals,
+        securityLogs: store.securityLogs,
+        automationRules: store.automationRules,
+        investments: store.investments,
+        financeHabits: store.financeHabits,
+        gullakSettings: store.gullakSettings,
+        securitySettings: store.securitySettings,
+        emailSettings: store.emailSettings,
+        emailHistory: store.emailHistory,
+        generalSettings: store.generalSettings,
+        aiRecognitionSettings: store.aiRecognitionSettings,
+        aiRecognitionHistory: store.aiRecognitionHistory,
+        posterTemplates: store.posterTemplates,
+        unlockedAchievements: store.unlockedAchievements,
+        generatedReports: store.generatedReports,
+        userProfile: store.userProfile,
+        backupSettings: store.backupSettings,
+        exportedAt: new Date().toISOString(),
+      };
+      const backupData = JSON.stringify(fullBackupPayload, null, 2);
       
       const blob = new Blob([backupData], { type: 'application/json' });
-      saveAs(blob, `SmartLedger_Backup_${new Date().toISOString().split('T')[0]}.json`);
+      saveAs(blob, `SmartLedger_Full_Backup_${new Date().toISOString().split('T')[0]}.json`);
       
       updateProgress(100, 'Backup Complete!');
       setTimeout(() => setIsProcessing(false), 1000);
@@ -191,14 +211,33 @@ export default function ImportExport() {
     try {
       const zip = new JSZip();
       
-      // JSON Backup
-      const backupData = JSON.stringify({
+      // JSON Full Backup
+      const fullBackupPayload = {
         isSetupComplete: store.isSetupComplete,
         startingBalance: store.startingBalance,
+        customers: store.customers,
         transactions: store.transactions,
-        securitySettings: store.securitySettings
-      }, null, 2);
-      zip.file('Backup.json', backupData);
+        gullakEntries: store.gullakEntries,
+        savingsGoals: store.savingsGoals,
+        securityLogs: store.securityLogs,
+        automationRules: store.automationRules,
+        investments: store.investments,
+        financeHabits: store.financeHabits,
+        gullakSettings: store.gullakSettings,
+        securitySettings: store.securitySettings,
+        emailSettings: store.emailSettings,
+        emailHistory: store.emailHistory,
+        generalSettings: store.generalSettings,
+        aiRecognitionSettings: store.aiRecognitionSettings,
+        aiRecognitionHistory: store.aiRecognitionHistory,
+        posterTemplates: store.posterTemplates,
+        unlockedAchievements: store.unlockedAchievements,
+        generatedReports: store.generatedReports,
+        userProfile: store.userProfile,
+        backupSettings: store.backupSettings,
+        exportedAt: new Date().toISOString(),
+      };
+      zip.file('SmartLedger_Database_Backup.json', JSON.stringify(fullBackupPayload, null, 2));
       
       // CSV
       updateProgress(40, 'Adding CSV records...');

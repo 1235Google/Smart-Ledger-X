@@ -65,8 +65,7 @@ export default function AdminLogin() {
       setShowForgotModal(false);
       setForgotSent(false);
       setForgotEmail('');
-      alert('Password reset instructions sent to your admin email.');
-    }, 1500);
+    }, 2500);
   };
 
   return (

@@ -10,6 +10,7 @@ import { cn, formatCurrency } from '../lib/utils';
 import { PosterTemplate, PosterPlaceholder, PlaceholderType, AiRecognitionSettings } from '../types';
 import Draggable from 'react-draggable';
 import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 // Placeholder visual options
 const placeholderTypes = [
@@ -218,7 +219,15 @@ export default function AdminHonors() {
         link.href = canvas.toDataURL('image/png');
         link.click();
       } else {
-        alert("PDF download requires jsPDF library. Falling back to PNG.");
+        const imgData = canvas.toDataURL('image/png');
+        const isLandscape = canvas.width > canvas.height;
+        const pdf = new jsPDF({
+          orientation: isLandscape ? 'landscape' : 'portrait',
+          unit: 'px',
+          format: [canvas.width, canvas.height]
+        });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save(`Honors_${currentCustomer.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
       }
       
       if (!isPreviewTest && topPayer) {

@@ -2,9 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Lock, Database, Upload, Download, CheckCircle2, Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
+import { useToast } from '../../context/ToastContext';
 
 export default function AdminSettings() {
-  const { importData, updateAdminPassword, isAdminAuthenticated } = useStore();
+  const store = useStore();
+  const { importData, updateAdminPassword, isAdminAuthenticated } = store;
+  const { showSuccess, showError } = useToast();
   const [currentPass, setCurrentPass] = useState('');
   const [newPass, setNewPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
@@ -128,14 +131,44 @@ export default function AdminSettings() {
   };
 
   const handleBackupDatabase = () => {
-    const data = localStorage.getItem('smart-ledger-data') || '{}';
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `smartledgerx_backup_${new Date().toISOString().split('T')[0]}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+    try {
+      const fullBackupPayload = {
+        isSetupComplete: store.isSetupComplete,
+        startingBalance: store.startingBalance,
+        customers: store.customers,
+        transactions: store.transactions,
+        gullakEntries: store.gullakEntries,
+        savingsGoals: store.savingsGoals,
+        securityLogs: store.securityLogs,
+        automationRules: store.automationRules,
+        investments: store.investments,
+        financeHabits: store.financeHabits,
+        gullakSettings: store.gullakSettings,
+        securitySettings: store.securitySettings,
+        emailSettings: store.emailSettings,
+        emailHistory: store.emailHistory,
+        generalSettings: store.generalSettings,
+        aiRecognitionSettings: store.aiRecognitionSettings,
+        aiRecognitionHistory: store.aiRecognitionHistory,
+        posterTemplates: store.posterTemplates,
+        unlockedAchievements: store.unlockedAchievements,
+        generatedReports: store.generatedReports,
+        userProfile: store.userProfile,
+        backupSettings: store.backupSettings,
+        exportedAt: new Date().toISOString(),
+      };
+      const data = JSON.stringify(fullBackupPayload, null, 2);
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `smartledgerx_admin_backup_${new Date().toISOString().split('T')[0]}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      showSuccess('Backup Downloaded', 'Full admin database snapshot saved to file.');
+    } catch (err: any) {
+      showError('Backup Failed', err?.message || 'Could not generate backup file.');
+    }
   };
 
   const handleRestoreBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -145,10 +178,13 @@ export default function AdminSettings() {
     reader.onload = (event) => {
       try {
         const parsed = JSON.parse(event.target?.result as string);
+        if (!parsed || (typeof parsed !== 'object')) {
+          throw new Error('Invalid JSON format');
+        }
         importData(parsed);
-        alert("Database restored successfully from backup.");
-      } catch (err) {
-        alert("Invalid backup file format.");
+        showSuccess('Restore Successful', 'Database restored successfully from backup.');
+      } catch (err: any) {
+        showError('Restore Failed', 'Invalid backup file format.');
       }
     };
     reader.readAsText(file);

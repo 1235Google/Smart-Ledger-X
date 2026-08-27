@@ -54,6 +54,7 @@
     "recharts": "^3.10.1",
     "resend": "^6.17.2",
     "tailwind-merge": "^3.6.0",
+    "three": "^0.185.1",
     "uuid": "^14.0.1"
   },
   "devDependencies": {

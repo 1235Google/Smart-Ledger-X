@@ -1,6 +1,6 @@
 {
   "name": "Remix: Smart Ledger",
-  "description": "A smart financial ledger with Material 3 Expressive UI and AI assistant to track balances, pending payments, and money transactions.",
+  "description": "Premium AI finance management application featuring cinematic product showcase, automated cash flow analysis, end-to-end encryption, and real-time ledger tracking.",
   "requestFramePermissions": [
     "publickey-credentials-create",
     "publickey-credentials-get"

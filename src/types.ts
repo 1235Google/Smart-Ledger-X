@@ -259,6 +259,7 @@ export interface BackupSettings {
   retention: '10' | '25' | '30' | 'unlimited';
   backupOnLogin: boolean;
   backupBeforeLogout: boolean;
+  notifyOnSuccess?: boolean;
   lastAutoBackupTime?: string;
   lastBackupTime?: string;
   nextBackupTime?: string;
@@ -367,11 +368,27 @@ export interface UserProfile {
 }
 
 export type NotificationType =
+  | 'due_payment'
+  | 'bill_reminder'
+  | 'backup_success'
+  | 'backup_failed'
+  | 'security_alert'
+  | 'security_new_device'
+  | 'security_pin_changed'
+  | 'security_pin_reset'
+  | 'security_password_changed'
+  | 'security_backup_restored'
+  | 'security_sync_disabled'
+  | 'security_failed_login'
+  | 'security_session_expired'
+  | 'security_unauthorized_access'
+  | 'security_settings_updated'
+  | 'daily_summary'
+  | 'weekly_report'
   | 'auth_google_login'
   | 'auth_google_logout'
-  | 'auth_pin_changed'
-  | 'auth_pin_reset'
   | 'auth_profile_updated'
+  | 'auth_pin_changed'
   | 'ledger_transaction_added'
   | 'ledger_transaction_edited'
   | 'ledger_transaction_deleted'
@@ -384,27 +401,81 @@ export type NotificationType =
   | 'report_generated'
   | 'report_export_completed'
   | 'report_import_completed'
-  | 'security_new_device'
-  | 'security_session_expired'
-  | 'security_password_changed'
-  | 'security_unauthorized_access'
-  | 'security_settings_updated'
   | 'admin_user_created'
   | 'admin_user_deleted'
   | 'admin_user_blocked'
   | 'admin_user_restored'
   | 'admin_db_backup'
-  | 'admin_db_restore';
+  | 'admin_db_restore'
+  | string;
+
+export type NotificationPriority = 'high' | 'medium' | 'low';
+export type NotificationCategory = 'all' | 'unread' | 'finance' | 'security' | 'backup' | 'bills';
 
 export interface AppNotification {
   id: string;
+  userId: string;
+  type: NotificationType;
   title: string;
   message: string;
-  type: NotificationType;
   createdAt: string;
+  timestamp?: number;
   read: boolean;
-  userId: string;
+  actionUrl?: string;
+  actionLabel?: string;
+  priority?: NotificationPriority;
+  category?: 'finance' | 'security' | 'backup' | 'bills' | 'system';
   referenceId?: string;
+  eventKey?: string;
+  metadata?: Record<string, any>;
+}
+
+export type BillCategory = 
+  | 'utilities'
+  | 'rent'
+  | 'subscription'
+  | 'insurance'
+  | 'credit_card'
+  | 'loan'
+  | 'taxes'
+  | 'other';
+
+export type BillFrequency = 'once' | 'monthly' | 'quarterly' | 'yearly';
+
+export interface Bill {
+  id: string;
+  name: string;
+  amount: number;
+  dueDate: string; // YYYY-MM-DD
+  category: BillCategory;
+  frequency: BillFrequency;
+  isPaid: boolean;
+  paidAt?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  userId?: string;
+}
+
+export interface NotificationSettings {
+  duePayments: boolean;
+  upcomingBills: boolean;
+  backupAlerts: boolean;
+  securityAlerts: boolean;
+  dailySummary: boolean;
+  weeklyReport: boolean;
+  pushEnabled: boolean;
+  emailNotifications: boolean;
+  emailToggles: {
+    duePayments: boolean;
+    upcomingBills: boolean;
+    backupAlerts: boolean;
+    securityAlerts: boolean;
+    dailySummary: boolean;
+    weeklyReport: boolean;
+  };
+  emailAddress?: string;
+  updatedAt?: string;
 }
 
 export type AdminRole = 'Owner' | 'Super Admin' | 'Admin' | 'Manager';

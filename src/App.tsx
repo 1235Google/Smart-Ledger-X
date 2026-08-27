@@ -22,6 +22,7 @@ import TimelineReplay from './pages/TimelineReplay';
 import SecurityWrapper from './components/SecurityWrapper';
 import SecurityCenter from './pages/SecurityCenter';
 import BackupDashboard from './pages/BackupDashboard';
+import Notifications from './pages/Notifications';
 import Help from './pages/Help';
 import About from './pages/About';
 import AdminLogin from './pages/admin/AdminLogin';
@@ -76,6 +77,7 @@ function LoginRoute({ children }: { children: React.ReactNode }) {
 
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './context/ToastContext';
+import { NotificationProvider } from './context/NotificationContext';
 import ToastContainer from './components/ui/ToastContainer';
 import CommandPalette from './components/CommandPalette';
 
@@ -129,6 +131,7 @@ function AppRoutes() {
         <Route path="settings" element={<Settings />} />
         <Route path="security" element={<SecurityCenter />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="notifications" element={<Notifications />} />
         <Route path="backup" element={<BackupDashboard />} />
         <Route path="backups" element={<BackupDashboard />} />
         <Route path="help" element={<Help />} />
@@ -145,20 +148,22 @@ export default function App() {
   return (
     <ErrorBoundary>
       <StoreProvider>
-        <ToastProvider>
-          <BrowserRouter>
-            {showSplash ? (
-              <SplashScreen onComplete={() => setShowSplash(false)} />
-            ) : (
-              <SecurityWrapper>
-                <AutomaticBackupRunner />
-                <AppRoutes />
-                <CommandPalette />
-                <ToastContainer />
-              </SecurityWrapper>
-            )}
-          </BrowserRouter>
-        </ToastProvider>
+        <NotificationProvider>
+          <ToastProvider>
+            <BrowserRouter>
+              {showSplash ? (
+                <SplashScreen onComplete={() => setShowSplash(false)} />
+              ) : (
+                <SecurityWrapper>
+                  <AutomaticBackupRunner />
+                  <AppRoutes />
+                  <CommandPalette />
+                  <ToastContainer />
+                </SecurityWrapper>
+              )}
+            </BrowserRouter>
+          </ToastProvider>
+        </NotificationProvider>
       </StoreProvider>
     </ErrorBoundary>
   );

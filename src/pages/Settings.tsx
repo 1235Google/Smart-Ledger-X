@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
 import { useToast } from '../context/ToastContext';
-import { Download, Upload, Wallet, Trash2, Lock, Shield, Mail, Smartphone, Globe, User, Search, CheckCircle, Send, Loader2, Cloud, Database, ArrowUpRight } from 'lucide-react';
+import { Download, Upload, Wallet, Trash2, Lock, Shield, Mail, Smartphone, Globe, User, Search, CheckCircle, Send, Loader2, Cloud, Database, ArrowUpRight, Bell, Receipt } from 'lucide-react';
 import { ReceivedMoney } from '../types';
 import { motion } from 'motion/react';
 import { cn, formatDate } from '../lib/utils';
@@ -14,6 +14,7 @@ import ChangePinModal from '../components/ChangePinModal';
 import SettingsSection from '../components/settings/SettingsSection';
 import SettingsItem from '../components/settings/SettingsItem';
 import Switch from '../components/settings/Switch';
+import NotificationSettingsModal from '../components/notifications/NotificationSettingsModal';
 
 import IdentityCard from '../components/IdentityCard';
 
@@ -52,6 +53,7 @@ export default function Settings() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showPinSetup, setShowPinSetup] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [emailInput, setEmailInput] = useState(emailSettings.emailAddress || '');
   const [statusMessage, setStatusMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -218,6 +220,43 @@ export default function Settings() {
                     <SettingsItem icon={Smartphone} title="Biometric Unlock" description="Use fingerprint or face ID" action={<BiometricSettings />} />
                 </SettingsSection>
                 
+                <SettingsSection title="Notifications & Alerts" delay={0.25}>
+                    <SettingsItem 
+                      icon={Bell} 
+                      title="Notification Center" 
+                      description="View recent financial, security & backup notifications" 
+                      onClick={() => navigate('/notifications')}
+                      action={
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); navigate('/notifications'); }}
+                          className="p-2 text-slate-400 hover:text-white transition-colors"
+                        >
+                          <ArrowUpRight size={16} />
+                        </button>
+                      }
+                    />
+                    <SettingsItem 
+                      icon={Receipt} 
+                      title="Upcoming Bills Manager" 
+                      description="Schedule bills & recurring expense alerts" 
+                      onClick={() => navigate('/notifications?tab=bills')}
+                      action={
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); navigate('/notifications?tab=bills'); }}
+                          className="p-2 text-slate-400 hover:text-white transition-colors"
+                        >
+                          <ArrowUpRight size={16} />
+                        </button>
+                      }
+                    />
+                    <SettingsItem 
+                      icon={Bell} 
+                      title="Notification Preferences" 
+                      description="Configure event triggers, push alerts, and email toggles" 
+                      onClick={() => setShowNotificationSettings(true)} 
+                    />
+                </SettingsSection>
+
                 <SettingsSection title="Email Reports" delay={0.3}>
                     <SettingsItem icon={Mail} title="Monthly Reports" description={emailSettings.enabled ? "Enabled" : "Disabled"} action={<Switch checked={emailSettings.enabled} onChange={() => updateEmailSettings({ enabled: !emailSettings.enabled })} />} />
                     <div className="px-3 pt-2">
@@ -307,6 +346,10 @@ export default function Settings() {
             }} />
         <ResetDataModal isOpen={showResetModal} onClose={() => setShowResetModal(false)} />
         <ChangePinModal isOpen={showPinSetup} onClose={() => setShowPinSetup(false)} />
+        <NotificationSettingsModal 
+          isOpen={showNotificationSettings} 
+          onClose={() => setShowNotificationSettings(false)} 
+        />
     </div>
   );
 }

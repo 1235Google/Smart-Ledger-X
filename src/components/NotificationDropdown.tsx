@@ -9,19 +9,15 @@ import {
   Wallet, 
   Clock, 
   FileText, 
-  Shield, 
   ShieldAlert, 
-  UserCheck, 
-  Inbox
+  Receipt,
+  Cloud,
+  ArrowRight,
+  Inbox,
+  Settings
 } from 'lucide-react';
 import { AppNotification, NotificationType } from '../types';
-import { 
-  subscribeNotifications, 
-  markNotificationAsRead, 
-  markAllNotificationsAsRead, 
-  deleteNotification 
-} from '../lib/notificationService';
-import { auth } from '../lib/firebase';
+import { useNotifications } from '../context/NotificationContext';
 import { cn } from '../lib/utils';
 
 function formatRelativeTime(dateString: string): string {
@@ -41,35 +37,22 @@ function formatRelativeTime(dateString: string): string {
 }
 
 function getNotificationIcon(type: NotificationType) {
-  if (type.startsWith('ledger_')) {
-    return { icon: Wallet, color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' };
-  }
-  if (type.startsWith('pending_')) {
+  if (type === 'due_payment' || type.startsWith('pending_')) {
     return { icon: Clock, color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' };
   }
-  if (type.startsWith('report_')) {
-    return { icon: FileText, color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' };
+  if (type === 'bill_reminder') {
+    return { icon: Receipt, color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20' };
   }
-  if (type.startsWith('security_')) {
+  if (type.startsWith('backup_') || type === 'admin_db_backup') {
+    return { icon: Cloud, color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' };
+  }
+  if (type.startsWith('security_') || type.startsWith('auth_') || type.startsWith('admin_')) {
     return { icon: ShieldAlert, color: 'text-rose-400 bg-rose-500/10 border-rose-500/20' };
   }
-  if (type.startsWith('admin_')) {
-    return { icon: Shield, color: 'text-purple-400 bg-purple-500/10 border-purple-500/20' };
+  if (type === 'daily_summary' || type === 'weekly_report' || type.startsWith('report_')) {
+    return { icon: FileText, color: 'text-purple-400 bg-purple-500/10 border-purple-500/20' };
   }
-  return { icon: UserCheck, color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20' };
-}
-
-function getTargetRoute(type: NotificationType): string {
-  if (type.startsWith('ledger_')) {
-    if (type === 'ledger_income_added') return '/received';
-    if (type === 'ledger_expense_added') return '/sent';
-    return '/';
-  }
-  if (type.startsWith('pending_')) return '/pending';
-  if (type.startsWith('report_')) return '/analytics';
-  if (type.startsWith('security_') || type.startsWith('auth_')) return '/settings';
-  if (type.startsWith('admin_')) return '/admin/dashboard';
-  return '/';
+  return { icon: Wallet, color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' };
 }
 
 export interface NotificationDropdownRef {
@@ -80,28 +63,16 @@ export interface NotificationDropdownRef {
 
 const NotificationDropdown = forwardRef<NotificationDropdownRef, {}>((props, ref) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  const currentUserId = auth.currentUser?.uid;
+  const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification } = useNotifications();
 
   useImperativeHandle(ref, () => ({
     open: () => setIsOpen(true),
     close: () => setIsOpen(false),
     toggle: () => setIsOpen(prev => !prev),
   }));
-
-  useEffect(() => {
-    if (!currentUserId) {
-      setNotifications([]);
-      return;
-    }
-    const unsubscribe = subscribeNotifications(currentUserId, (data) => {
-      setNotifications(data);
-    });
-    return () => unsubscribe();
-  }, [currentUserId]);
 
   // Outside click & Escape key listeners
   useEffect(() => {
@@ -128,28 +99,29 @@ const NotificationDropdown = forwardRef<NotificationDropdownRef, {}>((props, ref
     };
   }, [isOpen]);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
-
   const handleItemClick = async (notif: AppNotification) => {
     if (!notif.read) {
-      await markNotificationAsRead(notif.id);
+      await markAsRead(notif.id);
     }
     setIsOpen(false);
-    const targetRoute = getTargetRoute(notif.type);
-    navigate(targetRoute);
+    if (notif.actionUrl) {
+      navigate(notif.actionUrl);
+    } else {
+      navigate('/notifications');
+    }
   };
 
   const handleMarkAllRead = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (currentUserId) {
-      await markAllNotificationsAsRead(currentUserId);
-    }
+    await markAllAsRead();
   };
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     await deleteNotification(id);
   };
+
+  const displayNotifications = notifications.slice(0, 7);
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -169,7 +141,7 @@ const NotificationDropdown = forwardRef<NotificationDropdownRef, {}>((props, ref
         )}
       </button>
 
-      {/* Notification Panel */}
+      {/* Notification Dropdown Panel */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -179,7 +151,7 @@ const NotificationDropdown = forwardRef<NotificationDropdownRef, {}>((props, ref
             transition={{ duration: 0.18, ease: 'easeOut' }}
             role="region"
             aria-label="Notification list"
-            className="absolute right-0 top-full mt-2 w-[330px] sm:w-[380px] bg-neutral-900/95 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden z-50 flex flex-col max-h-[80vh] max-w-[calc(100vw-2rem)]"
+            className="absolute right-0 top-full mt-2 w-[340px] sm:w-[400px] bg-neutral-900/95 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden z-50 flex flex-col max-h-[82vh] max-w-[calc(100vw-2rem)]"
           >
             {/* Panel Header */}
             <div className="p-4 px-5 border-b border-white/10 flex items-center justify-between bg-white/[0.02]">
@@ -214,8 +186,8 @@ const NotificationDropdown = forwardRef<NotificationDropdownRef, {}>((props, ref
             </div>
 
             {/* Notification List Body */}
-            <div className="flex-1 overflow-y-auto divide-y divide-white/5">
-              {notifications.length === 0 ? (
+            <div className="flex-1 overflow-y-auto divide-y divide-white/5 max-h-[420px]">
+              {displayNotifications.length === 0 ? (
                 <div className="p-10 text-center flex flex-col items-center justify-center">
                   <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-3 text-slate-400">
                     <Inbox size={26} />
@@ -223,27 +195,27 @@ const NotificationDropdown = forwardRef<NotificationDropdownRef, {}>((props, ref
                   <p className="text-white font-bold text-base">No Notifications</p>
                   <p className="text-indigo-300 text-xs font-semibold mt-1">You're all caught up.</p>
                   <p className="text-slate-400 text-xs mt-1.5 max-w-[240px] leading-relaxed">
-                    Real notifications will appear here as you use SmartLedger.
+                    Real notifications will appear here as you record ledger activity, receive bill reminders, and sync cloud data.
                   </p>
                 </div>
               ) : (
-                notifications.map((notif) => {
+                displayNotifications.map((notif) => {
                   const { icon: Icon, color } = getNotificationIcon(notif.type);
                   return (
                     <div
                       key={notif.id}
                       onClick={() => handleItemClick(notif)}
                       className={cn(
-                        "p-4 flex gap-3 cursor-pointer transition-colors group relative hover:bg-white/5",
-                        !notif.read ? "bg-indigo-500/[0.04]" : ""
+                        "p-3.5 px-4 flex gap-3 cursor-pointer transition-colors group relative hover:bg-white/5",
+                        !notif.read ? "bg-indigo-500/[0.05]" : ""
                       )}
                     >
                       {!notif.read && (
-                        <div className="absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-indigo-500 rounded-full" />
+                        <div className="absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-indigo-500 rounded-full" />
                       )}
 
-                      <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 border shadow-sm", color)}>
-                        <Icon size={18} />
+                      <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 border shadow-sm", color)}>
+                        <Icon size={16} />
                       </div>
 
                       <div className="flex-1 min-w-0 pr-6">
@@ -255,22 +227,53 @@ const NotificationDropdown = forwardRef<NotificationDropdownRef, {}>((props, ref
                         <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
                           {notif.message}
                         </p>
-                        <p className="text-[10px] text-slate-500 font-medium mt-1.5">
-                          {formatRelativeTime(notif.createdAt)}
-                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] text-slate-500 font-medium">
+                            {formatRelativeTime(notif.createdAt)}
+                          </span>
+                          {notif.priority === 'high' && (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 font-semibold border border-rose-500/30">
+                              Urgent
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <button
                         onClick={(e) => handleDelete(e, notif.id)}
                         title="Delete notification"
-                        className="absolute right-3 top-4 opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition-all"
+                        className="absolute right-3 top-3 opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition-all"
                       >
-                        <Trash2 size={15} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   );
                 })
               )}
+            </div>
+
+            {/* Panel Footer */}
+            <div className="p-3 px-4 border-t border-white/10 bg-white/[0.02] flex items-center justify-between">
+              <button
+                onClick={() => {
+                  setIsOpen(false);
+                  navigate('/notifications');
+                }}
+                className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1.5 py-1 px-2 rounded-lg hover:bg-white/5 transition-colors"
+              >
+                <span>View All Notifications ({notifications.length})</span>
+                <ArrowRight size={14} />
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsOpen(false);
+                  navigate('/notifications?tab=bills');
+                }}
+                className="text-xs text-slate-400 hover:text-white py-1 px-2 rounded-lg hover:bg-white/5 transition-colors"
+              >
+                Bills
+              </button>
             </div>
           </motion.div>
         )}

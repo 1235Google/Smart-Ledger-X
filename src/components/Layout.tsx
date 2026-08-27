@@ -15,7 +15,8 @@ import {
   Calculator as CalculatorIcon,
   PanelLeftClose,
   PanelLeftOpen,
-  Cloud
+  Cloud,
+  Bell
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -30,6 +31,7 @@ const navItems = [
   { icon: Wallet, label: 'Current Balance', path: '/balance' },
   { icon: Download, label: 'Money Received', path: '/received' },
   { icon: Clock, label: 'Pending Payments', path: '/pending' },
+  { icon: Bell, label: 'Notifications', path: '/notifications' },
   { icon: BarChart3, label: 'Analytics', path: '/analytics' },
   { icon: Search, label: 'Search', path: '/search' },
   { icon: PiggyBank, label: 'Gullak Savings', path: '/gullak' },

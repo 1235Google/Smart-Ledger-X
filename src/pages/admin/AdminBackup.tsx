@@ -33,7 +33,7 @@ import { M3LinearProgress } from '../../components/admin/material3/M3Progress';
 import { useM3Theme } from '../../components/admin/material3/M3ThemeContext';
 
 export default function AdminBackup() {
-  const { applyRestoredState } = useStore();
+  const { applyRestoredState, updateBackupSettings } = useStore();
   const { showSuccess, showError, showInfo } = useToast();
   const { resolvedTheme } = useM3Theme();
   const isDark = resolvedTheme === 'dark';
@@ -68,7 +68,7 @@ export default function AdminBackup() {
   }, []);
 
   const handleCreateSnapshot = async () => {
-    if (isCreating) return;
+    if (isCreating || BackupService.isOperationActive()) return;
     setIsCreating(true);
     setProgressStage('Collecting ledger data...');
     setProgressValue(20);
@@ -87,10 +87,39 @@ export default function AdminBackup() {
       const snapshot = await BackupService.createBackup('manual');
       setProgressStage('Snapshot verified & indexed');
       setProgressValue(100);
-      showSuccess('Snapshot Created', `Cloud backup securely saved.`);
+
+      const backupDate = snapshot.date || new Date(snapshot.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      const backupTime = snapshot.time || new Date(snapshot.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      const backupSize = BackupService.formatSize(snapshot.size || snapshot.fileSize);
+      const totalRecords = snapshot.recordsCount || (
+        (snapshot.itemCounts?.transactions || 0) +
+        (snapshot.itemCounts?.customers || 0) +
+        (snapshot.itemCounts?.savingsGoals || 0) +
+        (snapshot.itemCounts?.gullakEntries || 0) +
+        (snapshot.itemCounts?.investments || 0) +
+        (snapshot.itemCounts?.reports || 0) +
+        (snapshot.itemCounts?.bills || 0)
+      ) || 1;
+
+      updateBackupSettings({
+        lastBackupTime: snapshot.createdAt,
+        lastBackupStatus: 'healthy',
+        backupHealth: 'Optimal • Cloud Verified',
+        lastBackupSize: snapshot.size,
+        lastBackupChecksum: snapshot.checksumSha256 || snapshot.checksum,
+        lastBackupLocation: snapshot.storagePath,
+        lastError: null,
+      });
+
+      localStorage.setItem('smart_ledger_last_backup_time', snapshot.createdAt);
+
+      showSuccess(
+        '✅ Backup completed successfully.',
+        `Date: ${backupDate} • Time: ${backupTime} • Size: ${backupSize} • Records: ${totalRecords}`
+      );
       await loadSnapshots();
     } catch (err: any) {
-      showError('Snapshot Failed', err?.message || 'Unable to create cloud snapshot.');
+      showError('Backup Failed', err?.message || 'Unable to create cloud snapshot.');
     } finally {
       setTimeout(() => {
         setIsCreating(false);

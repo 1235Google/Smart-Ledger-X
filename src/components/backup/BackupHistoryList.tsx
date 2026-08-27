@@ -3,9 +3,10 @@ import { motion } from 'motion/react';
 import { 
   Database, Download, RotateCcw, Trash2, Eye, 
   CheckCircle2, Clock, Shield, Search, FileJson, 
-  HardDrive, Server, Smartphone, Sparkles, Filter 
+  HardDrive, Server, Smartphone, Sparkles, Filter,
+  AlertCircle
 } from 'lucide-react';
-import { BackupMetadata, BackupType } from '../../types';
+import { BackupMetadata, BackupType, BackupItemCounts } from '../../types';
 import { BackupService } from '../../lib/backupService';
 import { formatDate } from '../../lib/utils';
 
@@ -147,8 +148,21 @@ export default function BackupHistoryList({
           {filtered.map((item, index) => {
             const sizeFormatted = BackupService.formatSize(item.fileSize || item.size);
             const relativeTime = BackupService.formatRelativeTime(item.createdAt);
-            const counts = item.itemCounts || { transactions: 0, customers: 0, savingsGoals: 0 };
+            const counts = (item.itemCounts || {}) as BackupItemCounts;
+            const totalRecords = item.recordsCount || (
+              (counts.transactions || 0) + 
+              (counts.customers || 0) + 
+              (counts.savingsGoals || 0) + 
+              (counts.gullakEntries || 0) + 
+              (counts.investments || 0) + 
+              (counts.reports || 0) + 
+              (counts.bills || 0)
+            );
             const hashPreview = (item.checksumSha256 || item.checksum || '').substring(0, 8);
+            const formattedDate = item.date || new Date(item.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+            const formattedTime = item.time || new Date(item.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+            const durationText = item.durationFormatted || (item.durationMs ? `${(item.durationMs / 1000).toFixed(1)}s` : null);
+            const isFailed = item.status === 'failed';
 
             return (
               <motion.div
@@ -156,18 +170,33 @@ export default function BackupHistoryList({
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.04, duration: 0.2 }}
-                className="group relative overflow-hidden rounded-[22px] bg-[#0b0e18]/90 hover:bg-[#0f1322] border border-white/[0.08] hover:border-indigo-500/30 p-4 sm:p-5 transition-all shadow-lg backdrop-blur-xl flex flex-col md:flex-row md:items-center justify-between gap-4"
+                className={`group relative overflow-hidden rounded-[22px] bg-[#0b0e18]/90 hover:bg-[#0f1322] border ${
+                  isFailed ? 'border-rose-500/20 hover:border-rose-500/40' : 'border-white/[0.08] hover:border-indigo-500/30'
+                } p-4 sm:p-5 transition-all shadow-lg backdrop-blur-xl flex flex-col md:flex-row md:items-center justify-between gap-4`}
               >
                 {/* Left section: Identity & Metadata */}
                 <div className="flex items-start gap-4">
-                  <div className="p-3 rounded-2xl bg-white/[0.03] group-hover:bg-indigo-500/10 border border-white/[0.06] group-hover:border-indigo-500/20 text-indigo-400 transition-colors flex-shrink-0 mt-0.5">
-                    <Database size={20} />
+                  <div className={`p-3 rounded-2xl bg-white/[0.03] ${
+                    isFailed 
+                      ? 'group-hover:bg-rose-500/10 border-rose-500/20 text-rose-400' 
+                      : 'group-hover:bg-indigo-500/10 border-white/[0.06] group-hover:border-indigo-500/20 text-indigo-400'
+                  } border transition-colors flex-shrink-0 mt-0.5`}>
+                    {isFailed ? <AlertCircle size={20} /> : <Database size={20} />}
                   </div>
 
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2.5 flex-wrap">
                       <h4 className="text-sm font-bold text-white tracking-tight">{item.name}</h4>
                       {getTypeBadge(item.type)}
+                      {isFailed ? (
+                        <span className="px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/20 text-[10px] font-semibold flex items-center gap-1">
+                          <AlertCircle size={10} /> Failed
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-[10px] font-semibold flex items-center gap-1">
+                          <CheckCircle2 size={10} /> Success
+                        </span>
+                      )}
                       {item.status === 'restored' && (
                         <span className="px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/20 text-[10px] font-semibold">
                           Restored Point
@@ -181,9 +210,17 @@ export default function BackupHistoryList({
                         <span>{relativeTime}</span>
                       </span>
                       <span>•</span>
-                      <span>{new Date(item.createdAt).toLocaleString()}</span>
+                      <span>{formattedDate} at {formattedTime}</span>
                       <span>•</span>
                       <span className="font-mono text-indigo-300 font-medium">{sizeFormatted}</span>
+                      {durationText && (
+                        <>
+                          <span>•</span>
+                          <span className="font-mono text-[11px] text-slate-300 bg-white/[0.04] px-1.5 py-0.5 rounded border border-white/5">
+                            ⚡ {durationText}
+                          </span>
+                        </>
+                      )}
                       {hashPreview && (
                         <>
                           <span>•</span>
@@ -195,19 +232,28 @@ export default function BackupHistoryList({
                     </div>
 
                     {/* Dataset item counts chips */}
-                    <div className="flex items-center gap-2 pt-1 flex-wrap text-[11px]">
-                      <span className="px-2 py-0.5 rounded-lg bg-white/[0.03] text-slate-300 border border-white/5">
-                        {counts.transactions || 0} Transactions
-                      </span>
-                      <span className="px-2 py-0.5 rounded-lg bg-white/[0.03] text-slate-300 border border-white/5">
-                        {counts.customers || 0} Customers
-                      </span>
-                      {counts.savingsGoals ? (
-                        <span className="px-2 py-0.5 rounded-lg bg-white/[0.03] text-slate-300 border border-white/5">
-                          {counts.savingsGoals} Goals
+                    {!isFailed ? (
+                      <div className="flex items-center gap-2 pt-1 flex-wrap text-[11px]">
+                        <span className="px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-medium">
+                          {totalRecords} Total Records
                         </span>
-                      ) : null}
-                    </div>
+                        <span className="px-2 py-0.5 rounded-lg bg-white/[0.03] text-slate-300 border border-white/5">
+                          {counts.transactions || 0} Transactions
+                        </span>
+                        <span className="px-2 py-0.5 rounded-lg bg-white/[0.03] text-slate-300 border border-white/5">
+                          {counts.customers || 0} Customers
+                        </span>
+                        {counts.savingsGoals ? (
+                          <span className="px-2 py-0.5 rounded-lg bg-white/[0.03] text-slate-300 border border-white/5">
+                            {counts.savingsGoals} Goals
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : item.errorMessage ? (
+                      <div className="text-[11px] text-rose-400 pt-0.5">
+                        Error: {item.errorMessage}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 

@@ -105,10 +105,10 @@ export default function BackupStatusHeader({
           disabled={isCreating}
           icon={isCreating ? <RefreshCw className="animate-spin" size={18} /> : <Play size={18} />}
           className={`relative overflow-hidden bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-lg shadow-indigo-600/30 px-6 py-3 rounded-2xl font-semibold text-sm transition-all ${
-            isCreating ? 'ring-2 ring-indigo-400/50' : ''
+            isCreating ? 'ring-2 ring-indigo-400/50 cursor-not-allowed opacity-90' : ''
           }`}
         >
-          {isCreating ? 'Running Snapshot...' : 'Run Backup Now'}
+          {isCreating ? 'Backing up...' : 'Run Backup Now'}
         </AnimatedButton>
       </div>
     </div>

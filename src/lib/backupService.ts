@@ -188,9 +188,16 @@ export class BackupService {
     this.lastErrorInfo = null;
     const startTime = Date.now();
 
+    // Required Debug Console Log: Backup started
+    console.log('Backup started');
+
     const notifyProgress = (info: BackupProgressInfo) => {
       if (onProgress) onProgress(info);
     };
+
+    let backupId = '';
+    let fileName = '';
+    let currentUid = '';
 
     try {
       // Step 1: Verify authenticated user with 5 auto-retries
@@ -203,6 +210,7 @@ export class BackupService {
       console.log(`[BackupService] Resolving authenticated user with auto-retry...`);
       const user = await getAuthenticatedUser(5, 1000);
       const uid = user.uid;
+      currentUid = uid;
       console.log(`[BackupService] Authenticated as user ${uid} (${user.email})`);
 
       // Step 2: Fetch and validate fresh ID token
@@ -221,6 +229,9 @@ export class BackupService {
         type: 'admin_db_backup',
       });
 
+      // Required Debug Console Log: Collecting data
+      console.log('Collecting data');
+
       // Step 3: Collect application records
       notifyProgress({
         stage: 'preparing',
@@ -237,10 +248,28 @@ export class BackupService {
         gullakEntries: snapshotData.gullakEntries?.length || 0,
         investments: snapshotData.investments?.length || 0,
         reports: snapshotData.generatedReports?.length || 0,
+        bills: ((snapshotData as any).bills?.length) || 0,
+        settings: 1,
       };
 
-      const { id: backupId, fileName } = this.generateBackupName(type);
+      const totalRecords = 
+        (itemCounts.transactions || 0) +
+        (itemCounts.customers || 0) +
+        (itemCounts.savingsGoals || 0) +
+        (itemCounts.gullakEntries || 0) +
+        (itemCounts.investments || 0) +
+        (itemCounts.reports || 0) +
+        (itemCounts.bills || 0);
+
+      const generated = this.generateBackupName(type);
+      backupId = generated.id;
+      fileName = generated.fileName;
       const createdAt = new Date().toISOString();
+      const backupDate = new Date(createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      const backupTime = new Date(createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      // Required Debug Console Log: Creating backup
+      console.log('Creating backup');
 
       // Step 4: Serialize raw JSON and compute SHA-256 checksum
       notifyProgress({
@@ -254,9 +283,12 @@ export class BackupService {
         backupMetadata: {
           backupId,
           createdAt,
+          date: backupDate,
+          time: backupTime,
           version: APP_VERSION,
           type,
           itemCounts,
+          recordsCount: totalRecords,
           userId: uid,
           userEmail: user.email || '',
         },
@@ -308,6 +340,9 @@ export class BackupService {
 
       const totalSizeBytes = zipBlob.size;
 
+      // Required Debug Console Log: Uploading/Saving backup
+      console.log('Uploading/Saving backup');
+
       // Step 7: Handle Offline State
       if (!navigator.onLine) {
         console.warn(`[BackupService] Device is offline. Queuing local encrypted backup...`);
@@ -317,13 +352,21 @@ export class BackupService {
           message: 'Device offline. Stored encrypted snapshot in secure local queue...',
         });
 
-        await this.queueOfflineBackup(uid, {
+        const durationMs = Date.now() - startTime;
+        const durationFormatted = durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(1)}s`;
+
+        const offlineRecord: BackupMetadata = {
           id: backupId,
           backupId,
+          name: backupId,
           fileName,
           createdAt,
+          date: backupDate,
+          time: backupTime,
           fileSize: totalSizeBytes,
           size: totalSizeBytes,
+          durationMs,
+          durationFormatted,
           status: 'verified',
           version: APP_VERSION,
           appVersion: APP_VERSION,
@@ -335,36 +378,26 @@ export class BackupService {
           checksumSha256: checksum,
           encryptionIv: ivHex,
           itemCounts,
-          envelopeString,
-          userId: uid,
-        });
-
-        localStorage.setItem('smart_ledger_last_backup_time', createdAt);
-        localStorage.setItem('smart_ledger_last_auto_backup', Date.now().toString());
-
-        return {
-          id: backupId,
-          backupId,
-          name: backupId,
-          fileName,
-          createdAt,
-          fileSize: totalSizeBytes,
-          size: totalSizeBytes,
-          status: 'verified',
-          version: APP_VERSION,
-          appVersion: APP_VERSION,
-          encryptionVersion: ENCRYPTION_VERSION,
-          device: navigator.userAgent ? navigator.userAgent.substring(0, 100) : 'Web Client',
-          restoreVersion: APP_VERSION,
-          type,
-          checksum,
-          checksumSha256: checksum,
-          encryptionIv: ivHex,
-          itemCounts,
+          recordsCount: totalRecords,
           storagePath: `backups/${uid}/${fileName}`,
           userId: uid,
           compressed: true,
         };
+
+        await this.queueOfflineBackup(uid, {
+          ...offlineRecord,
+          envelopeString,
+        });
+
+        this.recordLocalHistory(uid, offlineRecord);
+
+        localStorage.setItem('smart_ledger_last_backup_time', createdAt);
+        localStorage.setItem('smart_ledger_last_auto_backup', Date.now().toString());
+
+        // Required Debug Console Log: Backup completed
+        console.log('Backup completed');
+
+        return offlineRecord;
       }
 
       // Step 8: Upload to Firebase Storage with live transfer speed tracking & exponential backoff
@@ -447,14 +480,21 @@ export class BackupService {
         message: 'Saving verified backup metadata to Firestore...',
       });
 
+      const durationMs = Date.now() - startTime;
+      const durationFormatted = durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(1)}s`;
+
       const record: BackupMetadata = {
         id: backupId,
         backupId,
         name: backupId,
         fileName,
         createdAt,
+        date: backupDate,
+        time: backupTime,
         fileSize: storageVerifiedSize,
         size: storageVerifiedSize,
+        durationMs,
+        durationFormatted,
         status: 'verified',
         version: APP_VERSION,
         appVersion: APP_VERSION,
@@ -466,6 +506,7 @@ export class BackupService {
         checksumSha256: checksum,
         encryptionIv: ivHex,
         itemCounts,
+        recordsCount: totalRecords,
         storagePath,
         userId: uid,
         compressed: true,
@@ -473,6 +514,9 @@ export class BackupService {
 
       const backupDocRef = doc(db, 'users', uid, 'backups', backupId);
       await withTimeout(setDoc(backupDocRef, record), 10000, 'Saving Firestore backup metadata');
+
+      // Record in local cache for instant UI rendering
+      this.recordLocalHistory(uid, record);
 
       // Also store disaster recovery envelope in subcollection
       try {
@@ -528,6 +572,9 @@ export class BackupService {
       const totalDuration = Date.now() - startTime;
       console.log(`[BackupService] Backup completed successfully in ${totalDuration}ms.`);
 
+      // Required Debug Console Log: Backup completed
+      console.log('Backup completed');
+
       notifyProgress({
         stage: 'completed',
         percentage: 100,
@@ -538,25 +585,54 @@ export class BackupService {
 
       return record;
     } catch (err: any) {
+      // Required Debug Console Log: Backup failed (with error details)
+      console.error('Backup failed (with error details):', err);
+
       const classified = classifyBackupError(err);
       this.lastErrorInfo = classified;
       console.error(`[BackupService Fatal Error]`, classified, err);
 
-      const errorUid = auth.currentUser?.uid;
+      const errorUid = currentUid || auth.currentUser?.uid;
+      const failedDurationMs = Date.now() - startTime;
+      const failedDate = new Date();
+
       if (errorUid) {
+        const failedRecord: BackupMetadata = {
+          id: backupId || `failed_${Date.now()}`,
+          backupId: backupId || `failed_${Date.now()}`,
+          name: backupId ? `Snapshot (${backupId.substring(0, 16)})` : `Backup Attempt`,
+          fileName: fileName || `failed_${Date.now()}.backup`,
+          createdAt: failedDate.toISOString(),
+          date: failedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
+          time: failedDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          fileSize: 0,
+          size: 0,
+          durationMs: failedDurationMs,
+          durationFormatted: failedDurationMs < 1000 ? `${failedDurationMs}ms` : `${(failedDurationMs / 1000).toFixed(1)}s`,
+          status: 'failed',
+          version: APP_VERSION,
+          appVersion: APP_VERSION,
+          encryptionVersion: ENCRYPTION_VERSION,
+          device: navigator.userAgent ? navigator.userAgent.substring(0, 100) : 'Web Client',
+          type,
+          checksum: '',
+          checksumSha256: '',
+          recordsCount: 0,
+          errorMessage: classified.message,
+        };
+
+        this.recordLocalHistory(errorUid, failedRecord);
+
         await notifyBackupEvent({
           userId: errorUid,
           success: false,
           errorMessage: classified.message,
         });
-      }
 
-      // Update Firestore error state if possible
-      try {
-        const uid = auth.currentUser?.uid;
-        if (uid) {
+        // Update Firestore error state if possible
+        try {
           await setDoc(
-            doc(db, 'users', uid, 'backups_meta', 'status'),
+            doc(db, 'users', errorUid, 'backups_meta', 'status'),
             {
               lastBackupStatus: 'error',
               backupHealth: 'Error: Needs Retry',
@@ -565,8 +641,8 @@ export class BackupService {
             },
             { merge: true }
           );
-        }
-      } catch {}
+        } catch {}
+      }
 
       notifyProgress({
         stage: 'failed',
@@ -581,7 +657,7 @@ export class BackupService {
   }
 
   /**
-   * List all stored backups from Firestore
+   * List all stored backups from Firestore and local cache
    */
   public static async listBackups(): Promise<BackupMetadata[]> {
     try {
@@ -591,36 +667,84 @@ export class BackupService {
       console.log(`[BackupService] Fetching backups for user ${uid}...`);
       const backupsCol = collection(db, 'users', uid, 'backups');
       const q = query(backupsCol, orderBy('createdAt', 'desc'));
-      const querySnap = await withTimeout(getDocs(q), 10000, 'Fetching Firestore backups');
-
+      
       const backups: BackupMetadata[] = [];
-      querySnap.forEach((docSnap) => {
-        const data = docSnap.data() as BackupMetadata;
-        const bId = data.backupId || data.id || docSnap.id;
-        const bSize = data.fileSize || data.size || 0;
-        backups.push({
-          ...data,
-          id: bId,
-          backupId: bId,
-          name: data.name || data.fileName || bId,
-          fileName: data.fileName || `${bId}.backup`,
-          createdAt: data.createdAt || new Date().toISOString(),
-          fileSize: bSize,
-          size: bSize,
-          status: data.status || 'verified',
-          version: data.version || data.appVersion || APP_VERSION,
-          appVersion: data.appVersion || APP_VERSION,
-          encryptionVersion: data.encryptionVersion || ENCRYPTION_VERSION,
-          type: data.type || 'manual',
-          checksum: data.checksum || data.checksumSha256 || '',
-          checksumSha256: data.checksumSha256 || data.checksum || '',
-          storagePath: data.storagePath || `backups/${uid}/${data.fileName || `${bId}.backup`}`,
+      const seenIds = new Set<string>();
+
+      try {
+        const querySnap = await withTimeout(getDocs(q), 10000, 'Fetching Firestore backups');
+        querySnap.forEach((docSnap) => {
+          const data = docSnap.data() as BackupMetadata;
+          const bId = data.backupId || data.id || docSnap.id;
+          const bSize = data.fileSize || data.size || 0;
+          seenIds.add(bId);
+          backups.push({
+            ...data,
+            id: bId,
+            backupId: bId,
+            name: data.name || data.fileName || bId,
+            fileName: data.fileName || `${bId}.backup`,
+            createdAt: data.createdAt || new Date().toISOString(),
+            date: data.date || new Date(data.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
+            time: data.time || new Date(data.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+            fileSize: bSize,
+            size: bSize,
+            status: data.status || 'verified',
+            version: data.version || data.appVersion || APP_VERSION,
+            appVersion: data.appVersion || APP_VERSION,
+            encryptionVersion: data.encryptionVersion || ENCRYPTION_VERSION,
+            type: data.type || 'manual',
+            checksum: data.checksum || data.checksumSha256 || '',
+            checksumSha256: data.checksumSha256 || data.checksum || '',
+            storagePath: data.storagePath || `backups/${uid}/${data.fileName || `${bId}.backup`}`,
+          });
         });
-      });
+      } catch (firestoreErr) {
+        console.warn('[BackupService] Firestore list notice:', firestoreErr);
+      }
+
+      // Merge with local history items (for recent attempts or failed attempts)
+      const localHistory = this.getLocalHistory(uid);
+      for (const item of localHistory) {
+        if (!seenIds.has(item.id) && !seenIds.has(item.backupId)) {
+          backups.push(item);
+          seenIds.add(item.id);
+        }
+      }
+
+      // Sort descending by creation date
+      backups.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
       return backups;
     } catch (error: any) {
       console.warn('[BackupService] List backups warning:', error?.message);
+      const uid = auth.currentUser?.uid;
+      return uid ? this.getLocalHistory(uid) : [];
+    }
+  }
+
+  /**
+   * Local history tracking helpers
+   */
+  public static recordLocalHistory(uid: string, record: BackupMetadata): void {
+    try {
+      const key = `smart_ledger_backup_history_${uid}`;
+      const existing = localStorage.getItem(key);
+      let list: BackupMetadata[] = existing ? JSON.parse(existing) : [];
+      list = [record, ...list.filter((b) => b.id !== record.id && b.backupId !== record.backupId)].slice(0, 50);
+      localStorage.setItem(key, JSON.stringify(list));
+    } catch (e) {
+      console.warn('[BackupService] Error saving local history:', e);
+    }
+  }
+
+  public static getLocalHistory(uid: string): BackupMetadata[] {
+    try {
+      const key = `smart_ledger_backup_history_${uid}`;
+      const existing = localStorage.getItem(key);
+      if (!existing) return [];
+      return JSON.parse(existing);
+    } catch {
       return [];
     }
   }

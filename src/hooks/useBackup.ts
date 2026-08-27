@@ -18,7 +18,7 @@ import { useToast } from '../context/ToastContext';
 import { useStore } from '../context/StoreContext';
 
 export function useBackup() {
-  const { backupSettings, applyRestoredState } = useStore();
+  const { backupSettings, updateBackupSettings, applyRestoredState } = useStore();
   const { showSuccess, showError, showInfo } = useToast();
 
   const [authStatus, setAuthStatus] = useState<AuthStatusState>('loading');
@@ -152,9 +152,35 @@ export function useBackup() {
 
       if (isMountedRef.current) {
         setBackups((prev) => [newBackup, ...prev.filter((b) => b.id !== newBackup.id)]);
+        
+        const backupDate = newBackup.date || new Date(newBackup.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        const backupTime = newBackup.time || new Date(newBackup.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        const backupSize = BackupService.formatSize(newBackup.size || newBackup.fileSize);
+        const totalRecords = newBackup.recordsCount || (
+          (newBackup.itemCounts?.transactions || 0) +
+          (newBackup.itemCounts?.customers || 0) +
+          (newBackup.itemCounts?.savingsGoals || 0) +
+          (newBackup.itemCounts?.gullakEntries || 0) +
+          (newBackup.itemCounts?.investments || 0) +
+          (newBackup.itemCounts?.reports || 0) +
+          (newBackup.itemCounts?.bills || 0)
+        ) || 1;
+
+        if (updateBackupSettings) {
+          updateBackupSettings({
+            lastBackupTime: newBackup.createdAt,
+            lastBackupStatus: 'healthy',
+            backupHealth: 'Optimal • Cloud Verified',
+            lastBackupSize: newBackup.size,
+            lastBackupChecksum: newBackup.checksumSha256 || newBackup.checksum,
+            lastBackupLocation: newBackup.storagePath,
+            lastError: null,
+          });
+        }
+
         showSuccess(
-          'Backup Created Successfully',
-          `Encrypted snapshot (${BackupService.formatSize(newBackup.size)}) verified and saved to Cloud.`
+          '✅ Backup completed successfully.',
+          `Date: ${backupDate} • Time: ${backupTime} • Size: ${backupSize} • Records: ${totalRecords}`
         );
 
         // Keep progress at 100 for a moment before clearing
@@ -163,7 +189,7 @@ export function useBackup() {
             setIsCreating(false);
             setProgressInfo({ stage: 'idle', percentage: 0, message: '' });
           }
-        }, 1500);
+        }, 1200);
       }
 
       return newBackup;
@@ -172,7 +198,7 @@ export function useBackup() {
       if (isMountedRef.current) {
         setErrorInfo(classified);
         setProgressInfo({ stage: 'failed', percentage: 0, message: classified.message });
-        showError(classified.title, classified.message);
+        showError('Backup Failed', classified.message);
 
         setTimeout(() => {
           if (isMountedRef.current) {

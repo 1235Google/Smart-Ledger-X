@@ -48,6 +48,7 @@ export default function Settings() {
     generatedReports,
     userProfile,
     backupSettings,
+    updateBackupSettings,
   } = store;
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -181,13 +182,40 @@ export default function Settings() {
   const handleRunCloudBackup = async () => {
     if (isBackingUp || BackupService.isOperationActive()) return;
     setIsBackingUp(true);
-    showInfo('Creating Backup...', 'Collecting ledger data and encrypting snapshot...');
 
     try {
       const backup = await BackupService.createBackup('manual');
-      showSuccess('Backup Created', `Snapshot (${BackupService.formatSize(backup.size)}) saved and verified.`);
+      const backupDate = backup.date || new Date(backup.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      const backupTime = backup.time || new Date(backup.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      const backupSize = BackupService.formatSize(backup.size || backup.fileSize);
+      const totalRecords = backup.recordsCount || (
+        (backup.itemCounts?.transactions || 0) +
+        (backup.itemCounts?.customers || 0) +
+        (backup.itemCounts?.savingsGoals || 0) +
+        (backup.itemCounts?.gullakEntries || 0) +
+        (backup.itemCounts?.investments || 0) +
+        (backup.itemCounts?.reports || 0) +
+        (backup.itemCounts?.bills || 0)
+      ) || 1;
+
+      updateBackupSettings({
+        lastBackupTime: backup.createdAt,
+        lastBackupStatus: 'healthy',
+        backupHealth: 'Optimal • Cloud Verified',
+        lastBackupSize: backup.size,
+        lastBackupChecksum: backup.checksumSha256 || backup.checksum,
+        lastBackupLocation: backup.storagePath,
+        lastError: null,
+      });
+
+      localStorage.setItem('smart_ledger_last_backup_time', backup.createdAt);
+
+      showSuccess(
+        '✅ Backup completed successfully.',
+        `Date: ${backupDate} • Time: ${backupTime} • Size: ${backupSize} • Records: ${totalRecords}`
+      );
     } catch (err: any) {
-      showError('Backup Error', err?.message || 'Failed to complete cloud backup.');
+      showError('Backup Failed', err?.message || 'Failed to complete cloud backup.');
     } finally {
       setIsBackingUp(false);
     }
@@ -289,17 +317,17 @@ export default function Settings() {
                 <SettingsSection title="Data & Backup" delay={0.4}>
                     <SettingsItem 
                       icon={Cloud} 
-                      title={isBackingUp ? "Creating Backup..." : "Run Backup Now"} 
+                      title={isBackingUp ? "Backing up..." : "Run Backup Now"} 
                       description="Create instant AES-256 cloud snapshot" 
                       onClick={handleRunCloudBackup}
                       action={
                         <button 
                           disabled={isBackingUp}
                           onClick={(e) => { e.stopPropagation(); handleRunCloudBackup(); }}
-                          className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                          className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {isBackingUp ? <Loader2 size={13} className="animate-spin" /> : <Cloud size={13} />}
-                          {isBackingUp ? 'Backing up...' : 'Run Backup'}
+                          {isBackingUp ? 'Backing up...' : 'Run Backup Now'}
                         </button>
                       }
                     />

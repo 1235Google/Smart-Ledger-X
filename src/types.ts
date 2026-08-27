@@ -282,6 +282,8 @@ export interface BackupItemCounts {
   gullakEntries: number;
   investments: number;
   reports: number;
+  bills?: number;
+  settings?: number;
 }
 
 export interface BackupMetadata {
@@ -290,8 +292,12 @@ export interface BackupMetadata {
   name: string;
   fileName: string;
   createdAt: string;
+  date?: string;
+  time?: string;
   fileSize: number;
   size: number;
+  durationMs?: number;
+  durationFormatted?: string;
   status: 'verified' | 'failed' | 'pending' | 'restored';
   version: string;
   appVersion?: string;
@@ -303,10 +309,12 @@ export interface BackupMetadata {
   checksumSha256: string;
   encryptionIv?: string;
   itemCounts?: BackupItemCounts;
+  recordsCount?: number;
   storagePath?: string;
   userId?: string;
   compressed?: boolean;
   lastRestoredAt?: string;
+  errorMessage?: string;
 }
 
 export interface AppState {

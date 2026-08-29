@@ -5,57 +5,58 @@ import { useToast } from '../context/ToastContext';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+const CHECK_INTERVAL_MS = 15 * 60 * 1000; // Check every 15 minutes in background
+
 export default function AutomaticBackupRunner() {
   const { 
     isAuthenticated, 
     currentUser, 
     backupSettings, 
     updateBackupSettings,
-    transactions,
-    customers,
   } = useStore();
-  const { showSuccess, showError, showInfo } = useToast();
+  const { showSuccess, showError } = useToast();
 
   const isRunningRef = useRef(false);
-  const loginBackupTriggeredRef = useRef(false);
-  const lastCheckedTimeRef = useRef<number>(0);
+  const lastCheckEvaluationRef = useRef<number>(0);
 
-  const getFrequencyMs = useCallback((freq?: string) => {
-    switch (freq) {
-      case '12h': return 12 * 60 * 60 * 1000;
-      case '7d': return 7 * 24 * 60 * 60 * 1000;
-      case '24h':
-      default:
-        return 24 * 60 * 60 * 1000; // 24 Hours Default
-    }
-  }, []);
-
-  const runAutoBackup = useCallback(async (reason: 'startup' | 'schedule' | 'login' | 'visibility' | 'mutation') => {
+  const runAutoBackup = useCallback(async () => {
     if (isRunningRef.current || BackupService.isOperationActive()) {
-      console.log(`[AutomaticBackupRunner] Backup skipped: Another operation is in progress.`);
+      console.log('[AutomaticBackupRunner] Backup skipped: Another backup operation is currently active.');
       return;
     }
     
     if (!currentUser?.uid) return;
 
     if (!navigator.onLine) {
-      console.log(`[AutomaticBackupRunner] Device is offline. Deferring ${reason} automatic backup.`);
+      console.log('[AutomaticBackupRunner] Device is offline. Scheduled 24-hour backup deferred.');
       return;
     }
 
     isRunningRef.current = true;
-    console.log(`[AutomaticBackupRunner] Triggering automatic 24-hour cloud backup (Reason: ${reason})...`);
+    console.log('[AutomaticBackupRunner] Starting scheduled automatic 24-hour backup...');
 
     try {
       const result = await BackupService.createBackup('automatic');
       const nowIso = new Date().toISOString();
       
+      const backupDate = result.date || new Date(result.createdAt).toLocaleDateString(undefined, { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+      const backupTime = result.time || new Date(result.createdAt).toLocaleTimeString(undefined, { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+      const backupSize = BackupService.formatSize(result.size || result.fileSize);
+
       updateBackupSettings({ 
         lastAutoBackupTime: nowIso,
         lastBackupTime: nowIso,
         lastBackupStatus: 'healthy',
         backupHealth: 'Optimal • Cloud Verified',
-        nextBackupTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        nextBackupTime: new Date(Date.now() + TWENTY_FOUR_HOURS_MS).toISOString(),
         lastBackupSize: result.size,
         lastBackupChecksum: result.checksumSha256,
         lastBackupLocation: result.storagePath,
@@ -66,148 +67,143 @@ export default function AutomaticBackupRunner() {
       localStorage.setItem('smart_ledger_last_backup_time', nowIso);
 
       showSuccess(
-        'Automatic Backup Complete',
-        `24-Hour automatic snapshot (${BackupService.formatSize(result.size)}) encrypted & saved to Cloud.`
+        '✅ Backup Completed Successfully',
+        `Your Smart Ledger data has been safely backed up.\nDate: ${backupDate} • Time: ${backupTime} • Size: ${backupSize}`
       );
     } catch (err: any) {
-      console.error('[AutomaticBackupRunner] Automatic backup error:', err);
+      console.error('Backup failed (with error details):', err);
       updateBackupSettings({
         lastBackupStatus: 'error',
         backupHealth: 'Error: Needs Retry',
         lastError: err?.message || 'Automatic backup failed',
       });
+      showError(
+        '❌ Backup Failed',
+        'Please check your internet connection and try again.'
+      );
     } finally {
       isRunningRef.current = false;
     }
-  }, [currentUser?.uid, updateBackupSettings, showSuccess]);
+  }, [currentUser?.uid, updateBackupSettings, showSuccess, showError]);
 
   /**
-   * Determine if 24 hours have elapsed since the last successful backup
+   * Determine if 24 hours have elapsed since the last successful backup.
+   * NEVER runs on initial app launch / startup.
    */
-  const checkAndRunBackup = useCallback(async (reason: 'startup' | 'schedule' | 'login' | 'visibility' | 'mutation' = 'schedule') => {
+  const checkAndRunBackup = useCallback(async () => {
     if (!isAuthenticated || !currentUser?.uid) return;
 
+    // Check if automatic backup is enabled in settings
     const isEnabled = backupSettings?.autoBackupEnabled !== false;
     if (!isEnabled) {
       console.log('[AutomaticBackupRunner] Automatic backups are disabled in settings.');
       return;
     }
 
-    // Rate-limit checks to once every 10 seconds
+    // Throttle frequent checks to avoid redundant disk/network I/O
     const now = Date.now();
-    if (now - lastCheckedTimeRef.current < 10000) return;
-    lastCheckedTimeRef.current = now;
+    if (now - lastCheckEvaluationRef.current < 60000) return; // 1 minute throttle
+    lastCheckEvaluationRef.current = now;
 
-    const intervalMs = getFrequencyMs(backupSettings?.frequency);
+    console.log('[AutomaticBackupRunner] Checking scheduled 24-hour backup status...');
 
-    // 1. Check local storage timestamp
-    let lastBackupTimeMs = 0;
-    const localLastTimeStr = localStorage.getItem('smart_ledger_last_backup_time') || localStorage.getItem('smart_ledger_last_auto_backup');
+    // 1. Resolve the last backup timestamp
+    let lastBackupTimeMs: number | null = null;
+    
+    const localLastTimeStr = localStorage.getItem('smart_ledger_last_backup_time');
     if (localLastTimeStr) {
-      const parsed = isNaN(Number(localLastTimeStr)) ? new Date(localLastTimeStr).getTime() : Number(localLastTimeStr);
-      if (!isNaN(parsed)) lastBackupTimeMs = parsed;
-    }
-
-    // 2. Check store context setting timestamp
-    if (backupSettings?.lastBackupTime || backupSettings?.lastAutoBackupTime) {
-      const storeTimeStr = backupSettings.lastBackupTime || backupSettings.lastAutoBackupTime;
-      if (storeTimeStr) {
-        const parsed = new Date(storeTimeStr).getTime();
-        if (!isNaN(parsed) && parsed > lastBackupTimeMs) {
-          lastBackupTimeMs = parsed;
-        }
+      const parsed = isNaN(Number(localLastTimeStr)) 
+        ? new Date(localLastTimeStr).getTime() 
+        : Number(localLastTimeStr);
+      if (!isNaN(parsed) && parsed > 0) {
+        lastBackupTimeMs = parsed;
       }
     }
 
-    // 3. If no local timestamp found, check Firestore status doc
-    if (lastBackupTimeMs === 0) {
+    if (!lastBackupTimeMs && backupSettings?.lastBackupTime) {
+      const parsed = new Date(backupSettings.lastBackupTime).getTime();
+      if (!isNaN(parsed) && parsed > 0) {
+        lastBackupTimeMs = parsed;
+      }
+    }
+
+    // If still not found, check Firestore status doc
+    if (!lastBackupTimeMs) {
       try {
         const statusDoc = await getDoc(doc(db, 'users', currentUser.uid, 'backups_meta', 'status'));
         if (statusDoc.exists()) {
           const data = statusDoc.data();
           if (data.lastBackupTime) {
             const parsed = new Date(data.lastBackupTime).getTime();
-            if (!isNaN(parsed)) {
+            if (!isNaN(parsed) && parsed > 0) {
               lastBackupTimeMs = parsed;
               localStorage.setItem('smart_ledger_last_backup_time', data.lastBackupTime);
             }
           }
         }
       } catch (e) {
-        console.warn('[AutomaticBackupRunner] Status doc check notice:', e);
+        console.warn('[AutomaticBackupRunner] Status doc query notice:', e);
       }
+    }
+
+    // If there is NO prior backup recorded yet (e.g. brand new user session),
+    // set the baseline to now so the initial 24h schedule starts counting from now
+    // and NEVER triggers on app startup.
+    if (!lastBackupTimeMs) {
+      const nowIso = new Date(now).toISOString();
+      localStorage.setItem('smart_ledger_last_backup_time', nowIso);
+      console.log('[AutomaticBackupRunner] Baseline backup timestamp initialized. Next scheduled backup will run in 24 hours.');
+      return;
     }
 
     const elapsedMs = now - lastBackupTimeMs;
-    const isOverdue = lastBackupTimeMs === 0 || elapsedMs >= intervalMs;
-
-    console.log(`[AutomaticBackupRunner] Evaluated 24h backup check:`, {
-      reason,
-      lastBackup: lastBackupTimeMs ? new Date(lastBackupTimeMs).toLocaleString() : 'Never',
-      elapsedHours: (elapsedMs / (1000 * 60 * 60)).toFixed(1),
-      intervalHours: (intervalMs / (1000 * 60 * 60)).toFixed(1),
-      isOverdue,
-    });
+    const isOverdue = elapsedMs >= TWENTY_FOUR_HOURS_MS;
 
     if (isOverdue) {
-      await runAutoBackup(reason);
+      console.log(`[AutomaticBackupRunner] 24 hours elapsed (${(elapsedMs / (1000 * 60 * 60)).toFixed(1)}h since last backup). Triggering automatic backup...`);
+      await runAutoBackup();
+    } else {
+      const remainingHours = ((TWENTY_FOUR_HOURS_MS - elapsedMs) / (1000 * 60 * 60)).toFixed(1);
+      console.log(`[AutomaticBackupRunner] Scheduled backup skipped: Last backup was at ${new Date(lastBackupTimeMs).toLocaleString()}, ${remainingHours}h remaining until next 24h backup.`);
     }
-  }, [isAuthenticated, currentUser?.uid, backupSettings, getFrequencyMs, runAutoBackup]);
+  }, [isAuthenticated, currentUser?.uid, backupSettings?.autoBackupEnabled, backupSettings?.lastBackupTime, runAutoBackup]);
 
-  // Main Lifecycle Effects
+  // Background Scheduling & Event Listeners
   useEffect(() => {
     if (!isAuthenticated || !currentUser?.uid) return;
 
-    // 1. Process any pending offline backups when coming online
+    // Process offline queue if connection was restored
     const handleOnline = () => {
-      console.log('[AutomaticBackupRunner] Internet connection restored. Processing offline queue...');
+      console.log('[AutomaticBackupRunner] Network connected. Checking offline queue...');
       BackupService.processOfflineQueue();
-      checkAndRunBackup('startup');
     };
     window.addEventListener('online', handleOnline);
 
-    // Initial check on mount / startup
+    // Initial check for offline queue items without running backup
     BackupService.processOfflineQueue();
-    
-    // Immediate startup evaluation (0-second delay for instant 24h verification)
-    const startupTimer = setTimeout(() => {
-      checkAndRunBackup('startup');
-    }, 1200);
 
-    // 2. Check Backup on Login if enabled
-    if (backupSettings?.backupOnLogin && !loginBackupTriggeredRef.current) {
-      loginBackupTriggeredRef.current = true;
-      setTimeout(() => {
-        runAutoBackup('login');
-      }, 4000);
-    }
+    // 1. Periodic Background Check (runs every 15 minutes while app is active)
+    const intervalTimer = setInterval(() => {
+      checkAndRunBackup();
+    }, CHECK_INTERVAL_MS);
 
-    // 3. Tab Visibility Change: Check when tab becomes active again
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log('[AutomaticBackupRunner] Tab became visible. Checking 24h backup threshold...');
-        checkAndRunBackup('visibility');
+    // 2. Service Worker Message Listener (for background sync triggers)
+    const handleServiceWorkerMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'CHECK_AUTOMATIC_BACKUP') {
+        console.log('[AutomaticBackupRunner] Received CHECK_AUTOMATIC_BACKUP message from ServiceWorker.');
+        checkAndRunBackup();
       }
     };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+    }
 
-    // 4. Window Focus Listener
-    const handleFocus = () => {
-      checkAndRunBackup('visibility');
-    };
-    window.addEventListener('focus', handleFocus);
-
-    // 5. Periodic Background Interval while tab is open (runs every 5 minutes)
-    const intervalTimer = setInterval(() => {
-      checkAndRunBackup('schedule');
-    }, 5 * 60 * 1000);
-
-    // 6. Progressive Service Worker Periodic Background Sync (PWA Enhancement)
+    // 3. Register Periodic Background Sync if supported (PWA)
     if ('serviceWorker' in navigator && 'periodicSync' in (navigator as any).serviceWorker) {
       navigator.serviceWorker.ready.then((registration: any) => {
         if (registration.periodicSync) {
           registration.periodicSync.register('smart-ledger-backup-check', {
-            minInterval: 24 * 60 * 60 * 1000,
+            minInterval: TWENTY_FOUR_HOURS_MS,
           }).catch((err: any) => {
             console.log('[AutomaticBackupRunner] Periodic sync registration info:', err?.message);
           });
@@ -217,24 +213,13 @@ export default function AutomaticBackupRunner() {
 
     return () => {
       window.removeEventListener('online', handleOnline);
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      clearTimeout(startupTimer);
       clearInterval(intervalTimer);
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+      }
     };
-  }, [isAuthenticated, currentUser?.uid, backupSettings?.autoBackupEnabled, backupSettings?.frequency, backupSettings?.backupOnLogin, checkAndRunBackup, runAutoBackup]);
-
-  // Trigger check on important mutations if > 24 hours have elapsed
-  useEffect(() => {
-    if (!isAuthenticated || !currentUser?.uid) return;
-    if (transactions.length === 0 && customers.length === 0) return;
-
-    const mutationTimer = setTimeout(() => {
-      checkAndRunBackup('mutation');
-    }, 5000);
-
-    return () => clearTimeout(mutationTimer);
-  }, [transactions.length, customers.length, isAuthenticated, currentUser?.uid, checkAndRunBackup]);
+  }, [isAuthenticated, currentUser?.uid, checkAndRunBackup]);
 
   return null;
 }
+

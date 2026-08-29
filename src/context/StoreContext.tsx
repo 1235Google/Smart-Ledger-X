@@ -87,7 +87,7 @@ interface StoreContextType extends AppState {
   newlyUnlocked: UnlockedAchievement | null;
   clearNewlyUnlocked: () => void;
   updateUserProfile: (profile: Partial<UserProfile>) => void;
-  updateBackupSettings: (settings: Partial<BackupSettings>) => void;
+  updateBackupSettings: (settings: Partial<BackupSettings>, silent?: boolean) => void;
   applyRestoredState: (restored: AppState) => void;
   isAdminAuthenticated: boolean;
   isAdminLoading: boolean;
@@ -1240,7 +1240,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const updateBackupSettings = (settings: Partial<BackupSettings>) => {
+  const updateBackupSettings = (settings: Partial<BackupSettings>, silent: boolean = false) => {
     setState(prev => {
       const updated = {
         ...(prev.backupSettings || defaultState.backupSettings!),
@@ -1248,11 +1248,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       };
       return { ...prev, backupSettings: updated };
     });
-    createNotification({
-      title: 'Backup Settings Saved',
-      message: 'Cloud backup configuration updated successfully',
-      type: 'admin_db_backup'
-    });
+    
+    // Only notify if user explicitly modified configurations (not internal timestamp/status updates)
+    if (!silent && (settings.autoBackupEnabled !== undefined || settings.frequency !== undefined || settings.retention !== undefined || settings.notifyOnSuccess !== undefined)) {
+      createNotification({
+        title: 'Backup Settings Saved',
+        message: 'Cloud backup configuration updated successfully',
+        type: 'admin_db_backup'
+      });
+    }
   };
 
   const applyRestoredState = (restored: AppState) => {

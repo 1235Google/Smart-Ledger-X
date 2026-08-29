@@ -114,12 +114,16 @@ export default function AdminBackup() {
       localStorage.setItem('smart_ledger_last_backup_time', snapshot.createdAt);
 
       showSuccess(
-        '✅ Backup completed successfully.',
-        `Date: ${backupDate} • Time: ${backupTime} • Size: ${backupSize} • Records: ${totalRecords}`
+        '✅ Backup Completed Successfully',
+        `Your Smart Ledger data has been safely backed up.\nDate: ${backupDate} • Time: ${backupTime} • Size: ${backupSize}`
       );
       await loadSnapshots();
     } catch (err: any) {
-      showError('Backup Failed', err?.message || 'Unable to create cloud snapshot.');
+      console.error('Backup failed (with error details):', err);
+      showError(
+        '❌ Backup Failed',
+        'Please check your internet connection and try again.'
+      );
     } finally {
       setTimeout(() => {
         setIsCreating(false);

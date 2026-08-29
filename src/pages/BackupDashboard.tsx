@@ -12,8 +12,10 @@ import BackupDeleteModal from '../components/backup/BackupDeleteModal';
 import BackupDetailsModal from '../components/backup/BackupDetailsModal';
 import BackupSettingsModal from '../components/backup/BackupSettingsModal';
 import { BackupMetadata } from '../types';
+import { useStore } from '../context/StoreContext';
 
 export default function BackupDashboard() {
+  const { backupSettings } = useStore();
   const {
     authStatus,
     authUser,
@@ -97,7 +99,7 @@ export default function BackupDashboard() {
           isOnline={isOnline}
           isCreating={isCreating}
           isRefreshing={isRefreshing}
-          autoBackupEnabled={true}
+          autoBackupEnabled={backupSettings?.autoBackupEnabled !== false}
           onRefresh={refreshBackups}
           onOpenSettings={() => setShowSettingsModal(true)}
           onRunBackup={handleRunBackup}

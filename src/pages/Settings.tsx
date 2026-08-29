@@ -188,15 +188,6 @@ export default function Settings() {
       const backupDate = backup.date || new Date(backup.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
       const backupTime = backup.time || new Date(backup.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
       const backupSize = BackupService.formatSize(backup.size || backup.fileSize);
-      const totalRecords = backup.recordsCount || (
-        (backup.itemCounts?.transactions || 0) +
-        (backup.itemCounts?.customers || 0) +
-        (backup.itemCounts?.savingsGoals || 0) +
-        (backup.itemCounts?.gullakEntries || 0) +
-        (backup.itemCounts?.investments || 0) +
-        (backup.itemCounts?.reports || 0) +
-        (backup.itemCounts?.bills || 0)
-      ) || 1;
 
       updateBackupSettings({
         lastBackupTime: backup.createdAt,
@@ -211,11 +202,15 @@ export default function Settings() {
       localStorage.setItem('smart_ledger_last_backup_time', backup.createdAt);
 
       showSuccess(
-        '✅ Backup completed successfully.',
-        `Date: ${backupDate} • Time: ${backupTime} • Size: ${backupSize} • Records: ${totalRecords}`
+        '✅ Backup Completed Successfully',
+        `Your Smart Ledger data has been safely backed up.\nDate: ${backupDate} • Time: ${backupTime} • Size: ${backupSize}`
       );
     } catch (err: any) {
-      showError('Backup Failed', err?.message || 'Failed to complete cloud backup.');
+      console.error('Backup failed (with error details):', err);
+      showError(
+        '❌ Backup Failed',
+        'Please check your internet connection and try again.'
+      );
     } finally {
       setIsBackingUp(false);
     }
@@ -315,6 +310,28 @@ export default function Settings() {
                 </SettingsSection>
 
                 <SettingsSection title="Data & Backup" delay={0.4}>
+                    <SettingsItem 
+                      icon={Shield} 
+                      title="Automatic Backup" 
+                      description={backupSettings?.autoBackupEnabled !== false ? "Backup frequency: Every 24 hours" : "Automatic backup is disabled"} 
+                      action={
+                        <Switch 
+                          checked={backupSettings?.autoBackupEnabled !== false} 
+                          onChange={() => {
+                            const newEnabled = !(backupSettings?.autoBackupEnabled !== false);
+                            updateBackupSettings({ 
+                              autoBackupEnabled: newEnabled,
+                              frequency: '24h'
+                            });
+                            if (newEnabled) {
+                              showSuccess('Automatic Backup Enabled', 'Ledger will automatically back up every 24 hours.');
+                            } else {
+                              showInfo('Automatic Backup Disabled', 'Automatic 24-hour backups are turned off.');
+                            }
+                          }} 
+                        />
+                      } 
+                    />
                     <SettingsItem 
                       icon={Cloud} 
                       title={isBackingUp ? "Backing up..." : "Run Backup Now"} 

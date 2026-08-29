@@ -179,8 +179,8 @@ export function useBackup() {
         }
 
         showSuccess(
-          '✅ Backup completed successfully.',
-          `Date: ${backupDate} • Time: ${backupTime} • Size: ${backupSize} • Records: ${totalRecords}`
+          '✅ Backup Completed Successfully',
+          `Your Smart Ledger data has been safely backed up.\nDate: ${backupDate} • Time: ${backupTime} • Size: ${backupSize}`
         );
 
         // Keep progress at 100 for a moment before clearing
@@ -194,11 +194,15 @@ export function useBackup() {
 
       return newBackup;
     } catch (err: any) {
+      console.error('Backup failed (with error details):', err);
       const classified = classifyBackupError(err);
       if (isMountedRef.current) {
         setErrorInfo(classified);
         setProgressInfo({ stage: 'failed', percentage: 0, message: classified.message });
-        showError('Backup Failed', classified.message);
+        showError(
+          '❌ Backup Failed',
+          'Please check your internet connection and try again.'
+        );
 
         setTimeout(() => {
           if (isMountedRef.current) {

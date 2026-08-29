@@ -383,15 +383,19 @@ export async function notifyBackupEvent(params: {
       ? params.sizeBytes < 1024 * 1024 
         ? `${(params.sizeBytes / 1024).toFixed(1)} KB` 
         : `${(params.sizeBytes / (1024 * 1024)).toFixed(2)} MB`
-      : 'Verified';
+      : undefined;
+
+    const now = new Date();
+    const backupDate = now.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const backupTime = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
     await createNotification({
       userId: params.userId,
       type: 'backup_success',
       category: 'backup',
       priority: 'medium',
-      title: 'Backup Completed Successfully',
-      message: `Cloud snapshot verified and encrypted (${formattedSize}, ${params.version || 'v2.4.0'}) at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
+      title: '✅ Backup Completed Successfully',
+      message: `Your Smart Ledger data has been safely backed up.\nDate: ${backupDate} • Time: ${backupTime}${formattedSize ? ` • Size: ${formattedSize}` : ''}`,
       actionUrl: '/backup',
       actionLabel: 'View Vault',
       referenceId: params.backupId,
@@ -407,8 +411,8 @@ export async function notifyBackupEvent(params: {
       type: 'backup_failed',
       category: 'backup',
       priority: 'high',
-      title: 'Cloud Backup Failed',
-      message: params.errorMessage || 'Unable to store encrypted snapshot in Cloud Storage. Please check connection and retry.',
+      title: '❌ Backup Failed',
+      message: 'Please check your internet connection and try again.',
       actionUrl: '/backup',
       actionLabel: 'Retry Backup',
       metadata: {

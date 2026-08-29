@@ -51,6 +51,67 @@ if (isSupabaseConfigured()) {
   );
 }
 
+/**
+ * Verify connectivity to the Supabase backend
+ */
+export async function verifySupabaseConnection(): Promise<{
+  connected: boolean;
+  configured: boolean;
+  url: string;
+  latencyMs?: number;
+  message: string;
+  details?: Record<string, any>;
+}> {
+  const configured = isSupabaseConfigured();
+  if (!configured) {
+    return {
+      connected: false,
+      configured: false,
+      url: supabaseUrl || 'Not configured',
+      message: 'Supabase credentials (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) are not configured in environment.',
+    };
+  }
+
+  const startTime = Date.now();
+  try {
+    // 1. Test Auth endpoint / session
+    const { data: authData, error: authError } = await supabase.auth.getSession();
+    if (authError) {
+      console.warn('[Supabase Connection Check] Auth check notice:', authError.message);
+    }
+
+    // 2. Test ping / head request on transactions or buckets
+    const { error: pingError } = await supabase.from('transactions').select('id', { head: true, count: 'exact' });
+
+    const latencyMs = Date.now() - startTime;
+    console.log(`[Supabase Connection Check] Verified connection in ${latencyMs}ms`);
+
+    return {
+      connected: true,
+      configured: true,
+      url: supabaseUrl,
+      latencyMs,
+      message: 'Supabase client connected successfully.',
+      details: {
+        hasSession: !!authData?.session,
+        currentUser: authData?.session?.user?.email || 'Anonymous',
+        pingStatus: pingError ? pingError.message : 'OK',
+      },
+    };
+  } catch (err: any) {
+    const latencyMs = Date.now() - startTime;
+    console.error('[Supabase Connection Check Error]:', err);
+    return {
+      connected: false,
+      configured: true,
+      url: supabaseUrl,
+      latencyMs,
+      message: err?.message || 'Failed to establish connection with Supabase backend.',
+      details: { error: String(err) },
+    };
+  }
+}
+
 /* ==========================================================================
    AUTHENTICATION HELPERS
    ========================================================================== */

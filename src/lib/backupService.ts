@@ -43,6 +43,19 @@ import {
   ENCRYPTION_VERSION,
   EncryptedEnvelope 
 } from './backupCrypto';
+import { isSupabaseConfigured } from './supabase';
+import { 
+  uploadBackupToSupabaseStorage, 
+  downloadBackupFromSupabaseStorage, 
+  deleteBackupFromSupabaseStorage 
+} from './supabaseStorage';
+import { 
+  saveBackupRecordToSupabase, 
+  fetchBackupRecordsFromSupabase, 
+  deleteBackupRecordFromSupabase,
+  syncFullAppStateToSupabase,
+  batchUpsertTransactionsToSupabase
+} from './supabaseDb';
 
 export interface BackupProgressInfo {
   stage: BackupProgressStage;
@@ -515,6 +528,31 @@ export class BackupService {
       const backupDocRef = doc(db, 'users', uid, 'backups', backupId);
       await withTimeout(setDoc(backupDocRef, record), 10000, 'Saving Firestore backup metadata');
 
+      // Step 9b: Upload snapshot and metadata to Supabase 'smart-ledger-backups' bucket if configured
+      if (isSupabaseConfigured()) {
+        try {
+          notifyProgress({
+            stage: 'uploading',
+            percentage: 95,
+            message: `Synchronizing backup to Supabase storage bucket ('smart-ledger-backups')...`,
+          });
+          const sbRes = await uploadBackupToSupabaseStorage(uid, fileName, arrayBuffer, {
+            backupId,
+            checksum,
+            type,
+          });
+          if (sbRes.success) {
+            await saveBackupRecordToSupabase({
+              ...record,
+              storagePath: sbRes.path,
+            }, uid);
+            console.log(`[BackupService] Successfully uploaded backup snapshot to Supabase 'smart-ledger-backups' (${sbRes.path})`);
+          }
+        } catch (sbBackupErr) {
+          console.warn('[BackupService] Supabase backup upload warning:', sbBackupErr);
+        }
+      }
+
       // Record in local cache for instant UI rendering
       this.recordLocalHistory(uid, record);
 
@@ -703,6 +741,21 @@ export class BackupService {
         console.warn('[BackupService] Firestore list notice:', firestoreErr);
       }
 
+      // Check Supabase backups table if configured
+      if (isSupabaseConfigured()) {
+        try {
+          const sbBackups = await fetchBackupRecordsFromSupabase(uid);
+          for (const sbItem of sbBackups) {
+            if (!seenIds.has(sbItem.id) && !seenIds.has(sbItem.backupId || '')) {
+              backups.push(sbItem);
+              seenIds.add(sbItem.id);
+            }
+          }
+        } catch (sbListErr) {
+          console.warn('[BackupService] Supabase backups list notice:', sbListErr);
+        }
+      }
+
       // Merge with local history items (for recent attempts or failed attempts)
       const localHistory = this.getLocalHistory(uid);
       for (const item of localHistory) {
@@ -776,38 +829,59 @@ export class BackupService {
     const storagePath = metadata?.storagePath || `backups/${uid}/${fileName}`;
     const expectedChecksum = metadata?.checksum || metadata?.checksumSha256 || '';
 
-    // 2. Download encrypted payload from Storage or Firestore fallback
+    // 2. Download encrypted payload from Supabase Storage, Firebase Storage, or fallback
     onProgress?.('Downloading encrypted snapshot from Cloud Storage...', 35);
     let envelopeJson = '';
 
-    try {
-      const storageRef = ref(storage, storagePath);
-      const url = await withTimeout(getDownloadURL(storageRef), 12000, 'Getting Storage Download URL');
-      const res = await withTimeout(fetch(url), 15000, 'Fetching backup payload from Storage');
-      if (!res.ok) throw new Error(`HTTP error: ${res.statusText}`);
-      const blob = await res.blob();
-
-      // Decompress ZIP archive
-      const zip = await JSZip.loadAsync(blob);
-      const snapshotFile = zip.file('snapshot.json.enc') || zip.file('data.enc');
-      if (snapshotFile) {
-        envelopeJson = await snapshotFile.async('string');
-      } else {
-        envelopeJson = await blob.text();
-      }
-    } catch (downloadErr: any) {
-      console.warn('[BackupService] Storage download notice, checking Firestore subcollection fallback...', downloadErr?.message);
+    // Try Supabase Storage first if configured
+    if (isSupabaseConfigured()) {
       try {
-        const payloadDoc = await withTimeout(
-          getDoc(doc(db, 'users', uid, 'backups', backupId, 'payload', 'data')),
-          8000,
-          'Fetching Firestore fallback payload'
-        );
-        if (payloadDoc.exists()) {
-          envelopeJson = payloadDoc.data()?.envelopeString || '';
+        const { data: sbBlob, error: sbErr } = await downloadBackupFromSupabaseStorage(uid, fileName);
+        if (sbBlob && !sbErr) {
+          const zip = await JSZip.loadAsync(sbBlob);
+          const snapshotFile = zip.file('snapshot.json.enc') || zip.file('data.enc');
+          if (snapshotFile) {
+            envelopeJson = await snapshotFile.async('string');
+          } else {
+            envelopeJson = await sbBlob.text();
+          }
+          console.log('[BackupService] Downloaded backup from Supabase Storage successfully.');
         }
-      } catch (fallbackErr) {
-        console.error('[BackupService] Fallback payload fetch failed:', fallbackErr);
+      } catch (sbDownloadErr) {
+        console.warn('[BackupService] Supabase restore download notice:', sbDownloadErr);
+      }
+    }
+
+    if (!envelopeJson) {
+      try {
+        const storageRef = ref(storage, storagePath);
+        const url = await withTimeout(getDownloadURL(storageRef), 12000, 'Getting Storage Download URL');
+        const res = await withTimeout(fetch(url), 15000, 'Fetching backup payload from Storage');
+        if (!res.ok) throw new Error(`HTTP error: ${res.statusText}`);
+        const blob = await res.blob();
+
+        // Decompress ZIP archive
+        const zip = await JSZip.loadAsync(blob);
+        const snapshotFile = zip.file('snapshot.json.enc') || zip.file('data.enc');
+        if (snapshotFile) {
+          envelopeJson = await snapshotFile.async('string');
+        } else {
+          envelopeJson = await blob.text();
+        }
+      } catch (downloadErr: any) {
+        console.warn('[BackupService] Storage download notice, checking Firestore subcollection fallback...', downloadErr?.message);
+        try {
+          const payloadDoc = await withTimeout(
+            getDoc(doc(db, 'users', uid, 'backups', backupId, 'payload', 'data')),
+            8000,
+            'Fetching Firestore fallback payload'
+          );
+          if (payloadDoc.exists()) {
+            envelopeJson = payloadDoc.data()?.envelopeString || '';
+          }
+        } catch (fallbackErr) {
+          console.error('[BackupService] Fallback payload fetch failed:', fallbackErr);
+        }
       }
     }
 
@@ -870,8 +944,18 @@ export class BackupService {
       backupSettings: parsedData.backupSettings,
     };
 
-    // 5. Commit to Firestore atomically
+    // 5. Commit to Firestore atomically & Supabase database
     await this.restoreAllDataToFirestore(uid, restoredState);
+    if (isSupabaseConfigured()) {
+      try {
+        await syncFullAppStateToSupabase(uid, restoredState);
+        if (restoredState.transactions?.length) {
+          await batchUpsertTransactionsToSupabase(restoredState.transactions, uid);
+        }
+      } catch (sbRestoreErr) {
+        console.warn('[BackupService] Supabase restore DB sync note:', sbRestoreErr);
+      }
+    }
 
     // 6. Update status in metadata
     try {
@@ -915,6 +999,16 @@ export class BackupService {
       console.warn('[BackupService] Storage file delete notice:', storageErr?.message);
     }
 
+    // Delete from Supabase Storage and DB as well
+    if (isSupabaseConfigured()) {
+      try {
+        await deleteBackupFromSupabaseStorage(uid, name);
+        await deleteBackupRecordFromSupabase(backupId, uid);
+      } catch (sbDelErr) {
+        console.warn('[BackupService] Supabase backup delete notice:', sbDelErr);
+      }
+    }
+
     try {
       const docRef = doc(db, 'users', uid, 'backups', backupId);
       await deleteDoc(docRef);
@@ -935,6 +1029,26 @@ export class BackupService {
 
     const name = fileName || `${backupId}.backup`;
     const storageRef = ref(storage, `backups/${uid}/${name}`);
+
+    // Try Supabase Storage first if configured
+    if (isSupabaseConfigured()) {
+      try {
+        const { data: sbBlob, error: sbErr } = await downloadBackupFromSupabaseStorage(uid, name);
+        if (sbBlob && !sbErr) {
+          const url = URL.createObjectURL(sbBlob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = name;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          return;
+        }
+      } catch (sbDownloadErr) {
+        console.warn('[BackupService] Supabase download notice:', sbDownloadErr);
+      }
+    }
 
     try {
       const url = await getDownloadURL(storageRef);

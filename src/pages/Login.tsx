@@ -5,6 +5,12 @@ import { useStore } from '../context/StoreContext';
 import { Loader2, Mail, Lock, User, ArrowRight, KeyRound, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { loginWithGoogle, loginWithEmail, registerWithEmail, requestPasswordReset } from '../lib/firebase';
+import { 
+  loginWithSupabaseEmail, 
+  registerWithSupabaseEmail, 
+  loginWithSupabaseOAuth 
+} from '../lib/supabaseAuth';
+import { isSupabaseConfigured } from '../lib/supabase';
 import SyncStatusBadge from '../components/SyncStatusBadge';
 
 type AuthMode = 'signin' | 'signup' | 'forgot' | 'pin';
@@ -117,6 +123,17 @@ export default function Login() {
       try {
         const cred = await registerWithEmail(email, password);
         console.log('[Auth Action] User registration successful:', cred.user?.uid);
+        
+        // Also register in Supabase if configured
+        if (isSupabaseConfigured()) {
+          try {
+            await registerWithSupabaseEmail(email, password, fullName);
+            console.log('[Auth Action] Supabase user registration synchronized.');
+          } catch (sbErr) {
+            console.warn('[Auth Action] Supabase registration notice:', sbErr);
+          }
+        }
+
         if (fullName) {
           updateUserProfile({ fullName });
         }
@@ -145,6 +162,17 @@ export default function Login() {
       try {
         const cred = await loginWithEmail(email, password);
         console.log('[Auth Action] Login successful for user:', cred.user?.uid);
+
+        // Also sign in to Supabase if configured
+        if (isSupabaseConfigured()) {
+          try {
+            await loginWithSupabaseEmail(email, password);
+            console.log('[Auth Action] Supabase user session synchronized.');
+          } catch (sbErr) {
+            console.warn('[Auth Action] Supabase login notice:', sbErr);
+          }
+        }
+
         if (cred.user) {
           console.log('[Route Navigation] Navigating to / (Dashboard)');
           navigate('/', { replace: true });

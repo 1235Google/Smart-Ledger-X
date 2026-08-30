@@ -22,18 +22,23 @@ export default function Login() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
   
-  // PIN state
-  const [pin, setPin] = useState(['', '', '', '']);
-  const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
-  
+  const { loginWithPin, updateUserProfile, securitySettings } = useStore();
+  const currentPinLength = securitySettings.pinLength || 4;
+
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [shake, setShake] = useState(false);
-  
   const navigate = useNavigate();
-  const { loginWithPin, updateUserProfile, securitySettings } = useStore();
+
+  // PIN state
+  const [pin, setPin] = useState<string[]>(() => Array(securitySettings.pinLength || 4).fill(''));
+  const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  useEffect(() => {
+    setPin(Array(currentPinLength).fill(''));
+  }, [currentPinLength]);
 
   useEffect(() => {
     if (authMode === 'pin') {
@@ -202,12 +207,12 @@ export default function Login() {
     setPin(newPin);
 
     // Auto-advance
-    if (value && index < 3) {
+    if (value && index < currentPinLength - 1) {
       pinRefs.current[index + 1]?.focus();
     }
     
     // Check if full PIN entered
-    if (newPin.every((p) => p !== '') && newPin.length === 4) {
+    if (newPin.every((p) => p !== '') && newPin.length === currentPinLength) {
       handlePinSubmit(newPin.join(''));
     }
   };
@@ -231,7 +236,7 @@ export default function Login() {
     } else {
       setLoading(false);
       triggerError('Incorrect PIN. Please try again.');
-      setPin(['', '', '', '']);
+      setPin(Array(currentPinLength).fill(''));
       pinRefs.current[0]?.focus();
     }
   };

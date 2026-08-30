@@ -1,20 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
+import { createNotification } from '../lib/notificationService';
 import LockScreen from './LockScreen';
 
 export default function SecurityWrapper({ children }: { children: React.ReactNode }) {
-  const { securitySettings, isAuthenticated, isLocked, lockApp, unlockApp } = useStore();
+  const { securitySettings, isAuthenticated, isLocked, lockApp, logout, currentUser } = useStore();
+  const navigate = useNavigate();
   const lastActivityRef = useRef<number>(Date.now());
-  const autoLockTimeRef = useRef(securitySettings.autoLockTime);
+  const autoLockTimeRef = useRef(securitySettings.autoLockTime ?? 2);
+  const inactivityTimeoutRef = useRef(securitySettings.inactivityTimeout ?? 30);
+  const autoLogoutEnabledRef = useRef(securitySettings.autoLogoutEnabled !== false);
 
-  // Keep ref in sync
+  // Keep refs in sync with settings
   useEffect(() => {
-    autoLockTimeRef.current = securitySettings.autoLockTime;
-    lastActivityRef.current = Date.now(); // reset on setting change
-  }, [securitySettings.autoLockTime]);
+    autoLockTimeRef.current = securitySettings.autoLockTime ?? 2;
+    inactivityTimeoutRef.current = securitySettings.inactivityTimeout ?? 30;
+    autoLogoutEnabledRef.current = securitySettings.autoLogoutEnabled !== false;
+    lastActivityRef.current = Date.now(); // reset on settings update
+  }, [securitySettings.autoLockTime, securitySettings.inactivityTimeout, securitySettings.autoLogoutEnabled]);
 
   useEffect(() => {
-    if (isLocked || !isAuthenticated) return;
+    if (!isAuthenticated) return;
 
     let rafId: number;
     const handleActivity = () => {
@@ -31,14 +38,32 @@ export default function SecurityWrapper({ children }: { children: React.ReactNod
     });
 
     const interval = setInterval(() => {
-      const lockTime = autoLockTimeRef.current;
-      if (lockTime > 0) {
-        const inactiveFor = Date.now() - lastActivityRef.current;
-        if (inactiveFor >= lockTime * 60 * 1000) {
-          lockApp();
-        }
+      const now = Date.now();
+      const inactiveMs = now - lastActivityRef.current;
+      const inactiveMinutes = inactiveMs / (60 * 1000);
+
+      // 1. Automatic Inactivity Logout Check (Default 30 minutes)
+      const timeoutLimit = inactivityTimeoutRef.current || 30;
+      if (autoLogoutEnabledRef.current && timeoutLimit > 0 && inactiveMinutes >= timeoutLimit) {
+        console.warn(`[SecurityWrapper] Inactivity timeout reached (${timeoutLimit}m). Automatically signing out.`);
+        createNotification({
+          title: 'Session Expired',
+          message: `You were automatically signed out due to ${timeoutLimit} minutes of inactivity.`,
+          type: 'security_session_expired'
+        });
+        logout().then(() => {
+          navigate('/login');
+        });
+        return;
       }
-    }, 1000);
+
+      // 2. Local App PIN Lock Check (e.g. 2m or 5m)
+      const lockTime = autoLockTimeRef.current;
+      if (securitySettings.pinEnabled && !isLocked && lockTime > 0 && inactiveMinutes >= lockTime) {
+        console.log(`[SecurityWrapper] Auto-lock threshold reached (${lockTime}m). Locking app.`);
+        lockApp();
+      }
+    }, 2000);
 
     return () => {
       cancelAnimationFrame(rafId);
@@ -47,7 +72,7 @@ export default function SecurityWrapper({ children }: { children: React.ReactNod
       });
       clearInterval(interval);
     };
-  }, [isLocked, isAuthenticated, lockApp]);
+  }, [isAuthenticated, isLocked, securitySettings.pinEnabled, lockApp, logout, navigate]);
 
   if (!isAuthenticated) {
     return <>{children}</>;

@@ -54,12 +54,46 @@ export interface RegisteredDevice {
 export interface SecuritySettings {
   pinEnabled: boolean;
   pin: string | null;
+  pinLength?: 4 | 6;
   biometricEnabled: boolean;
   faceUnlockEnabled: boolean;
   autoLockTime: number; // in minutes
+  inactivityTimeout?: number; // in minutes (default 30)
+  autoLogoutEnabled?: boolean;
   registeredDevices: RegisteredDevice[];
   adminPasswordHash?: string;
   fallbackPassword?: string;
+  appCheckEnabled?: boolean;
+}
+
+export interface LoginHistoryEntry {
+  id: string;
+  userId: string;
+  deviceName: string;
+  browser: string;
+  os: string;
+  ip: string;
+  location: string;
+  timestamp: string;
+  status: 'Success' | 'Failed' | 'Blocked';
+  method: 'Google' | 'Email' | 'PIN' | 'Biometric' | 'Password';
+  userAgent?: string;
+}
+
+export interface UserDevice {
+  id: string;
+  userId: string;
+  deviceId: string;
+  deviceName: string;
+  browser: string;
+  os: string;
+  ip: string;
+  location: string;
+  lastActive: string;
+  createdAt: string;
+  isCurrent?: boolean;
+  status: 'active' | 'revoked';
+  userAgent?: string;
 }
 
 export interface EmailSettings {

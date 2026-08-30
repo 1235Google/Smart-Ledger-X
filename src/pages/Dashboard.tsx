@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { useStore } from '../context/StoreContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -14,17 +14,23 @@ import BalanceCard from '../components/BalanceCard';
 import GlassCard from '../components/ui/GlassCard';
 import CountUp from '../components/ui/CountUp';
 import DataStateGuard from '../components/ui/DataStateGuard';
-
-// Futuristic Landing Showcase Components
-import Hero3DCanvas from '../components/home/Hero3DCanvas';
-import FloatingVault3D from '../components/home/FloatingVault3D';
-import ProductShowcaseVideo from '../components/home/ProductShowcaseVideo';
-import AIAssistantSection from '../components/home/AIAssistantSection';
-import SmartReminderHUD from '../components/home/SmartReminderHUD';
-import SecurityVaultSection from '../components/home/SecurityVaultSection';
-import InteractiveAnalyticsSection from '../components/home/InteractiveAnalyticsSection';
-import InteractiveFeatureBento from '../components/home/InteractiveFeatureBento';
 import MagneticButton from '../components/home/MagneticButton';
+
+// Lazy Loaded Futuristic Landing Showcase Components
+const Hero3DCanvas = lazy(() => import('../components/home/Hero3DCanvas'));
+const FloatingVault3D = lazy(() => import('../components/home/FloatingVault3D'));
+const ProductShowcaseVideo = lazy(() => import('../components/home/ProductShowcaseVideo'));
+const AIAssistantSection = lazy(() => import('../components/home/AIAssistantSection'));
+const SmartReminderHUD = lazy(() => import('../components/home/SmartReminderHUD'));
+const SecurityVaultSection = lazy(() => import('../components/home/SecurityVaultSection'));
+const InteractiveAnalyticsSection = lazy(() => import('../components/home/InteractiveAnalyticsSection'));
+const InteractiveFeatureBento = lazy(() => import('../components/home/InteractiveFeatureBento'));
+
+const SectionLoadingFallback = () => (
+  <div className="w-full h-44 rounded-3xl bg-white/[0.02] border border-white/5 animate-pulse flex items-center justify-center">
+    <div className="w-6 h-6 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+  </div>
+);
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -135,7 +141,9 @@ export default function Dashboard() {
             {/* ========================================================================= */}
             <section className="relative min-h-[92vh] flex flex-col justify-center items-center py-12 px-4 md:px-8 overflow-hidden rounded-[40px] bg-gradient-to-b from-[#060913]/90 via-[#040710]/95 to-[#020408]/100 border border-white/[0.1] shadow-2xl">
               {/* Three.js Ambient 3D Background Canvas */}
-              <Hero3DCanvas className="opacity-70" />
+              <Suspense fallback={null}>
+                <Hero3DCanvas className="opacity-70" />
+              </Suspense>
 
               {/* Ambient radial glows */}
               <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-gradient-to-tr from-indigo-600/15 via-cyan-500/15 to-purple-600/10 rounded-full blur-[140px] pointer-events-none" />
@@ -243,24 +251,26 @@ export default function Dashboard() {
                 transition={{ duration: 0.9, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
                 className="w-full mt-6 relative z-20"
               >
-                {heroMode === 'video' ? (
-                  <ProductShowcaseVideo 
-                    balance={currentBalance}
-                    totalReceived={totalReceived}
-                    totalSent={totalSent}
-                    hasTransactions={transactions.length > 0}
-                    onInteractiveClick={() => scrollToSection('operational-terminal')} 
-                  />
-                ) : (
-                  <FloatingVault3D
-                    balance={currentBalance}
-                    totalReceived={totalReceived}
-                    totalSent={totalSent}
-                    totalPending={totalPending}
-                    onExplore={() => scrollToSection('operational-terminal')}
-                    onRunBackup={() => navigate('/backup')}
-                  />
-                )}
+                <Suspense fallback={<SectionLoadingFallback />}>
+                  {heroMode === 'video' ? (
+                    <ProductShowcaseVideo 
+                      balance={currentBalance}
+                      totalReceived={totalReceived}
+                      totalSent={totalSent}
+                      hasTransactions={transactions.length > 0}
+                      onInteractiveClick={() => scrollToSection('operational-terminal')} 
+                    />
+                  ) : (
+                    <FloatingVault3D
+                      balance={currentBalance}
+                      totalReceived={totalReceived}
+                      totalSent={totalSent}
+                      totalPending={totalPending}
+                      onExplore={() => scrollToSection('operational-terminal')}
+                      onRunBackup={() => navigate('/backup')}
+                    />
+                  )}
+                </Suspense>
               </motion.div>
 
               {/* Scroll Down Indicator */}
@@ -279,34 +289,44 @@ export default function Dashboard() {
             {/* SECTION 1: AI FINANCE ASSISTANT                                           */}
             {/* ========================================================================= */}
             <div id="ai-assistant-section">
-              <AIAssistantSection />
+              <Suspense fallback={<SectionLoadingFallback />}>
+                <AIAssistantSection />
+              </Suspense>
             </div>
 
             {/* ========================================================================= */}
             {/* SECTION 2: SMART REMINDERS & PROACTIVE HUD                                */}
             {/* ========================================================================= */}
             <div id="smart-reminders-section">
-              <SmartReminderHUD />
+              <Suspense fallback={<SectionLoadingFallback />}>
+                <SmartReminderHUD />
+              </Suspense>
             </div>
 
             {/* ========================================================================= */}
             {/* SECTION 3: QUANTUM SECURITY & ZERO-KNOWLEDGE ENCLAVE                      */}
             {/* ========================================================================= */}
             <div id="security-vault-section">
-              <SecurityVaultSection />
+              <Suspense fallback={<SectionLoadingFallback />}>
+                <SecurityVaultSection />
+              </Suspense>
             </div>
 
             {/* ========================================================================= */}
             {/* SECTION 4: BLOOMBERG-GRADE INTERACTIVE ANALYTICS                          */}
             {/* ========================================================================= */}
             <div id="analytics-section">
-              <InteractiveAnalyticsSection />
+              <Suspense fallback={<SectionLoadingFallback />}>
+                <InteractiveAnalyticsSection />
+              </Suspense>
             </div>
 
             {/* ========================================================================= */}
             {/* SECTION 5: BENTO FEATURE SHOWCASE (Gullak, Timeline, Reports, Cloud)      */}
             {/* ========================================================================= */}
-            <InteractiveFeatureBento />
+            <Suspense fallback={<SectionLoadingFallback />}>
+              <InteractiveFeatureBento />
+            </Suspense>
 
             {/* ========================================================================= */}
             {/* SECTION 6: LIVE OPERATIONAL TERMINAL (Direct Ledger Actions)              */}

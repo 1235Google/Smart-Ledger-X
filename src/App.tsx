@@ -46,13 +46,12 @@ const AdminBackup = lazy(() => import('./pages/admin/AdminBackup'));
 const Login = lazy(() => import('./pages/Login'));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isAuthReady } = useStore();
+  const { isAuthenticated, isLoading } = useStore();
   
-  if (!isAuthReady) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center gap-3">
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
         <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-xs text-neutral-400 font-medium">Verifying authentication...</p>
       </div>
     );
   }
@@ -64,13 +63,12 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function LoginRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isAuthReady } = useStore();
+  const { isAuthenticated, isLoading } = useStore();
   
-  if (!isAuthReady) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center gap-3">
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
         <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-xs text-neutral-400 font-medium">Loading Smart Ledger...</p>
       </div>
     );
   }

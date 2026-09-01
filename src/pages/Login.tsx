@@ -4,14 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
 import { Loader2, Mail, Lock, User, ArrowRight, KeyRound, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { 
-  loginWithGoogle, 
-  loginWithEmail, 
-  registerWithEmail, 
-  requestPasswordReset, 
-  checkRedirectResult,
-  formatAuthError 
-} from '../lib/firebase';
+import { loginWithGoogle, loginWithEmail, registerWithEmail, requestPasswordReset } from '../lib/firebase';
 import { 
   loginWithSupabaseEmail, 
   registerWithSupabaseEmail, 
@@ -38,26 +31,6 @@ export default function Login() {
   const [successMsg, setSuccessMsg] = useState('');
   const [shake, setShake] = useState(false);
   const navigate = useNavigate();
-
-  // Handle redirect sign-in results on initial mount
-  useEffect(() => {
-    let isMounted = true;
-    const processRedirect = async () => {
-      try {
-        const user = await checkRedirectResult();
-        if (user && isMounted) {
-          console.log('[Auth] Detected successful Google redirect login for:', user.uid);
-          navigate('/', { replace: true });
-        }
-      } catch (err: any) {
-        if (isMounted) {
-          setError(formatAuthError(err));
-        }
-      }
-    };
-    processRedirect();
-    return () => { isMounted = false; };
-  }, [navigate]);
 
   // PIN state
   const [pin, setPin] = useState<string[]>(() => Array(securitySettings.pinLength || 4).fill(''));
@@ -94,12 +67,15 @@ export default function Login() {
       }
     } catch (err: any) {
       console.error('[Auth Action Error] Google Sign-In failed:', err);
-      if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
-        console.log('[Auth Action] Google Sign-In was closed by the user.');
-      } else {
-        const friendlyMsg = formatAuthError(err);
-        triggerError(friendlyMsg);
+      let message = 'Unable to sign in with Google. Please try again.';
+      if (err.code === 'auth/popup-closed-by-user') {
+        message = 'Sign-in cancelled.';
+      } else if (err.code === 'auth/popup-blocked') {
+        message = 'Sign-in popup was blocked. Please allow popups for this site.';
+      } else if (err.message) {
+        message = err.message;
       }
+      triggerError(message);
     } finally {
       setGoogleLoading(false);
     }
@@ -111,63 +87,60 @@ export default function Login() {
     setError('');
     setSuccessMsg('');
 
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanPassword = password.trim();
-
-    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-      triggerError('Please enter a valid email address (e.g. user@example.com).');
+    if (!email || !email.includes('@')) {
+      triggerError('Please enter a valid email address.');
       return;
     }
 
     if (authMode === 'forgot') {
-      console.log('[Auth Action] Requesting password reset email for:', cleanEmail);
+      console.log('[Auth Action] Requesting password reset email for:', email);
       setLoading(true);
       try {
-        await requestPasswordReset(cleanEmail);
+        await requestPasswordReset(email);
         console.log('[Auth Action] Password reset email sent successfully');
-        setSuccessMsg('Password recovery link has been sent to your email address.');
+        setSuccessMsg('Password reset link has been sent to your email.');
         setTimeout(() => {
           setAuthMode('signin');
           setSuccessMsg('');
-        }, 4000);
+        }, 3500);
       } catch (err: any) {
         console.error('[Auth Action Error] Password reset failed:', err);
-        triggerError(formatAuthError(err));
+        triggerError(err.message || 'Failed to send password reset email.');
       } finally {
         setLoading(false);
       }
       return;
     }
 
-    if (!cleanPassword || cleanPassword.length < 6) {
+    if (!password || password.length < 6) {
       triggerError('Password must be at least 6 characters long.');
       return;
     }
 
     if (authMode === 'signup') {
-      if (cleanPassword !== confirmPassword.trim()) {
-        triggerError('Passwords do not match. Please re-enter your password.');
+      if (password !== confirmPassword) {
+        triggerError('Passwords do not match.');
         return;
       }
 
-      console.log('[Auth Action] Registering new user with email:', cleanEmail);
+      console.log('[Auth Action] Registering new user with email:', email);
       setLoading(true);
       try {
-        const cred = await registerWithEmail(cleanEmail, cleanPassword, fullName.trim());
+        const cred = await registerWithEmail(email, password);
         console.log('[Auth Action] User registration successful:', cred.user?.uid);
         
         // Also register in Supabase if configured
         if (isSupabaseConfigured()) {
           try {
-            await registerWithSupabaseEmail(cleanEmail, cleanPassword, fullName);
+            await registerWithSupabaseEmail(email, password, fullName);
             console.log('[Auth Action] Supabase user registration synchronized.');
           } catch (sbErr) {
             console.warn('[Auth Action] Supabase registration notice:', sbErr);
           }
         }
 
-        if (fullName.trim()) {
-          updateUserProfile({ fullName: fullName.trim() });
+        if (fullName) {
+          updateUserProfile({ fullName });
         }
         if (cred.user) {
           console.log('[Route Navigation] Navigating to / (Dashboard)');
@@ -175,22 +148,30 @@ export default function Login() {
         }
       } catch (err: any) {
         console.error('[Auth Action Error] Registration failed:', err);
-        triggerError(formatAuthError(err));
+        let msg = 'Failed to create account. Please try again.';
+        if (err.code === 'auth/email-already-in-use') {
+          msg = 'An account with this email already exists.';
+        } else if (err.code === 'auth/weak-password') {
+          msg = 'Password should be at least 6 characters.';
+        } else if (err.message) {
+          msg = err.message;
+        }
+        triggerError(msg);
       } finally {
         setLoading(false);
       }
     } else {
       // Sign in
-      console.log('[Auth Action] Logging in user with email:', cleanEmail);
+      console.log('[Auth Action] Logging in user with email:', email);
       setLoading(true);
       try {
-        const cred = await loginWithEmail(cleanEmail, cleanPassword);
+        const cred = await loginWithEmail(email, password);
         console.log('[Auth Action] Login successful for user:', cred.user?.uid);
 
         // Also sign in to Supabase if configured
         if (isSupabaseConfigured()) {
           try {
-            await loginWithSupabaseEmail(cleanEmail, cleanPassword);
+            await loginWithSupabaseEmail(email, password);
             console.log('[Auth Action] Supabase user session synchronized.');
           } catch (sbErr) {
             console.warn('[Auth Action] Supabase login notice:', sbErr);
@@ -203,7 +184,15 @@ export default function Login() {
         }
       } catch (err: any) {
         console.error('[Auth Action Error] Login failed:', err);
-        triggerError(formatAuthError(err));
+        let msg = 'Invalid email or password.';
+        if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+          msg = 'Invalid email or password credentials.';
+        } else if (err.code === 'auth/too-many-requests') {
+          msg = 'Too many failed login attempts. Please try again later.';
+        } else if (err.message) {
+          msg = err.message;
+        }
+        triggerError(msg);
       } finally {
         setLoading(false);
       }
@@ -306,24 +295,10 @@ export default function Login() {
             <motion.div 
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-rose-500/10 border border-rose-500/25 text-rose-300 px-4 py-3 rounded-2xl mb-5 text-sm space-y-2"
+              className="bg-rose-500/10 border border-rose-500/25 text-rose-300 px-4 py-3 rounded-2xl mb-5 text-sm flex items-start gap-2.5"
             >
-              <div className="flex items-start gap-2.5">
-                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                <span className="leading-relaxed">{error}</span>
-              </div>
-              
-              {(error.includes('Authorized Domain') || error.includes('auth/internal-error') || error.includes('Configuration Error')) && (
-                <div className="pt-2 border-t border-rose-500/20 text-xs text-rose-200/80 space-y-1">
-                  <p className="font-semibold text-rose-200">Firebase Setup Checklist:</p>
-                  <ul className="list-disc list-inside space-y-0.5 text-[11px] text-slate-300">
-                    <li>Project ID: <code className="text-amber-300 bg-white/5 px-1 py-0.5 rounded">studio-3200340687-9f052</code></li>
-                    <li>Current Host: <code className="text-amber-300 bg-white/5 px-1 py-0.5 rounded">{typeof window !== 'undefined' ? window.location.hostname : 'current domain'}</code></li>
-                    <li>Firebase Console → Authentication → Sign-in method → Enable <strong>Google</strong></li>
-                    <li>Firebase Console → Authentication → Settings → Authorized domains → Add <strong>{typeof window !== 'undefined' ? window.location.hostname : 'domain'}</strong></li>
-                  </ul>
-                </div>
-              )}
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <span>{error}</span>
             </motion.div>
           )}
 
@@ -378,10 +353,7 @@ export default function Login() {
                 className="w-full flex items-center justify-center gap-3 bg-white text-neutral-900 hover:bg-neutral-100 font-semibold py-3 px-4 rounded-2xl transition-all shadow-lg hover:shadow-white/20 active:scale-[0.98] disabled:opacity-50"
               >
                 {googleLoading ? (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-5 h-5 animate-spin text-neutral-900" />
-                    <span>Signing in with Google...</span>
-                  </div>
+                  <Loader2 className="w-5 h-5 animate-spin text-neutral-900" />
                 ) : (
                   <>
                     <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
@@ -547,14 +519,7 @@ export default function Login() {
                 className="w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-3.5 px-4 rounded-2xl transition-all shadow-lg shadow-blue-500/25 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 mt-2"
               >
                 {loading ? (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>
-                      {authMode === 'signin' && 'Signing in to Ledger...'}
-                      {authMode === 'signup' && 'Creating Account...'}
-                      {authMode === 'forgot' && 'Sending Recovery Email...'}
-                    </span>
-                  </div>
+                  <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
                   <>
                     <span>

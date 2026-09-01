@@ -152,67 +152,6 @@
         "autoLogoutEnabled": { "type": "boolean" },
         "updatedAt": { "type": "string" }
       }
-    },
-    "Bill": {
-      "title": "Bill",
-      "description": "User scheduled recurring or one-off bill reminder",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "amount": { "type": "number" },
-        "dueDate": { "type": "string" },
-        "category": { "type": "string" },
-        "frequency": { "type": "string" },
-        "isPaid": { "type": "boolean" },
-        "paidAt": { "type": "string" },
-        "notes": { "type": "string" },
-        "userId": { "type": "string" },
-        "createdAt": { "type": "string" },
-        "updatedAt": { "type": "string" }
-      },
-      "required": ["name", "amount", "dueDate", "category", "frequency", "isPaid", "userId"]
-    },
-    "Notification": {
-      "title": "Notification",
-      "description": "User activity, security and bill notification item",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "userId": { "type": "string" },
-        "type": { "type": "string" },
-        "category": { "type": "string" },
-        "title": { "type": "string" },
-        "message": { "type": "string" },
-        "createdAt": { "type": "string" },
-        "timestamp": { "type": "number" },
-        "read": { "type": "boolean" },
-        "actionUrl": { "type": "string" },
-        "actionLabel": { "type": "string" },
-        "priority": { "type": "string" },
-        "referenceId": { "type": "string" },
-        "eventKey": { "type": "string" },
-        "metadata": { "type": "object" }
-      },
-      "required": ["userId", "type", "title", "message", "read"]
-    },
-    "NotificationSettings": {
-      "title": "NotificationSettings",
-      "description": "User notification preferences and email delivery toggles",
-      "type": "object",
-      "properties": {
-        "duePayments": { "type": "boolean" },
-        "upcomingBills": { "type": "boolean" },
-        "backupAlerts": { "type": "boolean" },
-        "securityAlerts": { "type": "boolean" },
-        "dailySummary": { "type": "boolean" },
-        "weeklyReport": { "type": "boolean" },
-        "pushEnabled": { "type": "boolean" },
-        "emailNotifications": { "type": "boolean" },
-        "emailAddress": { "type": "string" },
-        "emailToggles": { "type": "object" },
-        "updatedAt": { "type": "string" }
-      }
     }
   },
   "firestore": {
@@ -247,22 +186,6 @@
     "/users/{uid}/security/config": {
       "schema": "UserSecurityConfig",
       "description": "User security configuration"
-    },
-    "/users/{uid}/bills/{billId}": {
-      "schema": "Bill",
-      "description": "User bills and recurring payments"
-    },
-    "/users/{uid}/notifications/{notificationId}": {
-      "schema": "Notification",
-      "description": "User notification inbox"
-    },
-    "/users/{uid}/settings/notifications": {
-      "schema": "NotificationSettings",
-      "description": "User notification configuration preferences"
-    },
-    "/notifications/{notificationId}": {
-      "schema": "Notification",
-      "description": "Global notification dispatch queue scoped to user"
     },
     "/adminUsers/{adminId}": {
       "schema": "AdminUser",

@@ -86,7 +86,6 @@ interface StoreContextType extends AppState {
   totalSent: number;
   totalPending: number;
   isLoading: boolean;
-  isAuthReady: boolean;
   dataStatus: DataLoadStatus;
   dataError: string | null;
   retryFetchData: () => Promise<void>;
@@ -217,7 +216,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   });
 
   const [isLoading, setIsLoading] = useState(true);
-  const [isAuthReady, setIsAuthReady] = useState(false);
   const [dataStatus, setDataStatus] = useState<DataLoadStatus>('loading');
   const [dataError, setDataError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -294,12 +292,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     let isSubscribed = true;
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log('[Auth Debug] onAuthStateChanged resolution triggered');
-      console.log('[Auth Debug] Firebase currentUser:', auth.currentUser ? `${auth.currentUser.email} (${auth.currentUser.uid})` : 'null');
-      console.log('[Auth Debug] UID:', user ? user.uid : 'null');
-      console.log('[Auth Debug] Email:', user ? user.email : 'null');
-      console.log('[Auth Debug] Auth state change result:', user ? 'AUTHENTICATED' : 'UNAUTHENTICATED');
-
+      console.log('[Auth State Changed] Current user:', user ? `${user.uid} (${user.email})` : 'None (Signed Out)');
       if (!isSubscribed) return;
 
       if (activeUnsubscribeRef.current) {
@@ -310,7 +303,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (user) {
         setCurrentUser(user);
         setIsAuthenticated(true);
-        setIsAuthReady(true);
         try {
           localStorage.setItem('smartledger_authenticated', 'true');
         } catch (e) {}
@@ -401,11 +393,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }
       } else {
         setCurrentUser(null);
-        setIsAuthenticated(false);
-        setIsAuthReady(true);
-        try {
-          localStorage.removeItem('smartledger_authenticated');
-        } catch (e) {}
+        const isLocallyAuth = localStorage.getItem('smartledger_authenticated') === 'true';
+        setIsAuthenticated(isLocallyAuth);
         
         // Load from local if not authenticated
         try {
@@ -424,7 +413,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }, (authError) => {
       console.error('[Auth State Error]', authError);
       if (isSubscribed) {
-        setIsAuthReady(true);
         setDataError(authError?.message || 'Authentication error');
         setDataStatus('error');
         setIsLoading(false);
@@ -1385,7 +1373,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       totalSent,
       totalPending,
       isLoading,
-      isAuthReady,
       dataStatus,
       dataError,
       retryFetchData,

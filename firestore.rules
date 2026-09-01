@@ -15,46 +15,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // User root document
+    // User-isolated namespace (Profile, Ledger, App State, Transactions, Backups, etc.)
     match /users/{userId} {
       allow read, write: if isOwner(userId);
     }
-
-    // User Subcollections (Profile, Ledger, App State, Transactions, Backups, Login History, Devices, Security)
-    match /users/{userId}/profile {
-      allow read, write: if isOwner(userId);
-    }
-
-    match /users/{userId}/ledger/{entryId} {
-      allow read, write: if isOwner(userId);
-    }
-
-    match /users/{userId}/transactions/{txId} {
-      allow read, write: if isOwner(userId);
-    }
-
-    match /users/{userId}/app/{stateDoc} {
-      allow read, write: if isOwner(userId);
-    }
-
-    match /users/{userId}/backups/{backupId} {
-      allow read, write: if isOwner(userId);
-    }
-
-    match /users/{userId}/loginHistory/{historyId} {
-      allow read, create, update, delete: if isOwner(userId);
-    }
-
-    match /users/{userId}/devices/{deviceId} {
-      allow read, create, update, delete: if isOwner(userId);
-    }
-
-    match /users/{userId}/security/{configDoc} {
-      allow read, write: if isOwner(userId);
-    }
-
-    // Fallback catch-all for any user subcollections
-    match /users/{userId}/{allSubPaths=**} {
+    
+    match /users/{userId}/{allPaths=**} {
       allow read, write: if isOwner(userId);
     }
 
@@ -84,5 +50,4 @@ service cloud.firestore {
     }
   }
 }
-
 

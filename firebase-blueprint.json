@@ -96,62 +96,6 @@
         "details": { "type": "string" }
       },
       "required": ["id", "email", "timestamp", "action"]
-    },
-    "LoginHistoryRecord": {
-      "title": "LoginHistoryRecord",
-      "description": "Audit record of user login session activity",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "userId": { "type": "string" },
-        "deviceName": { "type": "string" },
-        "browser": { "type": "string" },
-        "os": { "type": "string" },
-        "ip": { "type": "string" },
-        "location": { "type": "string" },
-        "timestamp": { "type": "string" },
-        "status": { "type": "string", "enum": ["Success", "Failed", "Blocked"] },
-        "method": { "type": "string", "enum": ["Google", "Email", "PIN", "Biometric", "Password"] },
-        "userAgent": { "type": "string" }
-      },
-      "required": ["id", "userId", "timestamp", "status", "method"]
-    },
-    "UserDeviceRecord": {
-      "title": "UserDeviceRecord",
-      "description": "Active registered device for user multi-device session management",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "userId": { "type": "string" },
-        "deviceId": { "type": "string" },
-        "deviceName": { "type": "string" },
-        "browser": { "type": "string" },
-        "os": { "type": "string" },
-        "ip": { "type": "string" },
-        "location": { "type": "string" },
-        "lastActive": { "type": "string" },
-        "createdAt": { "type": "string" },
-        "isCurrent": { "type": "boolean" },
-        "status": { "type": "string", "enum": ["active", "revoked"] },
-        "userAgent": { "type": "string" }
-      },
-      "required": ["id", "userId", "deviceId", "lastActive", "status"]
-    },
-    "UserSecurityConfig": {
-      "title": "UserSecurityConfig",
-      "description": "Encrypted security preferences and PIN lock configuration",
-      "type": "object",
-      "properties": {
-        "pinEnabled": { "type": "boolean" },
-        "pin": { "type": "string" },
-        "pinLength": { "type": "number" },
-        "biometricEnabled": { "type": "boolean" },
-        "faceUnlockEnabled": { "type": "boolean" },
-        "autoLockTime": { "type": "number" },
-        "inactivityTimeout": { "type": "number" },
-        "autoLogoutEnabled": { "type": "boolean" },
-        "updatedAt": { "type": "string" }
-      }
     }
   },
   "firestore": {
@@ -174,18 +118,6 @@
     "/users/{uid}/backups/{backupId}": {
       "schema": "BackupRecord",
       "description": "User backup metadata records"
-    },
-    "/users/{uid}/loginHistory/{historyId}": {
-      "schema": "LoginHistoryRecord",
-      "description": "User login activity history"
-    },
-    "/users/{uid}/devices/{deviceId}": {
-      "schema": "UserDeviceRecord",
-      "description": "User active devices"
-    },
-    "/users/{uid}/security/config": {
-      "schema": "UserSecurityConfig",
-      "description": "User security configuration"
     },
     "/adminUsers/{adminId}": {
       "schema": "AdminUser",

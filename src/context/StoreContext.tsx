@@ -15,12 +15,6 @@ import {
   verifyOrBootstrapAdminUser,
   logAdminSecurityEvent 
 } from '../lib/adminAuthService';
-import { 
-  recordLoginActivity, 
-  registerOrUpdateDevice, 
-  verifyPin, 
-  hashPin 
-} from '../lib/securityService';
 
 const SECRET_KEY = 'smart-ledger-secure-key-2026';
 
@@ -128,12 +122,9 @@ export const defaultState: AppState = {
   securitySettings: {
     pinEnabled: false,
     pin: null,
-    pinLength: 4,
     biometricEnabled: false,
     faceUnlockEnabled: false,
     autoLockTime: 2,
-    inactivityTimeout: 30,
-    autoLogoutEnabled: true,
     registeredDevices: [],
   },
   emailSettings: {
@@ -328,14 +319,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         } catch (e) {}
 
         try {
-          // Non-blocking background migration, profile sync, and security audit
-          registerOrUpdateDevice(user.uid);
-          recordLoginActivity(user.uid, {
-            method: user.providerData?.[0]?.providerId === 'google.com' ? 'Google' : 'Email',
-            status: 'Success',
-            email: user.email || ''
-          });
-          
+          // Non-blocking background migration & profile sync
           Promise.allSettled([
             migrateLocalDataToCloud(user.uid, defaultState),
             syncUserProfile(user, {
@@ -450,23 +434,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [state, isAuthenticated, currentUser, isDataLoaded, dataStatus]);
 
   const loginWithPin = (pin: string): boolean => {
-    if (!pin || (pin.length !== 4 && pin.length !== 6)) return false;
+    if (!pin || pin.length !== 4) return false;
+    const hashedPin = CryptoJS.SHA256(pin).toString();
     const configuredPin = state.securitySettings.pin;
     
-    const isCorrect = configuredPin ? verifyPin(pin, configuredPin) : true;
+    const isCorrect = configuredPin ? (configuredPin === hashedPin || configuredPin === pin) : true;
     if (isCorrect) {
       setIsAuthenticated(true);
       setIsLocked(false);
       try {
         localStorage.setItem('smartledger_authenticated', 'true');
       } catch (e) {}
-      if (currentUser?.uid) {
-        recordLoginActivity(currentUser.uid, {
-          method: 'PIN',
-          status: 'Success',
-          email: currentUser.email || ''
-        });
-      }
       createNotification({
         title: 'Account Unlocked',
         message: 'Successfully authenticated session with SmartLedger',
@@ -590,11 +568,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [isInitialized, state.securitySettings.pinEnabled]);
 
   const unlockApp = (pin: string) => {
-    if (!pin || (pin.length !== 4 && pin.length !== 6)) return false;
+    if (!pin || pin.length !== 4) return false;
+    const hashedPin = CryptoJS.SHA256(pin).toString();
     const configuredPin = state.securitySettings.pin;
     
     if (configuredPin) {
-      if (verifyPin(pin, configuredPin)) {
+      if (configuredPin === hashedPin || configuredPin === pin) {
         setIsLocked(false);
         return true;
       }
@@ -811,14 +790,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [state.gullakEntries, state.gullakSettings, isInitialized]);
 
   const updateSecuritySettings = (settings: Partial<SecuritySettings>) => {
-    let sanitizedSettings = { ...settings };
-    if (settings.pin !== undefined && settings.pin !== null && (settings.pin.length === 4 || settings.pin.length === 6)) {
-      sanitizedSettings.pin = hashPin(settings.pin);
-      sanitizedSettings.pinLength = settings.pin.length as (4 | 6);
-    }
     setState(prev => ({
       ...prev,
-      securitySettings: { ...prev.securitySettings, ...sanitizedSettings }
+      securitySettings: { ...prev.securitySettings, ...settings }
     }));
     if (settings.pin !== undefined) {
       createNotification({

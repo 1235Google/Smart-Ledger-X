@@ -126,26 +126,4 @@ export async function logoutUser() {
   return await signOut(auth);
 }
 
-// App Check Helper
-let appCheckInstance: any = null;
-export async function initAppCheck(siteKey?: string) {
-  if (typeof window === 'undefined') return null;
-  if (appCheckInstance) return appCheckInstance;
-  try {
-    const { initializeAppCheck, ReCaptchaV3Provider } = await import('firebase/app-check');
-    const key = siteKey || (window as any).FIREBASE_APPCHECK_KEY_RECAPTCHA_V3;
-    if (key) {
-      appCheckInstance = initializeAppCheck(app, {
-        provider: new ReCaptchaV3Provider(key),
-        isTokenAutoRefreshEnabled: true,
-      });
-      console.log('[Firebase AppCheck] App Check initialized successfully');
-      return appCheckInstance;
-    }
-  } catch (err) {
-    console.warn('[Firebase AppCheck] Notice on App Check init:', err);
-  }
-  return null;
-}
-
 export { app, db, auth, storage };

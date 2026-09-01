@@ -57,7 +57,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
 
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutTime, setLockoutTime] = useState(0);
-  const pinLength = securitySettings.pinLength || 4;
+  const pinLength = 4;
   
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -287,8 +287,8 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
 
   const handleResetPinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPin.length !== 4 && newPin.length !== 6) {
-      setFallbackError('PIN must be 4 or 6 digits');
+    if (newPin.length !== 4) {
+      setFallbackError('PIN must be exactly 4 digits');
       return;
     }
     if (newPin !== confirmNewPin) {
@@ -296,7 +296,8 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
       return;
     }
 
-    updateSecuritySettings({ pin: newPin, pinEnabled: true });
+    const hashedPin = CryptoJS.SHA256(newPin).toString();
+    updateSecuritySettings({ pin: hashedPin, pinEnabled: true });
     setShowForgotModal(false);
     setIsResettingPin(false);
     setFallbackInput('');
@@ -529,7 +530,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
                     <Loader2 size={13} className="animate-spin" /> Verifying PIN...
                   </motion.p>
                 ) : (
-                  <span className="text-[11px] text-[#767882]">{pinLength}-digit secure code</span>
+                  <span className="text-[11px] text-[#767882]">4-digit secure code</span>
                 )}
               </div>
             </motion.div>

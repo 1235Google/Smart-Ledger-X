@@ -5,12 +5,6 @@ import { useStore } from '../context/StoreContext';
 import { Loader2, Mail, Lock, User, ArrowRight, KeyRound, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { loginWithGoogle, loginWithEmail, registerWithEmail, requestPasswordReset } from '../lib/firebase';
-import { 
-  loginWithSupabaseEmail, 
-  registerWithSupabaseEmail, 
-  loginWithSupabaseOAuth 
-} from '../lib/supabaseAuth';
-import { isSupabaseConfigured } from '../lib/supabase';
 import SyncStatusBadge from '../components/SyncStatusBadge';
 
 type AuthMode = 'signin' | 'signup' | 'forgot' | 'pin';
@@ -22,23 +16,18 @@ export default function Login() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
   
-  const { loginWithPin, updateUserProfile, securitySettings } = useStore();
-  const currentPinLength = securitySettings.pinLength || 4;
-
+  // PIN state
+  const [pin, setPin] = useState(['', '', '', '']);
+  const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
+  
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [shake, setShake] = useState(false);
+  
   const navigate = useNavigate();
-
-  // PIN state
-  const [pin, setPin] = useState<string[]>(() => Array(securitySettings.pinLength || 4).fill(''));
-  const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
-
-  useEffect(() => {
-    setPin(Array(currentPinLength).fill(''));
-  }, [currentPinLength]);
+  const { loginWithPin, updateUserProfile, securitySettings } = useStore();
 
   useEffect(() => {
     if (authMode === 'pin') {
@@ -128,17 +117,6 @@ export default function Login() {
       try {
         const cred = await registerWithEmail(email, password);
         console.log('[Auth Action] User registration successful:', cred.user?.uid);
-        
-        // Also register in Supabase if configured
-        if (isSupabaseConfigured()) {
-          try {
-            await registerWithSupabaseEmail(email, password, fullName);
-            console.log('[Auth Action] Supabase user registration synchronized.');
-          } catch (sbErr) {
-            console.warn('[Auth Action] Supabase registration notice:', sbErr);
-          }
-        }
-
         if (fullName) {
           updateUserProfile({ fullName });
         }
@@ -167,17 +145,6 @@ export default function Login() {
       try {
         const cred = await loginWithEmail(email, password);
         console.log('[Auth Action] Login successful for user:', cred.user?.uid);
-
-        // Also sign in to Supabase if configured
-        if (isSupabaseConfigured()) {
-          try {
-            await loginWithSupabaseEmail(email, password);
-            console.log('[Auth Action] Supabase user session synchronized.');
-          } catch (sbErr) {
-            console.warn('[Auth Action] Supabase login notice:', sbErr);
-          }
-        }
-
         if (cred.user) {
           console.log('[Route Navigation] Navigating to / (Dashboard)');
           navigate('/', { replace: true });
@@ -207,12 +174,12 @@ export default function Login() {
     setPin(newPin);
 
     // Auto-advance
-    if (value && index < currentPinLength - 1) {
+    if (value && index < 3) {
       pinRefs.current[index + 1]?.focus();
     }
     
     // Check if full PIN entered
-    if (newPin.every((p) => p !== '') && newPin.length === currentPinLength) {
+    if (newPin.every((p) => p !== '') && newPin.length === 4) {
       handlePinSubmit(newPin.join(''));
     }
   };
@@ -236,7 +203,7 @@ export default function Login() {
     } else {
       setLoading(false);
       triggerError('Incorrect PIN. Please try again.');
-      setPin(Array(currentPinLength).fill(''));
+      setPin(['', '', '', '']);
       pinRefs.current[0]?.focus();
     }
   };

@@ -306,10 +306,24 @@ export default function Login() {
             <motion.div 
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-rose-500/10 border border-rose-500/25 text-rose-300 px-4 py-3 rounded-2xl mb-5 text-sm flex items-start gap-2.5"
+              className="bg-rose-500/10 border border-rose-500/25 text-rose-300 px-4 py-3 rounded-2xl mb-5 text-sm space-y-2"
             >
-              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-              <span>{error}</span>
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <span className="leading-relaxed">{error}</span>
+              </div>
+              
+              {(error.includes('Authorized Domain') || error.includes('auth/internal-error') || error.includes('Configuration Error')) && (
+                <div className="pt-2 border-t border-rose-500/20 text-xs text-rose-200/80 space-y-1">
+                  <p className="font-semibold text-rose-200">Firebase Setup Checklist:</p>
+                  <ul className="list-disc list-inside space-y-0.5 text-[11px] text-slate-300">
+                    <li>Project ID: <code className="text-amber-300 bg-white/5 px-1 py-0.5 rounded">studio-3200340687-9f052</code></li>
+                    <li>Current Host: <code className="text-amber-300 bg-white/5 px-1 py-0.5 rounded">{typeof window !== 'undefined' ? window.location.hostname : 'current domain'}</code></li>
+                    <li>Firebase Console → Authentication → Sign-in method → Enable <strong>Google</strong></li>
+                    <li>Firebase Console → Authentication → Settings → Authorized domains → Add <strong>{typeof window !== 'undefined' ? window.location.hostname : 'domain'}</strong></li>
+                  </ul>
+                </div>
+              )}
             </motion.div>
           )}
 

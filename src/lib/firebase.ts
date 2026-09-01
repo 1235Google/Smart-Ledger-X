@@ -12,6 +12,7 @@ import {
   GoogleAuthProvider, 
   signInWithPopup, 
   signInWithRedirect,
+  signInWithCredential,
   getRedirectResult,
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
@@ -78,6 +79,8 @@ if (typeof window !== 'undefined') {
 
 // Auth Provider Setup
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('profile');
+googleProvider.addScope('email');
 googleProvider.setCustomParameters({ 
   prompt: 'select_account' 
 });
@@ -129,14 +132,40 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 }
 
 /**
- * Human-friendly error translation for Firebase Auth error codes
+ * Human-friendly error translation for Firebase Auth error codes with exact diagnostic details
  */
 export function formatAuthError(err: any): string {
   if (!err) return 'An unexpected authentication error occurred.';
   const code = err.code || '';
   const message = err.message || String(err);
+  const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'current domain';
+
+  console.error('[Firebase Auth Error Detailed Code]:', code);
+  console.error('[Firebase Auth Error Message]:', message);
+  console.error('[Firebase Auth Error Context]:', {
+    projectId: firebaseConfig.projectId,
+    authDomain: firebaseConfig.authDomain,
+    currentHost,
+    customData: err.customData,
+    name: err.name,
+  });
 
   switch (code) {
+    case 'auth/unauthorized-domain':
+      return `Authorized Domain Error (${code}): The domain "${currentHost}" is not authorized. Please add "${currentHost}" to Firebase Console → Authentication → Settings → Authorized domains.`;
+    case 'auth/configuration-not-found':
+      return `Configuration Error (${code}): Google Sign-In is not enabled for project "${firebaseConfig.projectId}". Enable Google in Firebase Console → Authentication → Sign-in method.`;
+    case 'auth/operation-not-allowed':
+      return `Provider Disabled (${code}): This sign-in method is disabled. Enable Google Sign-In in Firebase Console → Authentication → Sign-in method.`;
+    case 'auth/internal-error':
+      return `Internal Authentication Error (${code}): Google OAuth handshake could not be completed. Check that Google Provider is enabled in Firebase Console, third-party cookies are enabled, and "${currentHost}" is in Authorized Domains.`;
+    case 'auth/network-request-failed':
+      return `Network Error (${code}): Network connection to Firebase Authentication timed out. Please check your internet connection and firewall.`;
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+      return `Sign-in Cancelled (${code}): The Google sign-in window was closed before completing authentication.`;
+    case 'auth/popup-blocked':
+      return `Popup Blocked (${code}): The sign-in popup was blocked by your browser. Please allow popups for this site or retry.`;
     case 'auth/invalid-credential':
     case 'auth/wrong-password':
     case 'auth/user-not-found':
@@ -151,24 +180,11 @@ export function formatAuthError(err: any): string {
       return 'This user account has been disabled. Please contact system support.';
     case 'auth/too-many-requests':
       return 'Access to this account has been temporarily disabled due to multiple failed login attempts. Please try again in a few minutes or reset your password.';
-    case 'auth/operation-not-allowed':
-      return 'This sign-in provider is disabled in your Firebase console. Please enable Google Sign-In and Email/Password in Firebase Authentication settings.';
-    case 'auth/network-request-failed':
-      return 'Network connection failed. Please check your internet connection and try again.';
-    case 'auth/popup-blocked':
-      return 'Sign-in popup was blocked by your browser. Please allow popups for this site or use redirect.';
-    case 'auth/popup-closed-by-user':
-      return 'Sign-in was cancelled before completing.';
-    case 'auth/unauthorized-domain':
-      return 'This domain is not authorized for OAuth operations. Please add this domain to Authorized Domains in Firebase Console.';
-    case 'auth/internal-error':
-      return 'Authentication encountered an internal error. Please check your network connection and verify your credentials.';
     default:
-      if (message.includes('auth/')) {
-        const cleanMsg = message.replace(/^Firebase:\s*/, '').replace(/\s*\(auth\/[^)]+\)\.?$/, '');
-        return cleanMsg || 'Authentication failed. Please check your credentials and try again.';
+      if (code) {
+        return `Authentication Error (${code}): ${message.replace(/^Firebase:\s*/, '').replace(/\s*\(auth\/[^)]+\)\.?$/, '')}`;
       }
-      return message || 'Authentication failed. Please try again.';
+      return message || 'Authentication failed. Please check your credentials and try again.';
   }
 }
 
@@ -239,7 +255,9 @@ export async function loginWithGoogle(): Promise<{ user: User }> {
     return { user };
   } catch (popupError: any) {
     const code = popupError?.code || '';
-    console.warn('[Firebase Auth] signInWithPopup encountered code:', code, popupError?.message);
+    console.error('[Firebase Auth Error] Code:', code);
+    console.error('[Firebase Auth Error] Full Message:', popupError?.message);
+    console.error('[Firebase Auth Error] CustomData:', popupError?.customData);
 
     // If the user deliberately closed the popup window, do NOT trigger redirect loop
     if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
@@ -260,6 +278,32 @@ export async function loginWithGoogle(): Promise<{ user: User }> {
     }
 
     throw popupError;
+  }
+}
+
+/**
+ * Sign in using Google ID Token credential (e.g. from Google Identity Services / One Tap)
+ */
+export async function loginWithGoogleCredential(idToken: string): Promise<{ user: User }> {
+  console.log('[Firebase Auth] Initiating signInWithCredential with Google ID token...');
+  try {
+    const credential = GoogleAuthProvider.credential(idToken);
+    const result = await signInWithCredential(auth, credential);
+    const user = result.user;
+
+    console.log('[Auth Debug] Google Credential Login Success');
+    console.log('[Auth Debug] Firebase currentUser:', auth.currentUser?.email);
+    console.log('[Auth Debug] UID:', user.uid);
+    console.log('[Auth Debug] Email:', user.email);
+
+    ensureUserProfileDoc(user).catch((err) => {
+      console.warn('[Firebase Auth] Profile creation notice:', err);
+    });
+
+    return { user };
+  } catch (err: any) {
+    console.error('[Firebase Auth Credential Error]', err?.code, err?.message);
+    throw err;
   }
 }
 

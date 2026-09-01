@@ -639,32 +639,34 @@ export default function PendingPayments() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full space-y-8 bg-[#05060a]"
+        className="w-full space-y-8"
       >
-        <header className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-white flex items-center gap-3">
-          <Clock className="text-orange-400" />
-          Pending Payments
-        </h1>
-        <p className="text-neutral-400 mt-1">Keep track of money that others owe you.</p>
-      </header>
+        <header className="mb-6">
+          <div className="flex items-center gap-2 text-xs font-semibold text-[#ffd60a] uppercase tracking-wider mb-1">
+            <span className="w-2 h-2 rounded-full bg-[#ffd60a]" /> Receivables Ledger
+          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
+            Pending Receivables
+          </h1>
+          <p className="text-[#86868b] mt-1 text-sm font-medium">Automate reminder cadences, track overdue penalty fees, and settle receivables with ease.</p>
+        </header>
 
-      {/* Premium Analytics Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      {/* Apple Metrics 4-Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         
         {/* Card 1: Pending Records */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/20 rounded-2xl p-5 backdrop-blur-xl shadow-lg shadow-blue-500/5 hover:shadow-blue-500/10 transition-all duration-300 group"
+          className="bg-[#12131a]/85 border border-white/[0.08] rounded-2xl p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between"
         >
           <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-blue-500/20 rounded-lg group-hover:scale-110 transition-transform">
-              <ClipboardList size={20} className="text-blue-400" />
+            <div className="p-2.5 bg-[#0a84ff]/15 rounded-xl">
+              <ClipboardList size={18} className="text-[#0a84ff]" />
             </div>
-            <h3 className="text-sm font-semibold text-slate-300">Pending Records</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#86868b]">Active Receivables</h3>
           </div>
-          <div className="text-3xl font-bold text-white mt-3">
+          <div className="text-3xl font-extrabold text-white mt-2 font-tabular">
             <AnimatedCounter value={pendingRecordsCount} />
           </div>
         </motion.div>
@@ -674,15 +676,15 @@ export default function PendingPayments() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-gradient-to-br from-orange-500/10 to-orange-500/5 border border-orange-500/20 rounded-2xl p-5 backdrop-blur-xl shadow-lg shadow-orange-500/5 hover:shadow-orange-500/10 transition-all duration-300 group"
+          className="bg-[#12131a]/85 border border-white/[0.08] rounded-2xl p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between"
         >
           <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-orange-500/20 rounded-lg group-hover:scale-110 transition-transform">
-              <Coins size={20} className="text-orange-400" />
+            <div className="p-2.5 bg-[#ffd60a]/15 rounded-xl">
+              <Coins size={18} className="text-[#ffd60a]" />
             </div>
-            <h3 className="text-sm font-semibold text-slate-300">Total Pending</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#86868b]">Total Outstanding</h3>
           </div>
-          <div className="text-3xl font-bold text-white mt-3">
+          <div className="text-3xl font-extrabold text-white mt-2 font-tabular">
             <AnimatedCounter value={totalPendingAmount} isCurrency />
           </div>
         </motion.div>
@@ -692,21 +694,21 @@ export default function PendingPayments() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-gradient-to-br from-red-500/10 to-red-500/5 border border-red-500/20 rounded-2xl p-5 backdrop-blur-xl shadow-lg shadow-red-500/5 hover:shadow-red-500/10 transition-all duration-300 group flex flex-col justify-between"
+          className="bg-[#12131a]/85 border border-[#ff453a]/25 rounded-2xl p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between"
         >
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-red-500/20 rounded-lg group-hover:scale-110 transition-transform">
-                <AlertTriangle size={20} className="text-red-400" />
+              <div className="p-2.5 bg-[#ff453a]/15 rounded-xl">
+                <AlertTriangle size={18} className="text-[#ff453a]" />
               </div>
-              <h3 className="text-sm font-semibold text-slate-300">Overdue</h3>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#ff453a]">Overdue Balance</h3>
             </div>
-            <div className="text-3xl font-bold text-white mt-3">
+            <div className="text-3xl font-extrabold text-[#ff453a] mt-2 font-tabular">
               <AnimatedCounter value={overdueAmount} isCurrency />
             </div>
           </div>
-          <div className="mt-3 text-sm text-red-400/80 font-medium">
-            • {overdueCount} {overdueCount === 1 ? 'record' : 'records'} overdue
+          <div className="mt-2 text-xs text-[#ff453a]/80 font-semibold">
+            {overdueCount} {overdueCount === 1 ? 'record' : 'records'} overdue
           </div>
         </motion.div>
 
@@ -715,21 +717,21 @@ export default function PendingPayments() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="bg-gradient-to-br from-green-500/10 to-green-500/5 border border-green-500/20 rounded-2xl p-5 backdrop-blur-xl shadow-lg shadow-green-500/5 hover:shadow-green-500/10 transition-all duration-300 group flex flex-col justify-between"
+          className="bg-[#12131a]/85 border border-[#30d158]/25 rounded-2xl p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between"
         >
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-green-500/20 rounded-lg group-hover:scale-110 transition-transform">
-                <CheckCircle2 size={20} className="text-green-400" />
+              <div className="p-2.5 bg-[#30d158]/15 rounded-xl">
+                <CheckCircle2 size={18} className="text-[#30d158]" />
               </div>
-              <h3 className="text-sm font-semibold text-slate-300">Collected This Month</h3>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[#30d158]">Settled This Month</h3>
             </div>
-            <div className="text-3xl font-bold text-white mt-3">
+            <div className="text-3xl font-extrabold text-[#30d158] mt-2 font-tabular">
               <AnimatedCounter value={collectedThisMonthAmount} isCurrency />
             </div>
           </div>
-          <div className="mt-3 text-sm text-green-400/80 font-medium">
-            • {collectedThisMonthCount} {collectedThisMonthCount === 1 ? 'payment' : 'payments'} collected
+          <div className="mt-2 text-xs text-[#30d158]/80 font-semibold">
+            {collectedThisMonthCount} {collectedThisMonthCount === 1 ? 'payment' : 'payments'} collected
           </div>
         </motion.div>
 

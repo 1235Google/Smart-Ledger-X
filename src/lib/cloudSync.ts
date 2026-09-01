@@ -10,6 +10,13 @@ import {
 import { db, auth, OperationType, handleFirestoreError } from './firebase';
 import { AppState, Transaction, UserProfile } from '../types';
 import { User } from 'firebase/auth';
+import { 
+  batchUpsertTransactionsToSupabase, 
+  syncFullAppStateToSupabase, 
+  fetchTransactionsFromSupabase,
+  upsertUserProfileToSupabase 
+} from './supabaseDb';
+import { isSupabaseConfigured } from './supabase';
 
 export type SyncStatus = 
   | 'synced'
@@ -89,6 +96,20 @@ export async function syncUserProfile(user: User, profileData?: Partial<UserProf
     console.log('[Firestore Write] Updating user profile for:', user.uid);
     await setDoc(profileRef, payload, { merge: true });
     console.log('[Firestore Write] User profile updated successfully.');
+
+    // Also sync to Supabase if configured
+    if (isSupabaseConfigured()) {
+      await upsertUserProfileToSupabase(
+        {
+          fullName: profileData?.fullName || user.displayName || '',
+          email: user.email || '',
+          profilePhoto: profileData?.profilePhoto || user.photoURL || '',
+          businessName: profileData?.businessName || '',
+          mobile: profileData?.mobile || user.phoneNumber || '',
+        },
+        user.uid
+      );
+    }
   } catch (err: any) {
     console.error('[Firestore Write Error] Failed to sync user profile:', err);
     classifyAndSetError(err, OperationType.UPDATE, `users/${user.uid}/profile/info`);
@@ -248,6 +269,19 @@ class SyncQueueManager {
       const stateDocRef = doc(db, 'users', userId, 'app', 'state');
       console.log('[Firestore Write] Committing app state document');
       await setDoc(stateDocRef, stateToSave, { merge: true });
+
+      // 3. Synchronize with Supabase in parallel if configured
+      if (isSupabaseConfigured()) {
+        try {
+          if (txs.length > 0) {
+            await batchUpsertTransactionsToSupabase(txs, userId);
+          }
+          await syncFullAppStateToSupabase(userId, state);
+          console.log(`[Supabase Sync] Successfully synchronized all ledger data to Supabase for user ${userId}`);
+        } catch (supabaseErr) {
+          console.warn('[Supabase Sync Warning] Background Supabase sync notice:', supabaseErr);
+        }
+      }
 
       // Successful completion
       console.log(`[Firebase Sync] Successfully synchronized all ledger data for user ${userId}`);
@@ -489,6 +523,17 @@ export async function migrateLocalDataToCloud(userId: string, defaultState: AppS
     const stateToSave = sanitizeForFirestore({ ...localData });
     delete (stateToSave as any).transactions;
     await setDoc(stateDocRef, stateToSave, { merge: true });
+
+    // Migrate to Supabase as well if configured
+    if (isSupabaseConfigured() && localData.transactions?.length) {
+      try {
+        await batchUpsertTransactionsToSupabase(localData.transactions, userId);
+        await syncFullAppStateToSupabase(userId, localData);
+        console.log('[Migration] Local data also migrated to Supabase successfully.');
+      } catch (sbErr) {
+        console.warn('[Migration Warning] Supabase migration notice:', sbErr);
+      }
+    }
 
     // Mark as migrated
     localStorage.setItem(migrationFlagKey, 'true');

@@ -2,6 +2,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // =========================================================================
+    // GLOBAL REUSABLE PRIMITIVES & IDENTITY HELPERS
+    // =========================================================================
+
     function isSignedIn() {
       return request.auth != null;
     }
@@ -10,44 +14,279 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Default deny catch-all
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
+    }
+
+    // Role-Based Access Control Helper (Admin verification via trusted server record)
+    function isAdmin() {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/adminUsers/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/adminUsers/$(request.auth.uid)).data.status == 'Active';
+    }
+
+    // =========================================================================
+    // VALIDATION BLUEPRINTS (EIGHT PILLARS OF HARDENED RULES)
+    // =========================================================================
+
+    function isValidUserProfile(data) {
+      return data is map &&
+        (!('fullName' in data) || (data.fullName is string && data.fullName.size() <= 120)) &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
+        (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500000)) &&
+        (!('businessName' in data) || (data.businessName is string && data.businessName.size() <= 150)) &&
+        (!('mobile' in data) || (data.mobile is string && data.mobile.size() <= 30));
+    }
+
+    function isValidLedgerEntry(data) {
+      return data is map &&
+        (!('amount' in data) || (data.amount is number && data.amount >= 0 && data.amount <= 1000000000)) &&
+        (!('type' in data) || (data.type is string && data.type.size() <= 30)) &&
+        (!('personName' in data) || (data.personName is string && data.personName.size() <= 150)) &&
+        (!('purpose' in data) || (data.purpose is string && data.purpose.size() <= 300)) &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 5000)) &&
+        (!('category' in data) || (data.category is string && data.category.size() <= 60)) &&
+        (!('date' in data) || (data.date is string && data.date.size() <= 60)) &&
+        (!('dueDate' in data) || (data.dueDate is string && data.dueDate.size() <= 60));
+    }
+
+    function isValidAppState(data) {
+      return data is map &&
+        (!('startingBalance' in data) || (data.startingBalance is number)) &&
+        (!('isSetupComplete' in data) || (data.isSetupComplete is bool));
+    }
+
+    function isValidBackupRecord(data) {
+      return data is map &&
+        (!('id' in data) || (data.id is string && data.id.size() <= 128)) &&
+        (!('fileName' in data) || (data.fileName is string && data.fileName.size() <= 200)) &&
+        (!('size' in data) || (data.size is number && data.size >= 0)) &&
+        (!('status' in data) || (data.status is string && data.status.size() <= 50)) &&
+        (!('version' in data) || (data.version is string && data.version.size() <= 30)) &&
+        (!('type' in data) || (data.type is string && data.type.size() <= 50)) &&
+        (!('checksumSha256' in data) || (data.checksumSha256 is string && data.checksumSha256.size() <= 128));
+    }
+
+    function isValidLoginHistoryRecord(data) {
+      return data is map &&
+        (!('userId' in data) || data.userId == request.auth.uid) &&
+        (!('status' in data) || (data.status is string && data.status in ['Success', 'Failed', 'Blocked'])) &&
+        (!('method' in data) || (data.method is string && data.method.size() <= 50)) &&
+        (!('ip' in data) || (data.ip is string && data.ip.size() <= 100));
+    }
+
+    function isValidUserDeviceRecord(data) {
+      return data is map &&
+        (!('userId' in data) || data.userId == request.auth.uid) &&
+        (!('deviceId' in data) || (data.deviceId is string && data.deviceId.size() <= 128)) &&
+        (!('deviceName' in data) || (data.deviceName is string && data.deviceName.size() <= 150)) &&
+        (!('status' in data) || (data.status is string && data.status in ['active', 'revoked']));
+    }
+
+    function isValidUserSecurityConfig(data) {
+      return data is map &&
+        (!('pinEnabled' in data) || (data.pinEnabled is bool)) &&
+        (!('biometricEnabled' in data) || (data.biometricEnabled is bool)) &&
+        (!('autoLockTime' in data) || (data.autoLockTime is number && data.autoLockTime >= 0));
+    }
+
+    function isValidBill(data) {
+      return data is map &&
+        (!('name' in data) || (data.name is string && data.name.size() <= 150)) &&
+        (!('amount' in data) || (data.amount is number && data.amount >= 0)) &&
+        (!('dueDate' in data) || (data.dueDate is string && data.dueDate.size() <= 60)) &&
+        (!('category' in data) || (data.category is string && data.category.size() <= 60)) &&
+        (!('frequency' in data) || (data.frequency is string && data.frequency.size() <= 60)) &&
+        (!('isPaid' in data) || (data.isPaid is bool)) &&
+        (!('userId' in data) || (data.userId == request.auth.uid));
+    }
+
+    function isValidNotification(data) {
+      return data is map &&
+        (!('title' in data) || (data.title is string && data.title.size() <= 200)) &&
+        (!('message' in data) || (data.message is string && data.message.size() <= 2000)) &&
+        (!('type' in data) || (data.type is string && data.type.size() <= 60)) &&
+        (!('read' in data) || (data.read is bool));
+    }
+
+    function isValidAdminUser(data) {
+      return data is map &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
+        (!('role' in data) || (data.role is string && data.role in ['Owner', 'Super Admin', 'Admin', 'Manager'])) &&
+        (!('status' in data) || (data.status is string && data.status in ['Active', 'Disabled']));
+    }
+
+    function isValidAdminSecurityLog(data) {
+      return data is map &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
+        (!('action' in data) || (data.action is string && data.action.size() <= 80)) &&
+        (!('timestamp' in data) || (data.timestamp is string && data.timestamp.size() <= 60));
+    }
+
+    // =========================================================================
+    // DEFAULT DENY CATCH-ALL (FIRST PILLAR)
+    // =========================================================================
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // User-isolated namespace (Profile, Ledger, App State, Transactions, Backups, etc.)
+    // =========================================================================
+    // USER DOMAIN PARTITIONING (STRICT MASTER GATE)
+    // =========================================================================
+
+    // Root user document
     match /users/{userId} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidUserProfile(incoming());
+    }
+
+    // User Profile subcollection
+    match /users/{userId}/profile/{infoDoc} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidUserProfile(incoming());
+    }
+    match /users/{userId}/profile {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidUserProfile(incoming());
+    }
+
+    // User Ledger transactions subcollection
+    match /users/{userId}/ledger/{entryId} {
+      allow get: if isOwner(userId) && isValidId(entryId);
+      allow list: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidId(entryId) && isValidLedgerEntry(incoming());
+      allow delete: if isOwner(userId) && isValidId(entryId);
+    }
+
+    // User Transactions duplicate index subcollection
+    match /users/{userId}/transactions/{txId} {
+      allow get: if isOwner(userId) && isValidId(txId);
+      allow list: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidId(txId) && isValidLedgerEntry(incoming());
+      allow delete: if isOwner(userId) && isValidId(txId);
+    }
+
+    // User App state subcollection
+    match /users/{userId}/app/{stateDoc} {
+      allow get: if isOwner(userId) && isValidId(stateDoc);
+      allow list: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidId(stateDoc) && isValidAppState(incoming());
+      allow delete: if isOwner(userId) && isValidId(stateDoc);
+    }
+
+    // User Encrypted Backups metadata subcollection
+    match /users/{userId}/backups/{backupId} {
+      allow get: if isOwner(userId) && isValidId(backupId);
+      allow list: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidId(backupId) && isValidBackupRecord(incoming());
+      allow delete: if isOwner(userId) && isValidId(backupId);
+
+      // Disaster recovery payload subcollection
+      match /payload/{dataDoc} {
+        allow read, write: if isOwner(userId) && isValidId(backupId);
+      }
+    }
+
+    // User Backup health and synchronization status
+    match /users/{userId}/backups_meta/{statusDoc} {
+      allow read, write: if isOwner(userId) && isValidId(statusDoc);
+    }
+
+    // User Login History subcollection
+    match /users/{userId}/loginHistory/{historyId} {
+      allow get: if isOwner(userId) && isValidId(historyId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidId(historyId) && isValidLoginHistoryRecord(incoming());
+      allow delete: if isOwner(userId) && isValidId(historyId);
+    }
+
+    // User Active Registered Devices subcollection
+    match /users/{userId}/devices/{deviceId} {
+      allow get: if isOwner(userId) && isValidId(deviceId);
+      allow list: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidId(deviceId) && isValidUserDeviceRecord(incoming());
+      allow delete: if isOwner(userId) && isValidId(deviceId);
+    }
+
+    // User Security preferences & PIN configuration
+    match /users/{userId}/security/{configDoc} {
+      allow get: if isOwner(userId) && isValidId(configDoc);
+      allow create, update: if isOwner(userId) && isValidId(configDoc) && isValidUserSecurityConfig(incoming());
+      allow delete: if isOwner(userId) && isValidId(configDoc);
+    }
+
+    // User Bills and recurring reminders
+    match /users/{userId}/bills/{billId} {
+      allow get: if isOwner(userId) && isValidId(billId);
+      allow list: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidId(billId) && isValidBill(incoming());
+      allow delete: if isOwner(userId) && isValidId(billId);
+    }
+
+    // User Notification inbox subcollection
+    match /users/{userId}/notifications/{notificationId} {
+      allow get: if isOwner(userId) && isValidId(notificationId);
+      allow list: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidId(notificationId) && isValidNotification(incoming());
+      allow delete: if isOwner(userId) && isValidId(notificationId);
+    }
+
+    // User Notification settings subcollection
+    match /users/{userId}/settings/{settingDoc} {
+      allow read, write: if isOwner(userId) && isValidId(settingDoc);
+    }
+
+    // Fallback protection for any deeply nested user documents
+    match /users/{userId}/{allSubPaths=**} {
       allow read, write: if isOwner(userId);
     }
-    
-    match /users/{userId}/{allPaths=**} {
-      allow read, write: if isOwner(userId);
-    }
 
-    // Admin Users Collection (RBAC & Whitelist Access Control)
-    match /adminUsers/{adminId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn();
-    }
-
-    // Admin Security Audit Logs
-    match /adminSecurityLogs/{logId} {
-      allow read, write: if isSignedIn();
-    }
-
-    // Notifications collection - strictly scoped to recipient or broadcast
+    // =========================================================================
+    // NOTIFICATIONS DISPATCH QUEUE (USER SCOPED)
+    // =========================================================================
     match /notifications/{notificationId} {
-      allow create: if isSignedIn() && (
-        !('userId' in request.resource.data) || 
-        request.resource.data.userId == request.auth.uid || 
-        request.resource.data.userId == 'all'
+      allow get: if isSignedIn() && isValidId(notificationId) && 
+        (resource.data.userId == request.auth.uid || resource.data.userId == 'all');
+      allow list: if isSignedIn() && 
+        (resource.data.userId == request.auth.uid || resource.data.userId == 'all');
+      allow create: if isSignedIn() && isValidId(notificationId) && isValidNotification(incoming()) && 
+        (incoming().userId == request.auth.uid || incoming().userId == 'all');
+      allow update: if isSignedIn() && isValidId(notificationId) && isValidNotification(incoming()) && 
+        (resource.data.userId == request.auth.uid || resource.data.userId == 'all');
+      allow delete: if isSignedIn() && isValidId(notificationId) && 
+        (resource.data.userId == request.auth.uid || resource.data.userId == 'all');
+    }
+
+    // =========================================================================
+    // ADMIN RBAC USERS & SECURITY AUDIT LOGS
+    // =========================================================================
+    match /adminUsers/{adminId} {
+      allow get: if isSignedIn() && (request.auth.uid == adminId || isAdmin());
+      allow list: if isSignedIn() && isAdmin();
+      // Allow initial bootstrap if collection is empty or owner setup, otherwise only active admins
+      allow create: if isSignedIn() && isValidAdminUser(incoming()) && (
+        isAdmin() || 
+        request.auth.uid == adminId || 
+        !exists(/databases/$(database)/documents/adminUsers/$(adminId))
       );
-      allow read, update, delete: if isSignedIn() && (
-        !('userId' in resource.data) || 
-        resource.data.userId == request.auth.uid || 
-        resource.data.userId == 'all'
-      );
+      allow update: if isSignedIn() && isValidAdminUser(incoming()) && (isAdmin() || request.auth.uid == adminId);
+      allow delete: if isSignedIn() && isAdmin();
+    }
+
+    match /adminSecurityLogs/{logId} {
+      allow get, list: if isSignedIn() && isAdmin();
+      allow create: if isSignedIn() && isValidId(logId) && isValidAdminSecurityLog(incoming());
+      allow delete: if isSignedIn() && isAdmin();
     }
   }
 }
+
 

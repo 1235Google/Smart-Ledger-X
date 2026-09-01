@@ -19,6 +19,8 @@ import {
   signOut,
   updateProfile,
   onAuthStateChanged,
+  setPersistence,
+  browserLocalPersistence,
   User
 } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
@@ -48,6 +50,17 @@ console.log('[Firebase Init] Firestore instance ready. DB ID:', firestoreDbId ||
 
 const auth = getAuth(app);
 console.log('[Firebase Init] Auth instance ready');
+
+// Enable browser local persistence to maintain session across reloads
+if (typeof window !== 'undefined') {
+  setPersistence(auth, browserLocalPersistence)
+    .then(() => {
+      console.log('[Firebase Auth] Persistence set to browserLocalPersistence');
+    })
+    .catch((err) => {
+      console.warn('[Firebase Auth] Persistence notice:', err);
+    });
+}
 
 const storage = getStorage(app);
 console.log('[Firebase Init] Storage instance ready');
@@ -168,6 +181,7 @@ export async function testConnection() {
 
 /**
  * Ensures user profile and initial app records exist in Firestore after login
+ * Task 5: Store uid, name, email, photoURL, createdAt without failing login on temporary errors
  */
 export async function ensureUserProfileDoc(user: User, customFullName?: string): Promise<void> {
   if (!user || !user.uid) return;
@@ -179,6 +193,7 @@ export async function ensureUserProfileDoc(user: User, customFullName?: string):
       const displayName = customFullName || user.displayName || user.email?.split('@')[0] || 'Ledger User';
       const initialProfile = {
         uid: user.uid,
+        name: displayName,
         fullName: displayName,
         email: user.email || '',
         photoURL: user.photoURL || '',
@@ -188,41 +203,62 @@ export async function ensureUserProfileDoc(user: User, customFullName?: string):
         updatedAt: new Date().toISOString()
       };
       await setDoc(profileRef, initialProfile, { merge: true });
-      console.log('[Firebase Auth] User profile document initialized for:', user.uid);
+      console.log('[Firebase Auth] User profile document successfully created for:', user.uid);
+    } else {
+      console.log('[Firebase Auth] User profile document already exists for:', user.uid);
     }
   } catch (err) {
-    console.warn('[Firebase Auth] Notice while ensuring user profile document:', err);
+    // Non-fatal: Do not block authentication if Firestore document creation encounters temporary issue
+    console.warn('[Firebase Auth] User profile document notice (non-fatal):', err);
   }
 }
 
 /**
- * Google Sign-In with automatic popup fallback to redirect
+ * Google Sign-In with automatic error classification and debug logging
+ * Task 1, 4, 7: Audit Google auth flow, handle popup-closed-by-user, log details
  */
 export async function loginWithGoogle(): Promise<{ user: User }> {
+  console.log('[Firebase Auth] Launching signInWithPopup for Google...');
   try {
     const result = await signInWithPopup(auth, googleProvider);
-    if (result.user) {
-      await ensureUserProfileDoc(result.user);
-    }
-    return { user: result.user };
-  } catch (popupError: any) {
-    console.warn('[Firebase Auth] signInWithPopup error code:', popupError?.code, popupError?.message);
+    const user = result.user;
+    
+    // Debug logging as required by Task 7
+    console.log('[Auth Debug] Google Login Success');
+    console.log('[Auth Debug] Firebase currentUser:', auth.currentUser?.email);
+    console.log('[Auth Debug] UID:', user.uid);
+    console.log('[Auth Debug] Email:', user.email);
+    console.log('[Auth Debug] Display Name:', user.displayName);
+    console.log('[Auth Debug] Provider:', user.providerData?.[0]?.providerId || 'google.com');
 
-    // If popup was blocked, restricted in iframe, or closed unexpectedly
-    if (
-      popupError?.code === 'auth/popup-blocked' ||
-      popupError?.code === 'auth/cancelled-popup-request' ||
-      popupError?.code === 'auth/internal-error'
-    ) {
-      console.log('[Firebase Auth] Falling back to signInWithRedirect...');
+    // Create user profile in Firestore if needed (asynchronous & non-blocking)
+    ensureUserProfileDoc(user).catch((err) => {
+      console.warn('[Firebase Auth] Background profile creation notice:', err);
+    });
+
+    return { user };
+  } catch (popupError: any) {
+    const code = popupError?.code || '';
+    console.warn('[Firebase Auth] signInWithPopup encountered code:', code, popupError?.message);
+
+    // If the user deliberately closed the popup window, do NOT trigger redirect loop
+    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+      console.log('[Firebase Auth] User cancelled Google Sign-In popup.');
+      throw popupError;
+    }
+
+    // If popup was blocked by browser security or iframe sandboxing, fall back to redirect
+    if (code === 'auth/popup-blocked') {
+      console.log('[Firebase Auth] Popup blocked by browser. Falling back to signInWithRedirect...');
       try {
         await signInWithRedirect(auth, googleProvider);
-        return new Promise(() => {}); // Wait for redirect navigation
+        return new Promise(() => {}); // Wait for browser redirect
       } catch (redirectError: any) {
         console.error('[Firebase Auth] signInWithRedirect error:', redirectError);
         throw redirectError;
       }
     }
+
     throw popupError;
   }
 }
@@ -235,7 +271,11 @@ export async function checkRedirectResult(): Promise<User | null> {
     const result = await getRedirectResult(auth);
     if (result && result.user) {
       console.log('[Firebase Auth] Successfully processed redirect sign-in for:', result.user.uid);
-      await ensureUserProfileDoc(result.user);
+      console.log('[Auth Debug] Redirect User UID:', result.user.uid);
+      console.log('[Auth Debug] Redirect User Email:', result.user.email);
+      ensureUserProfileDoc(result.user).catch((err) => {
+        console.warn('[Firebase Auth] Background profile creation notice on redirect:', err);
+      });
       return result.user;
     }
   } catch (err: any) {

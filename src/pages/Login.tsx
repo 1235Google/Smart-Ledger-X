@@ -94,8 +94,12 @@ export default function Login() {
       }
     } catch (err: any) {
       console.error('[Auth Action Error] Google Sign-In failed:', err);
-      const friendlyMsg = formatAuthError(err);
-      triggerError(friendlyMsg);
+      if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
+        console.log('[Auth Action] Google Sign-In was closed by the user.');
+      } else {
+        const friendlyMsg = formatAuthError(err);
+        triggerError(friendlyMsg);
+      }
     } finally {
       setGoogleLoading(false);
     }

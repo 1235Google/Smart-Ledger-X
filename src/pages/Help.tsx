@@ -45,7 +45,7 @@ const faqs: FAQItem[] = [
     id: '4',
     category: 'reports',
     question: 'Can I export my transaction history to Excel or PDF?',
-    answer: 'Yes! Go to Import & Export or Monthly Reports to generate and download comprehensive XLSX spreadsheets or formatted PDF reports at any time.'
+    answer: 'Yes! Go to Import & Export or Monthly Reports to generate and download complete XLSX spreadsheets or formatted PDF reports at any time.'
   },
   {
     id: '5',

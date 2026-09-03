@@ -61,17 +61,17 @@ export const AnimatedButton: React.FC<AnimatedButtonProps> = ({
 
   const variantClasses = {
     primary:
-      'bg-[#a8c7fa] text-[#042e6f] hover:bg-[#d3e3fd] shadow-[0_2px_8px_rgba(168,199,250,0.25)] border border-transparent font-bold',
+      'bg-[#0a84ff] text-white hover:bg-[#0a84ff]/90 shadow-[0_4px_16px_rgba(10,132,255,0.3)] border border-[#0a84ff]/40 font-semibold',
     secondary:
-      'bg-[#004a77] text-[#c2e7ff] hover:bg-[#005c94] border border-white/10 shadow-sm font-semibold',
+      'bg-[#1e1e1e] text-[#f5f5f7] hover:bg-[#282828] border border-white/[0.08] shadow-sm font-semibold',
     outline:
-      'bg-transparent border border-[#8e918f] hover:bg-white/[0.08] text-[#d3e3fd] hover:text-white',
+      'bg-transparent border border-white/[0.12] hover:bg-white/[0.06] text-[#f5f5f7] hover:text-white',
     danger:
-      'bg-[#f2b8b5] text-[#601410] hover:bg-[#f9dedc] shadow-sm font-bold',
+      'bg-[#ff453a] text-white hover:bg-[#ff453a]/90 shadow-[0_4px_16px_rgba(255,69,58,0.25)] border border-[#ff453a]/40 font-semibold',
     success:
-      'bg-[#6dd58c] text-[#00391c] hover:bg-[#a8f5ba] shadow-sm font-bold',
+      'bg-[#30d158] text-black hover:bg-[#30d158]/90 shadow-[0_4px_16px_rgba(48,209,88,0.25)] border border-[#30d158]/40 font-bold',
     ghost:
-      'bg-transparent text-slate-300 hover:text-white hover:bg-white/[0.08]',
+      'bg-transparent text-[#a1a1a6] hover:text-white hover:bg-white/[0.06]',
   }[variant];
 
   return (
@@ -81,7 +81,7 @@ export const AnimatedButton: React.FC<AnimatedButtonProps> = ({
       onMouseLeave={handleMouseLeave}
       whileHover={
         !disabled && !shouldReduceMotion
-          ? { y: -1, scale: 1.015 }
+          ? { y: -1, scale: 1.01 }
           : undefined
       }
       whileTap={
@@ -89,11 +89,11 @@ export const AnimatedButton: React.FC<AnimatedButtonProps> = ({
           ? { scale: 0.98 }
           : undefined
       }
-      transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
       onClick={handleClick}
       disabled={disabled || isLoading}
       className={cn(
-        'relative overflow-hidden inline-flex items-center justify-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed select-none group',
+        'relative overflow-hidden inline-flex items-center justify-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0a84ff] disabled:opacity-40 disabled:cursor-not-allowed select-none group',
         sizeClasses,
         variantClasses,
         className

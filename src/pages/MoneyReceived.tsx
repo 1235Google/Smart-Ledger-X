@@ -84,8 +84,8 @@ export default function MoneyReceived() {
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
           {/* Apple Style Form Section */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-[#12131a]/90 border border-white/[0.08] rounded-[28px] p-6 shadow-2xl backdrop-blur-3xl relative overflow-hidden">
-              <div className="pointer-events-none absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+            <div className="bg-[#171717] border border-white/[0.08] rounded-[22px] p-6 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] relative overflow-hidden">
+              <div className="pointer-events-none absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/15 to-transparent" />
               
               <h2 className="text-base font-bold text-white mb-5 flex items-center gap-2">
                 <span className="p-1.5 rounded-xl bg-[#30d158]/15 text-[#30d158]">
@@ -166,14 +166,14 @@ export default function MoneyReceived() {
                   placeholder="Search received..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs text-white placeholder-[#86868b] outline-none focus:border-[#30d158]/50 transition-all"
+                  className="w-full pl-8 pr-3 py-1.5 rounded-full bg-[#171717] border border-white/[0.08] text-xs text-white placeholder-[#86868b] outline-none focus:border-[#0a84ff] focus:ring-2 focus:ring-[#0a84ff]/25 transition-all"
                 />
               </div>
             </div>
             
             <div className="space-y-2.5">
               {filteredTransactions.length === 0 ? (
-                <div className="text-center py-16 border border-dashed border-white/10 rounded-[28px] flex flex-col items-center justify-center text-[#86868b] text-sm">
+                <div className="text-center py-16 border border-dashed border-white/[0.08] rounded-[22px] flex flex-col items-center justify-center text-[#86868b] text-sm bg-[#171717]/40">
                   <ArrowDownLeft size={32} className="text-[#86868b]/50 mb-2" />
                   <p>No received money records found.</p>
                 </div>
@@ -186,11 +186,11 @@ export default function MoneyReceived() {
                       initial={{ opacity: 0, y: 12 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ duration: 0.3, delay: idx * 0.02 }}
-                      className="bg-[#12131a]/70 hover:bg-[#12131a]/95 border border-white/[0.06] p-4 rounded-2xl flex items-center gap-4 transition-all shadow-sm group"
+                      transition={{ duration: 0.25, delay: idx * 0.02 }}
+                      className="bg-[#171717] hover:bg-[#1c1c1c] border border-white/[0.08] p-4 rounded-2xl flex items-center gap-4 transition-all duration-200 shadow-sm group"
                     >
-                      <div className="w-11 h-11 bg-[#30d158]/15 text-[#30d158] rounded-xl flex items-center justify-center flex-shrink-0">
-                        <ArrowDownLeft size={20} />
+                      <div className="w-10 h-10 bg-[#30d158]/15 text-[#30d158] rounded-xl flex items-center justify-center flex-shrink-0">
+                        <ArrowDownLeft size={18} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold truncate text-white">{tx.personName}</p>

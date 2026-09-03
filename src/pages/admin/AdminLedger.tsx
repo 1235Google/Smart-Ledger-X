@@ -40,7 +40,6 @@ export default function AdminLedger() {
   const { 
     transactions, 
     addReceivedMoney, 
-    addSentMoney, 
     deleteTransaction, 
     updateTransaction 
   } = useStore();
@@ -48,7 +47,6 @@ export default function AdminLedger() {
   const { resolvedTheme } = useM3Theme();
   const isDark = resolvedTheme === 'dark';
 
-  const [typeFilter, setTypeFilter] = useState<'all' | 'received' | 'sent'>('all');
   const [methodFilter, setMethodFilter] = useState<'all' | 'UPI' | 'Cash' | 'Card' | 'Bank Transfer'>('all');
   const [dateFilter, setDateFilter] = useState<string>('');
 
@@ -81,12 +79,6 @@ export default function AdminLedger() {
 
   // Apply chip filters
   const filteredData = completedEntries.filter((tx: any) => {
-    const isReceived = tx.type === 'received' || tx.type === 'income';
-    const isSent = tx.type === 'sent' || tx.type === 'expense';
-
-    if (typeFilter === 'received' && !isReceived) return false;
-    if (typeFilter === 'sent' && !isSent) return false;
-
     const txMethod = tx.method || tx.paymentMethod || 'UPI';
     if (methodFilter !== 'all' && txMethod !== methodFilter) return false;
 
@@ -149,23 +141,13 @@ export default function AdminLedger() {
         showSuccess('Transaction Updated', 'Ledger record modified successfully.');
         setEditingEntry(null);
       } else {
-        if (formType === 'received') {
-          addReceivedMoney({
-            personName: formName.trim(),
-            amount: num,
-            purpose: formCategory || formNote || 'General',
-            date: formDate,
-          });
-          showSuccess('Payment Recorded', `Received ₹${num.toLocaleString()} from ${formName}`);
-        } else {
-          addSentMoney({
-            personName: formName.trim(),
-            amount: num,
-            purpose: formCategory || formNote || 'General',
-            date: formDate,
-          });
-          showSuccess('Expense Recorded', `Disbursed ₹${num.toLocaleString()} to ${formName}`);
-        }
+        addReceivedMoney({
+          personName: formName.trim(),
+          amount: num,
+          purpose: formCategory || formNote || 'General',
+          date: formDate,
+        });
+        showSuccess('Payment Recorded', `Received ₹${num.toLocaleString()} from ${formName}`);
         setShowAddModal(false);
       }
     } catch (err: any) {
@@ -344,22 +326,8 @@ export default function AdminLedger() {
         </div>
       </div>
 
-      {/* Filter Row: Type & Method Filter Chips */}
+      {/* Filter Row: Rail Method Filter Chips */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">Flow:</span>
-          {(['all', 'received', 'sent'] as const).map((t) => (
-            <M3Chip
-              key={t}
-              label={t === 'all' ? 'All Flows' : t === 'received' ? 'Received Only' : 'Sent Only'}
-              selected={typeFilter === t}
-              onClick={() => setTypeFilter(t)}
-            />
-          ))}
-        </div>
-
-        <div className="h-4 w-[1px] bg-slate-700 hidden sm:block mx-1" />
-
         <div className="flex items-center gap-1.5 overflow-x-auto">
           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">Method:</span>
           {(['all', 'UPI', 'Cash', 'Card', 'Bank Transfer'] as const).map((m) => (
@@ -398,7 +366,7 @@ export default function AdminLedger() {
           setEditingEntry(null);
         }}
         title={editingEntry ? 'Edit Ledger Entry' : 'Record New Transaction'}
-        subtitle={editingEntry ? 'Update transaction details' : 'Save a customer settlement or disbursement'}
+        subtitle={editingEntry ? 'Update transaction details' : 'Save a payment received or money sent'}
         icon={Wallet}
         iconTone="primary"
         maxWidth="lg"
@@ -420,34 +388,9 @@ export default function AdminLedger() {
         }
       >
         <form onSubmit={handleSave} className="space-y-4 pt-2">
-          {/* Flow Type Switcher */}
-          <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-black/10 dark:bg-white/5 border border-white/5">
-            <button
-              type="button"
-              onClick={() => setFormType('received')}
-              className={cn(
-                'py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2',
-                formType === 'received'
-                  ? isDark ? 'bg-[#0f5223] text-[#b4f3b8] shadow-md' : 'bg-[#c4eed0] text-[#073814] shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              )}
-            >
-              <ArrowDownLeft size={16} />
-              <span>Money Received (In)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setFormType('sent')}
-              className={cn(
-                'py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2',
-                formType === 'sent'
-                  ? isDark ? 'bg-[#601410] text-[#f9dedc] shadow-md' : 'bg-[#f9dedc] text-[#410e0b] shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              )}
-            >
-              <ArrowUpRight size={16} />
-              <span>Money Sent (Out)</span>
-            </button>
+          <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2.5 text-emerald-400 text-xs font-bold">
+            <ArrowDownLeft size={16} />
+            <span>Recording Settlement / Inflow Entry</span>
           </div>
 
           <M3TextField

@@ -93,7 +93,7 @@ export function deriveAction(type: NotificationType): { url: string; label: stri
     case 'ledger_income_added':
       return { url: '/received', label: 'View Income' };
     case 'ledger_expense_added':
-      return { url: '/sent', label: 'View Sent Money' };
+      return { url: '/balance', label: 'View Balance' };
     default:
       return { url: '/', label: 'Open Ledger' };
   }

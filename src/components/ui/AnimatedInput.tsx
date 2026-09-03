@@ -42,8 +42,8 @@ export const AnimatedInput: React.FC<AnimatedInputProps> = ({
         <label
           htmlFor={inputId}
           className={cn(
-            'block text-xs font-bold tracking-wider uppercase transition-colors duration-200',
-            isFocused ? 'text-[#a8c7fa]' : 'text-slate-400'
+            'block text-xs font-semibold tracking-wider uppercase transition-colors duration-200',
+            isFocused ? 'text-[#0a84ff]' : 'text-[#86868b]'
           )}
         >
           {label}
@@ -53,14 +53,14 @@ export const AnimatedInput: React.FC<AnimatedInputProps> = ({
       <motion.div
         animate={
           error && !shouldReduceMotion
-            ? { x: [0, -8, 8, -6, 6, -3, 3, 0] }
+            ? { x: [0, -6, 6, -4, 4, 0] }
             : { x: 0 }
         }
-        transition={{ duration: 0.4 }}
+        transition={{ duration: 0.3 }}
         className="relative flex items-center"
       >
         {icon && (
-          <div className="absolute left-3.5 text-slate-400 pointer-events-none flex items-center justify-center">
+          <div className="absolute left-3.5 text-[#86868b] pointer-events-none flex items-center justify-center">
             {icon}
           </div>
         )}
@@ -71,14 +71,14 @@ export const AnimatedInput: React.FC<AnimatedInputProps> = ({
           onFocus={handleFocus}
           onBlur={handleBlur}
           className={cn(
-            'w-full bg-[#1e2029] border rounded-2xl py-3.5 px-4 text-sm text-white placeholder-slate-500 transition-all duration-200 outline-none',
+            'w-full bg-[#171717] border rounded-2xl py-3.5 px-4 text-sm text-white placeholder-[#737373] transition-all duration-200 outline-none',
             icon ? 'pl-10' : '',
             (error || isSuccess) ? 'pr-10' : '',
             error
-              ? 'border-[#f2b8b5] focus:border-[#f2b8b5] focus:ring-2 focus:ring-[#f2b8b5]/30'
+              ? 'border-[#ff453a] focus:border-[#ff453a] focus:ring-2 focus:ring-[#ff453a]/25'
               : isSuccess
-              ? 'border-[#6dd58c] focus:border-[#6dd58c] focus:ring-2 focus:ring-[#6dd58c]/30'
-              : 'border-white/10 hover:border-white/20 focus:border-[#a8c7fa] focus:ring-2 focus:ring-[#a8c7fa]/30',
+              ? 'border-[#30d158] focus:border-[#30d158] focus:ring-2 focus:ring-[#30d158]/25'
+              : 'border-white/[0.08] hover:border-white/[0.14] focus:border-[#0a84ff] focus:ring-2 focus:ring-[#0a84ff]/25',
             className
           )}
           {...props}
@@ -91,8 +91,8 @@ export const AnimatedInput: React.FC<AnimatedInputProps> = ({
               initial={{ scale: 0, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-              className="absolute right-3.5 text-rose-400 pointer-events-none"
+              transition={{ duration: 0.2 }}
+              className="absolute right-3.5 text-[#ff453a] pointer-events-none"
             >
               <AlertCircle size={18} />
             </motion.div>
@@ -100,11 +100,11 @@ export const AnimatedInput: React.FC<AnimatedInputProps> = ({
 
           {isSuccess && !error && (
             <motion.div
-              initial={{ scale: 0, opacity: 0, rotate: -45 }}
-              animate={{ scale: 1, opacity: 1, rotate: 0 }}
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-              className="absolute right-3.5 text-emerald-400 pointer-events-none bg-emerald-500/20 p-1 rounded-full border border-emerald-500/30"
+              transition={{ duration: 0.2 }}
+              className="absolute right-3.5 text-[#30d158] pointer-events-none bg-[#30d158]/15 p-1 rounded-full border border-[#30d158]/30"
             >
               <Check size={14} />
             </motion.div>
@@ -116,7 +116,7 @@ export const AnimatedInput: React.FC<AnimatedInputProps> = ({
         <motion.p
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-xs text-rose-400 font-medium pl-1"
+          className="text-xs text-[#ff453a] font-medium pl-1"
         >
           {error}
         </motion.p>

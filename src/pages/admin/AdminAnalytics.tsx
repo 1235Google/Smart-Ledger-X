@@ -67,23 +67,21 @@ export default function AdminAnalytics() {
       .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
   }, [filteredTransactions]);
 
-  const periodSent = useMemo(() => {
+  const periodPending = useMemo(() => {
     return filteredTransactions
-      .filter((tx: any) => tx.type === 'sent' || tx.type === 'expense')
+      .filter((tx: any) => tx.type === 'pending')
       .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
   }, [filteredTransactions]);
-
-  const periodMargin = periodReceived - periodSent;
 
   const analyticsData = useMemo(() => {
     if (timeRange === '1y') {
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const summary: Record<string, { day: string; received: number; sent: number }> = {};
+      const summary: Record<string, { day: string; received: number; pending: number }> = {};
       months.forEach((m) => {
-        summary[m] = { day: m, received: 0, sent: 0 };
+        summary[m] = { day: m, received: 0, pending: 0 };
       });
       filteredTransactions.forEach((tx: any) => {
-        const txDateStr = tx.date || tx.createdAt;
+        const txDateStr = tx.date || tx.createdAt || (tx as any).dueDate;
         if (txDateStr) {
           const d = new Date(txDateStr);
           if (!isNaN(d.getTime())) {
@@ -91,8 +89,8 @@ export default function AdminAnalytics() {
             if (summary[m]) {
               if (tx.type === 'received' || tx.type === 'income') {
                 summary[m].received += Number(tx.amount) || 0;
-              } else if (tx.type === 'sent' || tx.type === 'expense') {
-                summary[m].sent += Number(tx.amount) || 0;
+              } else if (tx.type === 'pending') {
+                summary[m].pending += Number(tx.amount) || 0;
               }
             }
           }
@@ -102,14 +100,14 @@ export default function AdminAnalytics() {
     }
 
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const summary: Record<string, { day: string; received: number; sent: number }> = {};
+    const summary: Record<string, { day: string; received: number; pending: number }> = {};
     
     days.forEach((d) => {
-      summary[d] = { day: d, received: 0, sent: 0 };
+      summary[d] = { day: d, received: 0, pending: 0 };
     });
 
     filteredTransactions.forEach((tx: any) => {
-      const txDateStr = tx.date || tx.createdAt;
+      const txDateStr = tx.date || tx.createdAt || (tx as any).dueDate;
       if (txDateStr) {
         const d = new Date(txDateStr);
         if (!isNaN(d.getTime())) {
@@ -118,8 +116,8 @@ export default function AdminAnalytics() {
           if (summary[dayName]) {
             if (tx.type === 'received' || tx.type === 'income') {
               summary[dayName].received += Number(tx.amount) || 0;
-            } else if (tx.type === 'sent' || tx.type === 'expense') {
-              summary[dayName].sent += Number(tx.amount) || 0;
+            } else if (tx.type === 'pending') {
+              summary[dayName].pending += Number(tx.amount) || 0;
             }
           }
         }
@@ -191,28 +189,28 @@ export default function AdminAnalytics() {
         />
 
         <M3StatCard
-          title="Period Outflow (Sent)"
-          value={periodSent}
+          title="Period Receivables (Due)"
+          value={periodPending}
           isCurrency
-          subtitle={`Disbursements (${timeRange.toUpperCase()})`}
-          icon={ArrowUpRight}
-          tone="rose"
+          subtitle={`Pending collection (${timeRange.toUpperCase()})`}
+          icon={Activity}
+          tone="amber"
         />
 
         <M3StatCard
-          title="Period Net Margin"
-          value={periodMargin}
+          title="Net Vault Balance"
+          value={currentBalance}
           isCurrency
-          subtitle="Net cash flow surplus"
+          subtitle="Total verified funds"
           icon={Wallet}
           tone="primary"
         />
 
         <M3StatCard
-          title="Pending Receivables"
+          title="Total Outstanding Due"
           value={totalPending}
           isCurrency
-          subtitle="Outstanding dues to collect"
+          subtitle="All-time uncollected dues"
           icon={Activity}
           tone="amber"
         />
@@ -225,10 +223,10 @@ export default function AdminAnalytics() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
               <h2 className={cn('text-lg font-bold tracking-tight', isDark ? 'text-white' : 'text-[#1f1f1f]')}>
-                Weekly Cash Velocity Curve
+                Revenue & Receivables Curve
               </h2>
               <p className={cn('text-xs mt-0.5', isDark ? 'text-[#8e918f]' : 'text-[#5f6368]')}>
-                Dynamic inflow vs outflow timeline
+                Dynamic received income vs pending receivables timeline
               </p>
             </div>
           </div>
@@ -239,11 +237,11 @@ export default function AdminAnalytics() {
                 <defs>
                   <linearGradient id="anColorRec" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor={isDark ? '#6dd58c' : '#1e8e3e'} stopOpacity={0.4} />
-                    <stop offset="95%" stopColor={isDark ? '#6dd58c' : '#1e8e3e'} stopOpacity={0} />
+                    <stop offset="95%" stopColor={isDark ? '#6dd58c' : '#1e8e3e'} stopOpacity={0.0} />
                   </linearGradient>
-                  <linearGradient id="anColorSent" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={isDark ? '#a8c7fa' : '#0b57d0'} stopOpacity={0.4} />
-                    <stop offset="95%" stopColor={isDark ? '#a8c7fa' : '#0b57d0'} stopOpacity={0} />
+                  <linearGradient id="anColorPending" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={isDark ? '#ffe082' : '#f9ab00'} stopOpacity={0.4} />
+                    <stop offset="95%" stopColor={isDark ? '#ffe082' : '#f9ab00'} stopOpacity={0.0} />
                   </linearGradient>
                 </defs>
                 <XAxis dataKey="day" stroke={isDark ? '#8e918f' : '#747775'} tickLine={false} />
@@ -264,16 +262,16 @@ export default function AdminAnalytics() {
                   strokeWidth={3}
                   fillOpacity={1}
                   fill="url(#anColorRec)"
-                  name="Inflow"
+                  name="Inflow (Received)"
                 />
                 <Area
                   type="monotone"
-                  dataKey="sent"
-                  stroke={isDark ? '#a8c7fa' : '#0b57d0'}
+                  dataKey="pending"
+                  stroke={isDark ? '#ffe082' : '#f9ab00'}
                   strokeWidth={3}
                   fillOpacity={1}
-                  fill="url(#anColorSent)"
-                  name="Outflow"
+                  fill="url(#anColorPending)"
+                  name="Pending (Due)"
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -341,7 +339,7 @@ export default function AdminAnalytics() {
             Comparative Daily Volume Breakdown
           </h2>
           <p className={cn('text-xs mt-0.5', isDark ? 'text-[#8e918f]' : 'text-[#5f6368]')}>
-            Side-by-side bar analysis of customer payments received vs disbursements made
+            Side-by-side bar analysis of customer payments received vs pending dues
           </p>
         </div>
 
@@ -360,7 +358,7 @@ export default function AdminAnalytics() {
                 }}
               />
               <Bar dataKey="received" fill={isDark ? '#6dd58c' : '#1e8e3e'} radius={[8, 8, 0, 0]} name="Received" />
-              <Bar dataKey="sent" fill={isDark ? '#a8c7fa' : '#0b57d0'} radius={[8, 8, 0, 0]} name="Sent" />
+              <Bar dataKey="pending" fill={isDark ? '#ffe082' : '#f9ab00'} radius={[8, 8, 0, 0]} name="Pending Due" />
             </BarChart>
           </ResponsiveContainer>
         </div>

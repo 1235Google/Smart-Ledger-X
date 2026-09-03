@@ -127,11 +127,11 @@ function PaymentCard({
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.2, delay: 0.04 * idx, ease: "easeOut" }}
-      className="group bg-neutral-900/60 backdrop-blur-xl border border-white/10 hover:border-white/20 p-5 rounded-[2rem] flex flex-col gap-5 relative overflow-hidden transition-all duration-200 ease-out shadow-xl shadow-black/20 hover:shadow-2xl hover:shadow-black/30"
+      transition={{ duration: 0.25, delay: 0.03 * idx, ease: [0.16, 1, 0.3, 1] }}
+      className="group bg-[#171717] border border-white/[0.08] hover:border-white/[0.14] p-6 rounded-[22px] flex flex-col gap-5 relative overflow-hidden transition-all duration-200 ease-out shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)]"
     >
       {/* Header */}
       <div className="flex justify-between items-start gap-4">
@@ -472,21 +472,25 @@ export default function PendingPayments() {
     const currentYear = today.getFullYear();
 
     transactions.forEach(tx => {
-      if (tx.type === 'pending' && tx.status === 'pending') {
+      const amt = Number(tx.amount || 0);
+      if (
+        tx.type === 'pending' && 
+        (tx.status === 'pending' || tx.status === 'overdue' || (tx.status !== 'completed' && tx.status !== 'cancelled' && tx.status !== 'closed'))
+      ) {
         pRecordsCount++;
-        tPendingAmount += tx.amount;
+        tPendingAmount += amt;
         
         const dueDate = new Date(tx.dueDate);
         dueDate.setHours(0, 0, 0, 0);
         
-        if (dueDate < today) {
-          oAmount += tx.amount;
+        if (dueDate < today || tx.status === 'overdue') {
+          oAmount += amt;
           oCount++;
         }
-      } else if (tx.type === 'received' && tx.purpose?.startsWith('Settled: ')) {
+      } else if (tx.type === 'received' && (tx.purpose?.startsWith('Settled: ') || (tx as any).settledFromPending)) {
         const rxDate = new Date(tx.date);
         if (rxDate.getMonth() === currentMonth && rxDate.getFullYear() === currentYear) {
-          cThisMonthAmount += tx.amount;
+          cThisMonthAmount += amt;
           cThisMonthCount++;
         }
       }
@@ -643,12 +647,12 @@ export default function PendingPayments() {
       >
         <header className="mb-6">
           <div className="flex items-center gap-2 text-xs font-semibold text-[#ffd60a] uppercase tracking-wider mb-1">
-            <span className="w-2 h-2 rounded-full bg-[#ffd60a]" /> Receivables Ledger
+            <span className="w-2 h-2 rounded-full bg-[#ffd60a]" /> Due Money Ledger
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
-            Pending Receivables
+            Due Money
           </h1>
-          <p className="text-[#86868b] mt-1 text-sm font-medium">Automate reminder cadences, track overdue penalty fees, and settle receivables with ease.</p>
+          <p className="text-[#86868b] mt-1 text-sm font-medium">Track who owes you money, send friendly reminders, and record payments easily.</p>
         </header>
 
       {/* Apple Metrics 4-Grid */}

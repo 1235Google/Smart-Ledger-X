@@ -211,7 +211,7 @@ export default function Analytics() {
         </div>
         
         {/* Apple Segmented Pill Filter */}
-        <div className="flex items-center p-1 bg-white/[0.05] border border-white/[0.08] rounded-full backdrop-blur-2xl self-start md:self-auto overflow-x-auto max-w-full">
+        <div className="flex items-center p-1 bg-[#1c1c1e] border border-white/[0.08] rounded-full self-start md:self-auto overflow-x-auto max-w-full shadow-sm">
           {[
             { id: 'today', label: 'Day' },
             { id: 'week', label: 'Week' },
@@ -224,9 +224,9 @@ export default function Analytics() {
               key={tab.id}
               onClick={() => setFilter(tab.id as DateFilter)}
               className={cn(
-                "px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-200 whitespace-nowrap",
+                "px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 whitespace-nowrap",
                 filter === tab.id
-                  ? "bg-white text-black shadow-md"
+                  ? "bg-[#0a84ff] text-white shadow-[0_2px_8px_rgba(10,132,255,0.3)]"
                   : "text-[#86868b] hover:text-white"
               )}
             >
@@ -237,8 +237,8 @@ export default function Analytics() {
       </header>
       
       {/* 1. Net Worth Tracker Glass Card */}
-      <div className="bg-[#12131a]/85 border border-white/[0.08] rounded-[28px] p-7 md:p-8 backdrop-blur-3xl shadow-2xl relative overflow-hidden">
-        <div className="pointer-events-none absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+      <div className="bg-[#171717] border border-white/[0.08] rounded-[22px] p-7 md:p-8 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] relative overflow-hidden">
+        <div className="pointer-events-none absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/15 to-transparent" />
         
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xs font-bold uppercase tracking-wider text-[#86868b]">Position Summary</h2>
@@ -276,7 +276,7 @@ export default function Analytics() {
       </div>
 
       {/* 2. Insights & Warnings */}
-      <div className="bg-[#12131a]/85 border border-white/[0.08] rounded-[28px] p-6 backdrop-blur-3xl shadow-xl">
+      <div className="bg-[#171717] border border-white/[0.08] rounded-[22px] p-6 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)]">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-[#bf5af2]/15 text-[#bf5af2]">
@@ -302,7 +302,7 @@ export default function Analytics() {
                   initial={{ opacity: 0, y: 8 }} 
                   animate={{ opacity: 1, y: 0 }} 
                   transition={{ delay: idx * 0.05 }}
-                  className="flex gap-3 items-start bg-white/[0.03] p-3.5 rounded-2xl border border-white/[0.05]"
+                  className="flex gap-3 items-start bg-[#1f1f1f] p-3.5 rounded-xl border border-white/[0.05]"
                 >
                   <span className="w-2 h-2 rounded-full bg-[#bf5af2] mt-1.5 flex-shrink-0" />
                   <span className="text-xs text-white/90 font-medium leading-relaxed">{i}</span>
@@ -317,7 +317,7 @@ export default function Analytics() {
 
       {/* 3. Financial Health & Forecast */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-[#12131a]/85 border border-white/[0.08] rounded-[28px] p-6 backdrop-blur-3xl shadow-xl flex items-center gap-6">
+        <div className="bg-[#171717] border border-white/[0.08] rounded-[22px] p-6 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] flex items-center gap-6">
             <div className={cn(
               "w-20 h-20 rounded-full border-4 flex items-center justify-center font-extrabold text-2xl shadow-inner shrink-0 font-tabular", 
               healthScore > 75 ? "border-[#30d158] bg-[#30d158]/10 text-[#30d158]" : 
@@ -333,7 +333,7 @@ export default function Analytics() {
             </div>
         </div>
 
-        <div className="bg-[#12131a]/85 border border-white/[0.08] rounded-[28px] p-6 backdrop-blur-3xl shadow-xl flex flex-col justify-between">
+        <div className="bg-[#171717] border border-white/[0.08] rounded-[22px] p-6 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] flex flex-col justify-between">
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-[#86868b]">30-Day Pro Forma Forecast</p>
               <p className="text-xs text-[#86868b] mt-0.5">Projected trajectory based on current collection velocity</p>
@@ -346,7 +346,7 @@ export default function Analytics() {
 
       {/* 4. Progressive Animated Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-[#12131a]/85 border border-white/[0.08] rounded-[28px] h-[400px] p-6 flex flex-col justify-between backdrop-blur-3xl shadow-xl">
+        <div className="bg-[#171717] border border-white/[0.08] rounded-[22px] h-[400px] p-6 flex flex-col justify-between shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)]">
           <h3 className="text-sm font-bold text-white">Cashflow Velocity (Inflow vs Outflow)</h3>
           <ResponsiveContainer width="100%" height="88%">
             <BarChart data={timelineData}>
@@ -360,7 +360,7 @@ export default function Analytics() {
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-[#12131a]/85 border border-white/[0.08] rounded-[28px] h-[400px] p-6 flex flex-col justify-between backdrop-blur-3xl shadow-xl">
+        <div className="bg-[#171717] border border-white/[0.08] rounded-[22px] h-[400px] p-6 flex flex-col justify-between shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)]">
           <h3 className="text-sm font-bold text-white">Expense Category Distribution</h3>
           <ResponsiveContainer width="100%" height="88%">
             <PieChart>

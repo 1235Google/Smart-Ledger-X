@@ -434,7 +434,7 @@ export default function ImportExport() {
                   <h2 className="text-2xl font-bold text-white">One-Click Complete Export</h2>
                 </div>
                 <p className="text-neutral-300 text-sm font-normal max-w-xl">
-                  Get a comprehensive ZIP archive containing your financial reports in PDF, all ledger transactions in Excel & CSV formats, and a full system backup JSON.
+                  Get a complete ZIP archive containing your financial reports in PDF, all ledger transactions in Excel & CSV formats, and a full system backup JSON.
                 </p>
               </div>
 

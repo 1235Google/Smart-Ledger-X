@@ -120,12 +120,8 @@ export default function VaultPage() {
   const totalReceived = store.transactions
     .filter(t => t.type === 'received')
     .reduce((sum, t) => sum + t.amount, 0);
-  
-  const totalSent = store.transactions
-    .filter(t => t.type === 'sent')
-    .reduce((sum, t) => sum + t.amount, 0);
 
-  const realBalance = store.startingBalance + totalReceived - totalSent;
+  const realBalance = store.startingBalance + totalReceived;
 
   const [vaultLoaded, setVaultLoaded] = useState(false);
   const [displayBalance, setDisplayBalance] = useState(0);
@@ -239,14 +235,14 @@ export default function VaultPage() {
   const monthlyIncome = store.transactions
     .filter(t => t.type === 'received' && t.date.startsWith(currentMonthPrefix))
     .reduce((sum, t) => sum + t.amount, 0);
-    
-  const monthlyExpenses = store.transactions
-    .filter(t => t.type === 'sent' && t.date.startsWith(currentMonthPrefix))
+
+  const monthlyPending = store.transactions
+    .filter(t => t.type === 'pending' && t.status === 'pending' && (t as any).dueDate?.startsWith(currentMonthPrefix))
     .reduce((sum, t) => sum + t.amount, 0);
     
-  const totalSavings = monthlyIncome - monthlyExpenses;
-  const savingsRatio = monthlyIncome > 0 ? totalSavings / monthlyIncome : 0;
-  const healthScore = Math.min(Math.max(Math.floor(savingsRatio * 100 + 50), 0), 100);
+  const totalSavings = monthlyIncome;
+  const savingsRatio = 1;
+  const healthScore = 100;
   const predictedNextMonth = realBalance + totalSavings;
 
   const last7Days = useMemo(() => {
@@ -265,17 +261,16 @@ export default function VaultPage() {
     return data.some(d => d > 0) ? data : [10, 20, 15, 30, 25, 40, 35];
   }, [store.transactions, last7Days]);
 
-  const expenseData = useMemo(() => {
+  const pendingData = useMemo(() => {
     const data = last7Days.map(date => 
-      store.transactions.filter(t => t.type === 'sent' && t.date === date).reduce((sum, t) => sum + t.amount, 0)
+      store.transactions.filter(t => t.type === 'pending' && t.status === 'pending' && (t as any).dueDate === date).reduce((sum, t) => sum + t.amount, 0)
     );
-    return data.some(d => d > 0) ? data : [30, 25, 35, 20, 15, 25, 10];
+    return data.some(d => d > 0) ? data : [8, 15, 12, 22, 18, 25, 20];
   }, [store.transactions, last7Days]);
 
   const savingsData = useMemo(() => {
-    const data = incomeData.map((inc, i) => Math.max(0, inc - expenseData[i]));
-    return data.some(d => d > 0) ? data : [10, 20, 30, 25, 40, 50, 60];
-  }, [incomeData, expenseData]);
+    return incomeData;
+  }, [incomeData]);
 
   const recentTransactions = [...store.transactions].sort((a, b) => {
     const dateA = a.type === 'pending' ? (a as any).dueDate : (a as any).date;
@@ -391,18 +386,18 @@ export default function VaultPage() {
               </div>
            </div>
            
-           {/* Expenses Card */}
+           {/* Pending Due Card */}
            <div className="bg-[#0c0d12]/90 backdrop-blur-xl border border-white/5 rounded-2xl p-5 flex flex-col justify-between overflow-hidden relative shadow-lg">
               <div className="flex items-center gap-2 mb-3 relative z-10">
-                 <TrendingDown size={16} className="text-red-400" />
-                 <span className="text-sm font-medium text-slate-300">Expenses</span>
+                 <TrendingDown size={16} className="text-amber-400" />
+                 <span className="text-sm font-medium text-slate-300">Pending Dues</span>
               </div>
               <div className="mb-6 relative z-10">
-                 <h3 className="text-3xl font-semibold text-white">₹{monthlyExpenses.toLocaleString()}</h3>
-                 <p className="text-xs text-slate-500 mt-1">This Month</p>
+                 <h3 className="text-3xl font-semibold text-white">₹{monthlyPending.toLocaleString()}</h3>
+                 <p className="text-xs text-slate-500 mt-1">Due This Month</p>
               </div>
               <div className="absolute bottom-0 left-0 right-0 h-16">
-                 <Sparkline color="#f87171" data={expenseData} />
+                 <Sparkline color="#fbbf24" data={pendingData} />
               </div>
            </div>
            
@@ -578,11 +573,9 @@ export default function VaultPage() {
                         <div className="flex items-center gap-4">
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                             t.type === 'received' ? 'bg-emerald-500/10 text-emerald-400' :
-                            t.type === 'sent' ? 'bg-red-500/10 text-red-400' :
                             'bg-amber-500/10 text-amber-400'
                           }`}>
                             {t.type === 'received' ? <TrendingUp size={18} /> :
-                             t.type === 'sent' ? <TrendingDown size={18} /> :
                              <Clock size={18} />}
                           </div>
                           <div>
@@ -595,10 +588,9 @@ export default function VaultPage() {
                         <div className="text-right">
                           <p className={`font-medium ${
                             t.type === 'received' ? 'text-emerald-400' :
-                            t.type === 'sent' ? 'text-red-400' :
                             'text-amber-400'
                           }`}>
-                            {t.type === 'received' ? '+' : t.type === 'sent' ? '-' : ''}
+                            {t.type === 'received' ? '+' : ''}
                             ₹{t.amount.toLocaleString()}
                           </p>
                           <p className="text-xs text-slate-500">

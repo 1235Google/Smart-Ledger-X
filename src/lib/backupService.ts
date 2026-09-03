@@ -288,7 +288,7 @@ export class BackupService {
       notifyProgress({
         stage: 'preparing',
         percentage: 38,
-        message: 'Generating cryptographic SHA-256 checksum...',
+        message: 'Generating secure SHA-256 checksum...',
       });
 
       const rawJsonPayload = JSON.stringify({
@@ -803,7 +803,7 @@ export class BackupService {
   }
 
   /**
-   * Restore application state with cryptographic integrity verification
+   * Restore application state with secure integrity verification
    */
   public static async restoreBackup(
     backupId: string,

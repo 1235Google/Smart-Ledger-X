@@ -66,13 +66,11 @@ export default function AdminReports() {
       .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
   }, [reportTransactions]);
 
-  const periodSent = React.useMemo(() => {
+  const periodPending = React.useMemo(() => {
     return reportTransactions
-      .filter((tx: any) => tx.type === 'sent' || tx.type === 'expense')
+      .filter((tx: any) => tx.type === 'pending')
       .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
   }, [reportTransactions]);
-
-  const periodNet = periodReceived - periodSent;
 
   const handleExportPDF = () => {
     showInfo('Generating Statement', `Preparing ${reportType.toUpperCase()} financial report statement...`);
@@ -169,19 +167,19 @@ export default function AdminReports() {
           </M3Card>
 
           <M3Card variant="filled" padding="md">
-            <span className="text-xs text-slate-400 font-medium">Period Disbursements</span>
-            <div className="text-2xl font-extrabold font-mono text-[#f2b8b5] mt-1">
-              ₹{periodSent.toLocaleString('en-IN')}
+            <span className="text-xs text-slate-400 font-medium">Period Receivables (Due)</span>
+            <div className="text-2xl font-extrabold font-mono text-[#ffe082] mt-1">
+              ₹{periodPending.toLocaleString('en-IN')}
             </div>
-            <div className="text-[11px] text-slate-400 mt-2">Active {reportType} vendor expenses</div>
+            <div className="text-[11px] text-slate-400 mt-2">Uncollected {reportType} receivables</div>
           </M3Card>
 
           <M3Card variant="filled" padding="md">
-            <span className="text-xs text-slate-400 font-medium">Net Period Flow</span>
-            <div className={cn('text-2xl font-extrabold font-mono mt-1', periodNet >= 0 ? 'text-[#6dd58c]' : 'text-[#f2b8b5]')}>
-              {periodNet >= 0 ? '+' : ''}₹{periodNet.toLocaleString('en-IN')}
+            <span className="text-xs text-slate-400 font-medium">Active Net Vault</span>
+            <div className="text-2xl font-extrabold font-mono text-[#6dd58c] mt-1">
+              ₹{currentBalance.toLocaleString('en-IN')}
             </div>
-            <div className="text-[11px] text-slate-400 mt-2">Current Total Balance: ₹{currentBalance.toLocaleString('en-IN')}</div>
+            <div className="text-[11px] text-slate-400 mt-2">Total settled ledger balance</div>
           </M3Card>
         </div>
 

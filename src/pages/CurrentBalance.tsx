@@ -1,9 +1,9 @@
 import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useStore } from '../context/StoreContext';
-import { ArrowDownLeft, Clock, Users, ArrowUpRight } from 'lucide-react';
+import { ArrowDownLeft, Clock, Users, ArrowUpRight, CheckCircle2, ChevronRight } from 'lucide-react';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import BalanceCard from '../components/BalanceCard';
 import GlassCard from '../components/ui/GlassCard';
 import CountUp from '../components/ui/CountUp';
@@ -21,26 +21,58 @@ export default function CurrentBalance() {
     retryFetchData
   } = useStore();
 
-  const { totalReceived, totalPending, totalSent, pendingCount, receivedCount } = useMemo(() => {
+  const navigate = useNavigate();
+
+  const {
+    totalReceived,
+    totalPending,
+    pendingCount,
+    receivedCount,
+    receivedPeopleCount,
+    pendingPeopleCount,
+    overduePendingCount
+  } = useMemo(() => {
     let tr = 0;
     let tp = 0;
-    let ts = 0;
     let pc = 0;
     let rc = 0;
-    transactions.forEach(tx => {
+    let oc = 0;
+    const receivedPeople = new Set<string>();
+    const pendingPeople = new Set<string>();
+    const today = new Date().toISOString().split('T')[0];
+
+    (transactions || []).forEach(tx => {
+      const amt = Number(tx.amount) || 0;
       if (tx.type === 'received') {
-        tr += tx.amount;
+        tr += amt;
         rc += 1;
-      }
-      if (tx.type === 'pending' && tx.status === 'pending') {
-        tp += tx.amount;
+        if (tx.personName?.trim()) {
+          receivedPeople.add(tx.personName.trim().toLowerCase());
+        }
+      } else if (
+        tx.type === 'pending' &&
+        (tx.status === 'pending' || tx.status === 'overdue' || (tx.status !== 'completed' && tx.status !== 'cancelled' && tx.status !== 'closed'))
+      ) {
+        tp += amt;
         pc += 1;
-      }
-      if (tx.type === 'sent') {
-        ts += tx.amount;
+        if (tx.personName?.trim()) {
+          pendingPeople.add(tx.personName.trim().toLowerCase());
+        }
+        if (tx.dueDate && tx.dueDate < today) {
+          oc += 1;
+        }
       }
     });
-    return { totalReceived: tr, totalPending: tp, totalSent: ts, pendingCount: pc, receivedCount: rc };
+
+    return {
+      totalReceived: tr,
+      totalPending: tp,
+      pendingCount: pc,
+      receivedCount: rc,
+      receivedPeopleCount: receivedPeople.size,
+      pendingPeopleCount: pendingPeople.size,
+      overduePendingCount: oc
+    };
   }, [transactions]);
 
   const recentTransactions = useMemo(() => {
@@ -91,34 +123,120 @@ export default function CurrentBalance() {
         currentBalance={currentBalance}
         startingBalance={startingBalance}
         totalReceived={totalReceived}
-        totalSent={totalSent}
       />
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-        <GlassCard delay={0.08} glowColor="rgba(16, 185, 129, 0.25)">
-          <div className="absolute top-0 right-0 p-6 opacity-20 group-hover:opacity-40 transition-opacity">
-            <ArrowDownLeft size={48} className="text-emerald-500" />
+      {/* Stats Grid with VisionOS Liquid Glass Styling */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
+        {/* Total Received Card */}
+        <GlassCard 
+          delay={0.08} 
+          glowColor="rgba(48, 209, 88, 0.25)"
+          className="p-6 md:p-7 relative select-none flex flex-col justify-between cursor-pointer group"
+          onClick={() => navigate('/received')}
+        >
+          {/* Top Specular Rim */}
+          <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
+
+          {/* Ambient Glow */}
+          <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#30d158]/10 rounded-full blur-2xl pointer-events-none group-hover:bg-[#30d158]/20 transition-all duration-500" />
+
+          <div>
+            <div className="flex items-start justify-between relative z-10 mb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#30d158]/15 border border-[#30d158]/30 flex items-center justify-center text-[#30d158] shadow-sm">
+                  <ArrowDownLeft size={20} />
+                </div>
+                <div>
+                  <span className="text-[#86868b] text-xs font-bold uppercase tracking-wider block">
+                    Total Received
+                  </span>
+                  <span className="text-[11px] text-[#30d158] font-semibold">
+                    Settled Inflows
+                  </span>
+                </div>
+              </div>
+              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#30d158]/15 text-[#30d158] border border-[#30d158]/25 shadow-sm flex items-center gap-1">
+                <CheckCircle2 size={12} /> {receivedCount} {receivedCount === 1 ? 'record' : 'records'}
+              </span>
+            </div>
+
+            <div className="text-3xl sm:text-4xl font-extrabold text-white font-tabular tracking-tight my-2 relative z-10">
+              <CountUp value={totalReceived} formatter={(v) => formatCurrency(v)} />
+            </div>
           </div>
-          <div className="text-slate-400 text-xs font-bold mb-1 uppercase tracking-wider">Total Received</div>
-          <div className="text-3xl font-extrabold text-white mb-4">
-            <CountUp value={totalReceived} formatter={(v) => formatCurrency(v)} />
-          </div>
-          <div className="flex items-center gap-2 text-xs text-slate-400 bg-black/30 w-fit px-3 py-1.5 rounded-xl border border-white/5">
-            <Users size={14} className="text-emerald-400" /> Received from {receivedCount} {receivedCount === 1 ? 'person' : 'people'}
+
+          <div className="flex items-center justify-between text-xs pt-3 border-t border-white/[0.06] mt-4 relative z-10">
+            <div className="flex items-center gap-2 text-[#86868b]">
+              <Users size={14} className="text-[#30d158]" />
+              <span>
+                {receivedPeopleCount > 0 
+                  ? `Received from ${receivedPeopleCount} ${receivedPeopleCount === 1 ? 'person' : 'people'}`
+                  : 'Received from 0 people'}
+              </span>
+            </div>
+            <span className="text-xs text-[#30d158] font-bold group-hover:translate-x-1 transition-transform flex items-center gap-1">
+              View History <ChevronRight size={13} />
+            </span>
           </div>
         </GlassCard>
 
-        <GlassCard delay={0.16} glowColor="rgba(245, 158, 11, 0.25)">
-          <div className="absolute top-0 right-0 p-6 opacity-20 group-hover:opacity-40 transition-opacity">
-            <Clock size={48} className="text-amber-500" />
+        {/* Total Pending Card */}
+        <GlassCard 
+          delay={0.16} 
+          glowColor="rgba(255, 214, 10, 0.25)"
+          className="p-6 md:p-7 relative select-none flex flex-col justify-between cursor-pointer group"
+          onClick={() => navigate('/pending')}
+        >
+          {/* Top Specular Rim */}
+          <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
+
+          {/* Ambient Glow */}
+          <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#ffd60a]/10 rounded-full blur-2xl pointer-events-none group-hover:bg-[#ffd60a]/20 transition-all duration-500" />
+
+          <div>
+            <div className="flex items-start justify-between relative z-10 mb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#ffd60a]/15 border border-[#ffd60a]/30 flex items-center justify-center text-[#ffd60a] shadow-sm">
+                  <Clock size={20} />
+                </div>
+                <div>
+                  <span className="text-[#86868b] text-xs font-bold uppercase tracking-wider block">
+                    Total Pending
+                  </span>
+                  <span className="text-[11px] text-[#ffd60a] font-semibold">
+                    Outstanding Receivables
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {overduePendingCount > 0 && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#ff453a]/20 text-[#ff453a] border border-[#ff453a]/30 animate-pulse">
+                    {overduePendingCount} overdue
+                  </span>
+                )}
+                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#ffd60a]/15 text-[#ffd60a] border border-[#ffd60a]/25 shadow-sm">
+                  {pendingCount} {pendingCount === 1 ? 'due' : 'dues'}
+                </span>
+              </div>
+            </div>
+
+            <div className="text-3xl sm:text-4xl font-extrabold text-[#ffd60a] font-tabular tracking-tight my-2 relative z-10">
+              <CountUp value={totalPending} formatter={(v) => formatCurrency(v)} />
+            </div>
           </div>
-          <div className="text-slate-400 text-xs font-bold mb-1 uppercase tracking-wider">Total Pending</div>
-          <div className="text-3xl font-extrabold text-white mb-4">
-            <CountUp value={totalPending} formatter={(v) => formatCurrency(v)} />
-          </div>
-          <div className="flex items-center gap-2 text-xs text-slate-400 bg-black/30 w-fit px-3 py-1.5 rounded-xl border border-white/5">
-            <Users size={14} className="text-amber-400" /> Pending from {pendingCount} {pendingCount === 1 ? 'person' : 'people'}
+
+          <div className="flex items-center justify-between text-xs pt-3 border-t border-white/[0.06] mt-4 relative z-10">
+            <div className="flex items-center gap-2 text-[#86868b]">
+              <Users size={14} className="text-[#ffd60a]" />
+              <span>
+                {pendingPeopleCount > 0 
+                  ? `Pending from ${pendingPeopleCount} ${pendingPeopleCount === 1 ? 'person' : 'people'}`
+                  : 'Pending from 0 people'}
+              </span>
+            </div>
+            <span className="text-xs text-[#0a84ff] font-bold group-hover:translate-x-1 transition-transform flex items-center gap-1">
+              Collect Now <ChevronRight size={13} />
+            </span>
           </div>
         </GlassCard>
       </div>

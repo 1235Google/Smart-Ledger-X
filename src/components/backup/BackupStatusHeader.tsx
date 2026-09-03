@@ -46,7 +46,7 @@ export default function BackupStatusHeader({
         </div>
 
         <p className="text-slate-400 text-sm max-w-2xl leading-relaxed">
-          Zero-knowledge cryptographic snapshot engine. Financial records and ledgers are compressed, client-side encrypted, and verified with SHA-256 checksums before syncing to Cloud Storage.
+          Highly secure backup system. Your financial records are compressed, encrypted on your device, and checked for safety before saving to Cloud Storage.
         </p>
 
         {/* Live system pills */}

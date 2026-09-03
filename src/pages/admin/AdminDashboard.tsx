@@ -80,9 +80,9 @@ export default function AdminDashboard() {
   // Chart Data: 7-Day Trend
   const chartData = useMemo(() => {
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const summary: Record<string, { day: string; received: number; sent: number }> = {};
+    const summary: Record<string, { day: string; received: number }> = {};
     days.forEach((d) => {
-      summary[d] = { day: d, received: 0, sent: 0 };
+      summary[d] = { day: d, received: 0 };
     });
 
     safeTransactions.forEach((tx: any) => {
@@ -94,8 +94,6 @@ export default function AdminDashboard() {
           if (summary[dayName]) {
             if (tx.type === 'received' || tx.type === 'income') {
               summary[dayName].received += Number(tx.amount) || 0;
-            } else if (tx.type === 'sent' || tx.type === 'expense') {
-              summary[dayName].sent += Number(tx.amount) || 0;
             }
           }
         }
@@ -294,20 +292,16 @@ export default function AdminDashboard() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
               <h2 className={cn('text-lg font-bold tracking-tight', isDark ? 'text-white' : 'text-[#1f1f1f]')}>
-                Financial Cash Flow Trends
+                Financial Inflow Trends
               </h2>
               <p className={cn('text-xs mt-0.5', isDark ? 'text-[#8e918f]' : 'text-[#5f6368]')}>
-                Weekly comparison of money received (inflow) vs money sent (outflow)
+                Weekly volume of money received and customer settlements
               </p>
             </div>
             <div className="flex items-center gap-4 text-xs font-semibold">
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-[#1e8e3e] dark:bg-[#6dd58c]" />
-                <span>Inflow</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-[#0b57d0] dark:bg-[#a8c7fa]" />
-                <span>Outflow</span>
+                <span>Received Inflow</span>
               </div>
             </div>
           </div>
@@ -349,15 +343,6 @@ export default function AdminDashboard() {
                   fillOpacity={1}
                   fill="url(#colorRec)"
                   name="Money Received"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="sent"
-                  stroke={isDark ? '#a8c7fa' : '#0b57d0'}
-                  strokeWidth={3}
-                  fillOpacity={1}
-                  fill="url(#colorSent)"
-                  name="Money Sent"
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -421,7 +406,7 @@ export default function AdminDashboard() {
         <div className="lg:col-span-2">
           <M3DataTable
             title="Recent Ledger Transactions"
-            subtitle="Latest settled customer payments and expense disbursements"
+            subtitle="Latest completed customer payments and money sent"
             data={safeTransactions.slice(0, 10)}
             columns={recentColumns}
             keyExtractor={(item) => item.id || Math.random()}

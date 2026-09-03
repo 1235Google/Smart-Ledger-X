@@ -30,7 +30,7 @@ interface HistoryItem {
 }
 
 export default function Calculator() {
-  const { addReceivedMoney, addSentMoney, addPendingMoney, setStartingBalance, startingBalance } = useStore();
+  const { addReceivedMoney, addPendingMoney, setStartingBalance, startingBalance } = useStore();
   
   // Calculator State
   const [expression, setExpression] = useState('');
@@ -305,25 +305,16 @@ export default function Calculator() {
   }, [handleNumber, handleOperator, calculateResult, handleDelete, handleClear, handlePercentage, displayValue, history, selectedHistoryIndex]);
 
   // Smart Ledger Integrations
-  const handleAddTransaction = (type: 'received' | 'sent') => {
+  const handleAddIncome = () => {
     const amount = parseFloat(displayValue);
     if (isNaN(amount) || amount <= 0) return;
 
-    if (type === 'received') {
-      addReceivedMoney({
-        amount,
-        personName: 'Manual Calculator Entry',
-        date: new Date().toISOString().split('T')[0],
-        purpose: 'Calculator Calculation'
-      });
-    } else {
-      addSentMoney({
-        amount,
-        personName: 'Manual Calculator Entry',
-        date: new Date().toISOString().split('T')[0],
-        purpose: 'Calculator Calculation'
-      });
-    }
+    addReceivedMoney({
+      amount,
+      personName: 'Manual Calculator Entry',
+      date: new Date().toISOString().split('T')[0],
+      purpose: 'Calculator Calculation'
+    });
     setShowActions(false);
   };
 
@@ -388,11 +379,8 @@ export default function Calculator() {
               className="px-6 pb-4 overflow-hidden border-b border-white/5 bg-white/5"
             >
               <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                <button onClick={() => handleAddTransaction('received')} className="flex items-center gap-2 whitespace-nowrap px-4 py-2 bg-emerald-500/10 text-emerald-400 rounded-xl hover:bg-emerald-500/20 transition-colors text-sm font-medium">
+                <button onClick={handleAddIncome} className="flex items-center gap-2 whitespace-nowrap px-4 py-2 bg-emerald-500/10 text-emerald-400 rounded-xl hover:bg-emerald-500/20 transition-colors text-sm font-medium">
                   <Plus size={16} /> Add Income
-                </button>
-                <button onClick={() => handleAddTransaction('sent')} className="flex items-center gap-2 whitespace-nowrap px-4 py-2 bg-red-500/10 text-red-400 rounded-xl hover:bg-red-500/20 transition-colors text-sm font-medium">
-                  <Minus size={16} /> Add Expense
                 </button>
                 <button onClick={() => handleAddPendingPayment()} className="flex items-center gap-2 whitespace-nowrap px-4 py-2 bg-amber-500/10 text-amber-400 rounded-xl hover:bg-amber-500/20 transition-colors text-sm font-medium">
                   <Clock size={16} /> Pending Payment

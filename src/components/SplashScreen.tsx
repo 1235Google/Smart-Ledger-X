@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Wallet } from 'lucide-react';
+import { Wallet, Sparkles } from 'lucide-react';
 
 export default function SplashScreen({ onComplete }: { onComplete: () => void }) {
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
-    // Hide splash screen after 1.8 seconds
+    // Cinematic launch duration
     const timer = setTimeout(() => {
       setIsVisible(false);
-      setTimeout(onComplete, 600); // Wait for exit animation
+      setTimeout(onComplete, 550); // Wait for exit animation
     }, 1800);
     return () => clearTimeout(timer);
   }, [onComplete]);
@@ -20,66 +20,81 @@ export default function SplashScreen({ onComplete }: { onComplete: () => void })
         <motion.div
           key="splash"
           initial={{ opacity: 1 }}
-          exit={{ opacity: 0, scale: 1.05 }}
-          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          className="fixed inset-0 z-[9999] bg-[#05060a] flex items-center justify-center overflow-hidden"
+          exit={{ opacity: 0, scale: 1.04, filter: 'blur(10px)' }}
+          transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+          className="fixed inset-0 z-[9999] bg-[#000000] flex items-center justify-center overflow-hidden select-none"
         >
-          {/* Ambient Glows */}
+          {/* Dynamic VisionOS Ambient Orbs */}
           <motion.div 
-            initial={{ opacity: 0, scale: 0.5 }}
-            animate={{ opacity: 1, scale: 1 }}
+            initial={{ opacity: 0, scale: 0.7 }}
+            animate={{ opacity: 0.4, scale: 1 }}
             transition={{ duration: 1.2, ease: 'easeOut' }}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[40vw] h-[40vw] bg-blue-600/20 blur-[120px] rounded-full mix-blend-screen"
-          />
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.5 }}
-            animate={{ opacity: 1, scale: 1.2 }}
-            transition={{ duration: 1.5, ease: 'easeOut', delay: 0.2 }}
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[30vw] h-[30vw] bg-indigo-500/15 blur-[100px] rounded-full mix-blend-screen"
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[50vw] h-[50vw] max-w-[600px] max-h-[600px] bg-gradient-to-tr from-[#0a84ff]/30 via-[#bf5af2]/20 to-[#64d2ff]/30 blur-[130px] rounded-full pointer-events-none"
           />
 
           <div className="relative z-10 flex flex-col items-center">
-            {/* Animated Logo */}
+            {/* Liquid Glass Apple VisionOS Shield Emblem */}
             <motion.div
-              initial={{ scale: 0.8, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
+              initial={{ scale: 0.8, opacity: 0, y: 25, filter: 'blur(8px)' }}
+              animate={{ scale: 1, opacity: 1, y: 0, filter: 'blur(0px)' }}
               transition={{ 
-                duration: 0.8, 
+                duration: 0.85, 
                 ease: [0.16, 1, 0.3, 1],
-                delay: 0.1 
+                delay: 0.05 
               }}
-              className="relative"
+              className="relative group"
             >
-              <div className="absolute -inset-4 bg-gradient-to-r from-blue-600 to-indigo-600 blur-2xl opacity-40 animate-pulse" />
-              <div className="relative w-20 h-20 bg-gradient-to-br from-[#0a0f1e] to-[#050814] border border-white/10 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.2)] flex items-center justify-center overflow-hidden">
-                {/* Inner glass shine */}
-                <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent transform -translate-x-full animate-[shimmer_2s_infinite]" />
-                <Wallet className="text-white w-10 h-10 drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]" />
+              {/* Outer Radiant Glow */}
+              <div className="absolute -inset-5 bg-gradient-to-r from-[#0a84ff]/40 via-[#5e5ce6]/40 to-[#bf5af2]/40 blur-2xl opacity-60 animate-pulse" style={{ animationDuration: '3s' }} />
+              
+              {/* Liquid Glass Container */}
+              <div className="relative w-24 h-24 vision-glass-elevated border border-white/25 rounded-[30px] shadow-[0_25px_60px_rgba(0,0,0,0.8),inset_0_1px_1px_rgba(255,255,255,0.4)] flex items-center justify-center overflow-hidden">
+                {/* Specular Highlight */}
+                <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/50 to-transparent" />
+                
+                {/* Inner glass light sweep */}
+                <motion.div 
+                  initial={{ x: '-100%' }}
+                  animate={{ x: '200%' }}
+                  transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent skew-x-12 pointer-events-none"
+                />
+
+                <Wallet className="text-white w-11 h-11 drop-shadow-[0_0_20px_rgba(10,132,255,0.7)] relative z-10" />
               </div>
             </motion.div>
 
-            {/* Brand Name */}
-            <motion.h1
-              initial={{ opacity: 0, y: 10, filter: 'blur(10px)' }}
+            {/* Brand Title Lockup */}
+            <motion.div
+              initial={{ opacity: 0, y: 15, filter: 'blur(6px)' }}
               animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-              transition={{ duration: 0.8, delay: 0.4, ease: 'easeOut' }}
-              className="mt-6 text-3xl font-bold tracking-tight bg-gradient-to-br from-white via-slate-200 to-slate-500 bg-clip-text text-transparent"
+              transition={{ duration: 0.7, delay: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              className="mt-7 text-center"
             >
-              SmartLedger
-            </motion.h1>
+              <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center justify-center gap-2">
+                <span>SmartLedger</span>
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#0a84ff] to-[#64d2ff]">
+                  X
+                </span>
+              </h1>
+              <p className="mt-1.5 text-xs font-semibold uppercase tracking-widest text-[#86868b] flex items-center justify-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#30d158] shadow-[0_0_8px_#30d158]" />
+                VisionOS Financial Engine
+              </p>
+            </motion.div>
 
-            {/* Minimal Progress Bar */}
+            {/* Precision Liquid Progress Capsule */}
             <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.6 }}
-              className="mt-8 w-48 h-[2px] bg-white/5 rounded-full overflow-hidden"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.5, duration: 0.4 }}
+              className="mt-8 w-44 h-1.5 bg-white/[0.08] p-0.5 rounded-full overflow-hidden border border-white/10 shadow-inner"
             >
               <motion.div
                 initial={{ width: "0%" }}
                 animate={{ width: "100%" }}
-                transition={{ duration: 1.2, ease: [0.85, 0, 0.15, 1], delay: 0.2 }}
-                className="h-full bg-gradient-to-r from-blue-500 to-indigo-400 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.8)]"
+                transition={{ duration: 1.15, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
+                className="h-full bg-gradient-to-r from-[#0a84ff] via-[#5e5ce6] to-[#64d2ff] rounded-full shadow-[0_0_12px_rgba(10,132,255,0.9)]"
               />
             </motion.div>
           </div>

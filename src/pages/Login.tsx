@@ -18,6 +18,7 @@ import {
   loginWithSupabaseOAuth 
 } from '../lib/supabaseAuth';
 import { isSupabaseConfigured } from '../lib/supabase';
+import { recordLoginActivity } from '../lib/securityService';
 import SyncStatusBadge from '../components/SyncStatusBadge';
 
 type AuthMode = 'signin' | 'signup' | 'forgot' | 'pin';
@@ -89,6 +90,13 @@ export default function Login() {
       const result = await loginWithGoogle();
       console.log('[Auth Action] Google Sign-In successful for user:', result?.user?.uid);
       if (result?.user) {
+        await recordLoginActivity(result.user.uid, {
+          method: 'Google',
+          status: 'Success',
+          email: result.user.email || '',
+          userName: result.user.displayName || '',
+          userAvatar: result.user.photoURL || ''
+        });
         console.log('[Route Navigation] Navigating to / (Dashboard)');
         navigate('/', { replace: true });
       }
@@ -99,6 +107,11 @@ export default function Login() {
       } else {
         const friendlyMsg = formatAuthError(err);
         triggerError(friendlyMsg);
+        recordLoginActivity('anonymous', {
+          method: 'Google',
+          status: 'Failed',
+          failureReason: friendlyMsg
+        });
       }
     } finally {
       setGoogleLoading(false);
@@ -170,12 +183,26 @@ export default function Login() {
           updateUserProfile({ fullName: fullName.trim() });
         }
         if (cred.user) {
+          await recordLoginActivity(cred.user.uid, {
+            method: 'Email',
+            status: 'Success',
+            email: cleanEmail,
+            userName: fullName.trim() || 'New User',
+          });
           console.log('[Route Navigation] Navigating to / (Dashboard)');
           navigate('/', { replace: true });
         }
       } catch (err: any) {
         console.error('[Auth Action Error] Registration failed:', err);
-        triggerError(formatAuthError(err));
+        const friendlyMsg = formatAuthError(err);
+        triggerError(friendlyMsg);
+        recordLoginActivity('anonymous', {
+          method: 'Email',
+          status: 'Failed',
+          email: cleanEmail,
+          userName: fullName.trim(),
+          failureReason: friendlyMsg
+        });
       } finally {
         setLoading(false);
       }
@@ -198,12 +225,26 @@ export default function Login() {
         }
 
         if (cred.user) {
+          await recordLoginActivity(cred.user.uid, {
+            method: 'Email',
+            status: 'Success',
+            email: cleanEmail,
+            userName: cred.user.displayName || '',
+            userAvatar: cred.user.photoURL || ''
+          });
           console.log('[Route Navigation] Navigating to / (Dashboard)');
           navigate('/', { replace: true });
         }
       } catch (err: any) {
         console.error('[Auth Action Error] Login failed:', err);
-        triggerError(formatAuthError(err));
+        const friendlyMsg = formatAuthError(err);
+        triggerError(friendlyMsg);
+        recordLoginActivity('anonymous', {
+          method: 'Email',
+          status: 'Failed',
+          email: cleanEmail,
+          failureReason: friendlyMsg
+        });
       } finally {
         setLoading(false);
       }
@@ -280,10 +321,10 @@ export default function Login() {
             x: shake ? [-8, 8, -8, 8, -4, 4, 0] : 0 
           }}
           transition={{ duration: shake ? 0.4 : 0.25 }}
-          className="bg-white/[0.04] backdrop-blur-2xl border border-white/10 p-8 rounded-[2rem] shadow-2xl relative overflow-hidden"
+          className="bg-[#171717] border border-white/[0.08] p-8 rounded-[24px] shadow-[0_4px_24px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] relative overflow-hidden"
         >
           {/* Top subtle sheen */}
-          <div className="pointer-events-none absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+          <div className="pointer-events-none absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/15 to-transparent" />
 
           {/* Header */}
           <div className="text-center mb-6">
@@ -293,7 +334,7 @@ export default function Login() {
               {authMode === 'forgot' && 'Reset Password'}
               {authMode === 'pin' && 'Enter Quick PIN'}
             </h1>
-            <p className="text-slate-400 text-sm mt-1.5">
+            <p className="text-[#86868b] text-sm mt-1.5 font-medium">
               {authMode === 'signin' && 'Sign in to synchronize your ledger across all devices'}
               {authMode === 'signup' && 'All your financial records safely stored in Cloud Firestore'}
               {authMode === 'forgot' && 'Enter your email to receive a recovery link'}
@@ -306,19 +347,19 @@ export default function Login() {
             <motion.div 
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-rose-500/10 border border-rose-500/25 text-rose-300 px-4 py-3 rounded-2xl mb-5 text-sm space-y-2"
+              className="bg-[#ff453a]/10 border border-[#ff453a]/25 text-[#ff453a] px-4 py-3 rounded-2xl mb-5 text-sm space-y-2"
             >
               <div className="flex items-start gap-2.5">
-                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                <span className="leading-relaxed">{error}</span>
+                <AlertCircle className="w-4 h-4 text-[#ff453a] shrink-0 mt-0.5" />
+                <span className="leading-relaxed text-xs">{error}</span>
               </div>
               
               {(error.includes('Authorized Domain') || error.includes('auth/internal-error') || error.includes('Configuration Error')) && (
-                <div className="pt-2 border-t border-rose-500/20 text-xs text-rose-200/80 space-y-1">
-                  <p className="font-semibold text-rose-200">Firebase Setup Checklist:</p>
-                  <ul className="list-disc list-inside space-y-0.5 text-[11px] text-slate-300">
-                    <li>Project ID: <code className="text-amber-300 bg-white/5 px-1 py-0.5 rounded">studio-3200340687-9f052</code></li>
-                    <li>Current Host: <code className="text-amber-300 bg-white/5 px-1 py-0.5 rounded">{typeof window !== 'undefined' ? window.location.hostname : 'current domain'}</code></li>
+                <div className="pt-2 border-t border-[#ff453a]/20 text-xs text-white/80 space-y-1">
+                  <p className="font-semibold text-[#ff453a]">Firebase Setup Checklist:</p>
+                  <ul className="list-disc list-inside space-y-0.5 text-[11px] text-[#86868b]">
+                    <li>Project ID: <code className="text-[#ffd60a] bg-white/5 px-1 py-0.5 rounded">studio-3200340687-9f052</code></li>
+                    <li>Current Host: <code className="text-[#ffd60a] bg-white/5 px-1 py-0.5 rounded">{typeof window !== 'undefined' ? window.location.hostname : 'current domain'}</code></li>
                     <li>Firebase Console → Authentication → Sign-in method → Enable <strong>Google</strong></li>
                     <li>Firebase Console → Authentication → Settings → Authorized domains → Add <strong>{typeof window !== 'undefined' ? window.location.hostname : 'domain'}</strong></li>
                   </ul>
@@ -331,24 +372,24 @@ export default function Login() {
             <motion.div 
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 px-4 py-3 rounded-2xl mb-5 text-sm flex items-start gap-2.5"
+              className="bg-[#30d158]/10 border border-[#30d158]/25 text-[#30d158] px-4 py-3 rounded-2xl mb-5 text-sm flex items-start gap-2.5"
             >
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <CheckCircle2 className="w-4 h-4 text-[#30d158] shrink-0 mt-0.5" />
               <span>{successMsg}</span>
             </motion.div>
           )}
 
           {/* Mode Switchers */}
           {authMode !== 'pin' && authMode !== 'forgot' && (
-            <div className="grid grid-cols-2 gap-1.5 p-1 bg-white/5 border border-white/10 rounded-2xl mb-6">
+            <div className="grid grid-cols-2 gap-1 p-1 bg-[#1c1c1e] border border-white/[0.08] rounded-full mb-6 shadow-sm">
               <button
                 type="button"
                 onClick={() => { setAuthMode('signin'); setError(''); }}
                 className={cn(
-                  'py-2 text-sm font-semibold rounded-xl transition-all',
+                  'py-2 text-xs font-semibold rounded-full transition-all',
                   authMode === 'signin'
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                    : 'text-slate-400 hover:text-white'
+                    ? 'bg-[#0a84ff] text-white shadow-[0_2px_8px_rgba(10,132,255,0.3)]'
+                    : 'text-[#86868b] hover:text-white'
                 )}
               >
                 Sign In
@@ -357,10 +398,10 @@ export default function Login() {
                 type="button"
                 onClick={() => { setAuthMode('signup'); setError(''); }}
                 className={cn(
-                  'py-2 text-sm font-semibold rounded-xl transition-all',
+                  'py-2 text-xs font-semibold rounded-full transition-all',
                   authMode === 'signup'
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                    : 'text-slate-400 hover:text-white'
+                    ? 'bg-[#0a84ff] text-white shadow-[0_2px_8px_rgba(10,132,255,0.3)]'
+                    : 'text-[#86868b] hover:text-white'
                 )}
               >
                 Sign Up
@@ -375,7 +416,7 @@ export default function Login() {
                 type="button"
                 disabled={googleLoading || loading}
                 onClick={handleGoogleSignIn}
-                className="w-full flex items-center justify-center gap-3 bg-white text-neutral-900 hover:bg-neutral-100 font-semibold py-3 px-4 rounded-2xl transition-all shadow-lg hover:shadow-white/20 active:scale-[0.98] disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-3 bg-white text-black hover:bg-neutral-100 font-semibold py-3 px-4 rounded-full transition-all shadow-md active:scale-[0.98] disabled:opacity-50 text-sm"
               >
                 {googleLoading ? (
                   <div className="flex items-center gap-2">
@@ -408,9 +449,9 @@ export default function Login() {
               </button>
 
               <div className="flex items-center gap-3">
-                <div className="flex-1 h-[1px] bg-white/10" />
-                <span className="text-xs text-slate-400 uppercase tracking-widest font-mono">Or with email</span>
-                <div className="flex-1 h-[1px] bg-white/10" />
+                <div className="flex-1 h-[1px] bg-white/[0.08]" />
+                <span className="text-xs text-[#86868b] uppercase tracking-widest font-mono">Or with email</span>
+                <div className="flex-1 h-[1px] bg-white/[0.08]" />
               </div>
             </div>
           )}
@@ -436,8 +477,8 @@ export default function Login() {
                     onChange={(e) => handlePinChange(i, e.target.value)}
                     onKeyDown={(e) => handlePinKeyDown(i, e)}
                     className={cn(
-                      'w-14 h-16 bg-white/5 border rounded-2xl text-center text-2xl text-white font-mono focus:outline-none transition-all',
-                      digit ? 'border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.3)]' : 'border-white/10 focus:border-blue-500'
+                      'w-14 h-16 bg-[#1f1f1f] border rounded-2xl text-center text-2xl text-white font-mono focus:outline-none transition-all',
+                      digit ? 'border-[#0a84ff] shadow-[0_0_15px_rgba(10,132,255,0.3)]' : 'border-white/[0.08] focus:border-[#0a84ff]'
                     )}
                   />
                 ))}
@@ -447,7 +488,7 @@ export default function Login() {
                 type="button"
                 disabled={loading || pin.some((p) => p === '')}
                 onClick={() => handlePinSubmit(pin.join(''))}
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white rounded-2xl py-3.5 font-semibold transition-all shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2"
+                className="w-full bg-[#0a84ff] hover:bg-[#0a84ff]/90 disabled:opacity-50 text-white rounded-full py-3.5 font-semibold transition-all shadow-[0_4px_16px_rgba(10,132,255,0.3)] flex items-center justify-center gap-2 text-sm"
               >
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Unlock Wallet'}
               </button>
@@ -456,7 +497,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => { setAuthMode('signin'); setError(''); }}
-                  className="text-xs text-blue-400 hover:text-blue-300 font-medium transition-colors"
+                  className="text-xs text-[#0a84ff] hover:underline font-medium transition-colors"
                 >
                   Switch to Cloud Account Login
                 </button>
@@ -467,31 +508,31 @@ export default function Login() {
             <form onSubmit={handleEmailAuth} className="space-y-4">
               {authMode === 'signup' && (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Full Name</label>
+                  <label className="block text-xs font-semibold text-white/90 mb-1.5">Full Name</label>
                   <div className="relative">
-                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#86868b]" />
                     <input
                       type="text"
                       placeholder="John Doe"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                      className="w-full bg-[#1f1f1f] border border-white/[0.08] rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-[#86868b] focus:outline-none focus:border-[#0a84ff] focus:ring-2 focus:ring-[#0a84ff]/25 transition-all"
                     />
                   </div>
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Email Address</label>
+                <label className="block text-xs font-semibold text-white/90 mb-1.5">Email Address</label>
                 <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#86868b]" />
                   <input
                     type="email"
                     required
                     placeholder="user@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                    className="w-full bg-[#1f1f1f] border border-white/[0.08] rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-[#86868b] focus:outline-none focus:border-[#0a84ff] focus:ring-2 focus:ring-[#0a84ff]/25 transition-all"
                   />
                 </div>
               </div>
@@ -499,26 +540,26 @@ export default function Login() {
               {authMode !== 'forgot' && (
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
-                    <label className="text-xs font-semibold text-slate-300">Password</label>
+                    <label className="text-xs font-semibold text-white/90">Password</label>
                     {authMode === 'signin' && (
                       <button
                         type="button"
                         onClick={() => { setAuthMode('forgot'); setError(''); }}
-                        className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                        className="text-xs text-[#0a84ff] hover:underline transition-colors"
                       >
                         Forgot password?
                       </button>
                     )}
                   </div>
                   <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#86868b]" />
                     <input
                       type="password"
                       required
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                      className="w-full bg-[#1f1f1f] border border-white/[0.08] rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-[#86868b] focus:outline-none focus:border-[#0a84ff] focus:ring-2 focus:ring-[#0a84ff]/25 transition-all"
                     />
                   </div>
                 </div>
@@ -526,16 +567,16 @@ export default function Login() {
 
               {authMode === 'signup' && (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Confirm Password</label>
+                  <label className="block text-xs font-semibold text-white/90 mb-1.5">Confirm Password</label>
                   <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#86868b]" />
                     <input
                       type="password"
                       required
                       placeholder="••••••••"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                      className="w-full bg-[#1f1f1f] border border-white/[0.08] rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-[#86868b] focus:outline-none focus:border-[#0a84ff] focus:ring-2 focus:ring-[#0a84ff]/25 transition-all"
                     />
                   </div>
                 </div>
@@ -544,7 +585,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={loading || googleLoading}
-                className="w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-3.5 px-4 rounded-2xl transition-all shadow-lg shadow-blue-500/25 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 mt-2"
+                className="w-full bg-[#0a84ff] hover:bg-[#0a84ff]/90 text-white font-semibold py-3.5 px-4 rounded-full transition-all shadow-[0_4px_16px_rgba(10,132,255,0.3)] active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 mt-2 text-sm"
               >
                 {loading ? (
                   <div className="flex items-center gap-2">
@@ -572,7 +613,7 @@ export default function Login() {
                   <button
                     type="button"
                     onClick={() => { setAuthMode('signin'); setError(''); }}
-                    className="text-xs text-slate-400 hover:text-white transition-colors"
+                    className="text-xs text-[#86868b] hover:text-white transition-colors"
                   >
                     Back to Sign In
                   </button>
@@ -583,15 +624,15 @@ export default function Login() {
 
           {/* Bottom PIN fallback toggle */}
           {authMode !== 'pin' && (
-            <div className="mt-6 pt-5 border-t border-white/10 flex items-center justify-between text-xs text-slate-400">
-              <span className="flex items-center gap-1.5 text-slate-400">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <div className="mt-6 pt-5 border-t border-white/[0.08] flex items-center justify-between text-xs text-[#86868b]">
+              <span className="flex items-center gap-1.5 text-[#86868b]">
+                <ShieldCheck className="w-3.5 h-3.5 text-[#30d158]" />
                 End-to-End Encrypted Cloud Sync
               </span>
               <button
                 type="button"
                 onClick={() => { setAuthMode('pin'); setError(''); }}
-                className="text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1 transition-colors"
+                className="text-[#0a84ff] hover:underline font-semibold flex items-center gap-1 transition-colors"
               >
                 <KeyRound className="w-3.5 h-3.5" />
                 Quick PIN

@@ -84,7 +84,7 @@ export default function BackupHistoryList({
             </span>
           </h2>
           <p className="text-slate-400 text-xs mt-0.5">
-            Immutable cryptographic cloud backups. Verified and point-in-time restorable.
+            Secure cloud backups. Fully verified and easy to restore at any time.
           </p>
         </div>
 

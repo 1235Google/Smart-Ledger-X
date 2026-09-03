@@ -37,7 +37,7 @@ export default function Profile() {
   const activeCustomersList = customers ? customers.filter(c => transactions?.some(t => t.personName === c.name)) : [];
   const activeCustomers = activeCustomersList.length;
   const totalReceived = transactions ? transactions.filter(t => t.type === 'received').reduce((sum, t) => sum + (Number(t.amount) || 0), 0) : 0;
-  const totalPending = transactions ? transactions.filter(t => t.type === 'pending' && t.status === 'pending').reduce((sum, t) => sum + (Number(t.amount) || 0), 0) : 0;
+  const totalPending = transactions ? transactions.filter(t => t.type === 'pending' && (t.status === 'pending' || t.status === 'overdue' || (t.status !== 'completed' && t.status !== 'cancelled' && t.status !== 'closed'))).reduce((sum, t) => sum + (Number(t.amount) || 0), 0) : 0;
   const totalPendingCreated = transactions ? transactions.filter(t => t.type === 'pending').reduce((sum, t) => sum + (Number(t.amount) || 0), 0) : 0;
   const recoveredPayments = transactions ? transactions.filter(t => t.type === 'received' && t.purpose?.includes('Settled')).reduce((sum, t) => sum + (Number(t.amount) || 0), 0) : 0;
 

@@ -337,11 +337,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
         try {
           // Non-blocking background migration, profile sync, and security audit
-          registerOrUpdateDevice(user.uid);
+          registerOrUpdateDevice(user.uid, {
+            email: user.email || '',
+            userName: user.displayName || '',
+            userAvatar: user.photoURL || ''
+          });
           recordLoginActivity(user.uid, {
             method: user.providerData?.[0]?.providerId === 'google.com' ? 'Google' : 'Email',
             status: 'Success',
-            email: user.email || ''
+            email: user.email || '',
+            userName: user.displayName || '',
+            userAvatar: user.photoURL || ''
           });
           
           Promise.allSettled([
@@ -472,13 +478,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       try {
         localStorage.setItem('smartledger_authenticated', 'true');
       } catch (e) {}
-      if (currentUser?.uid) {
-        recordLoginActivity(currentUser.uid, {
-          method: 'PIN',
-          status: 'Success',
-          email: currentUser.email || ''
-        });
-      }
+      recordLoginActivity(currentUser?.uid || 'local_user', {
+        method: 'PIN',
+        status: 'Success',
+        email: currentUser?.email || state.userProfile?.email || '',
+        userName: currentUser?.displayName || state.userProfile?.fullName || '',
+        userAvatar: currentUser?.photoURL || state.userProfile?.profilePhoto || ''
+      });
       createNotification({
         title: 'Account Unlocked',
         message: 'Successfully authenticated session with SmartLedger',
@@ -486,6 +492,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       });
       return true;
     }
+
+    // Record failed PIN attempt for live security center audit
+    recordLoginActivity(currentUser?.uid || 'local_user', {
+      method: 'PIN',
+      status: 'Failed',
+      email: currentUser?.email || state.userProfile?.email || '',
+      userName: currentUser?.displayName || state.userProfile?.fullName || '',
+      failureReason: 'Invalid PIN entered'
+    });
     return false;
   };
 
@@ -608,8 +623,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (configuredPin) {
       if (verifyPin(pin, configuredPin)) {
         setIsLocked(false);
+        recordLoginActivity(currentUser?.uid || 'local_user', {
+          method: 'PIN',
+          status: 'Success',
+          email: currentUser?.email || state.userProfile?.email || '',
+          userName: currentUser?.displayName || state.userProfile?.fullName || '',
+          userAvatar: currentUser?.photoURL || state.userProfile?.profilePhoto || ''
+        });
         return true;
       }
+      recordLoginActivity(currentUser?.uid || 'local_user', {
+        method: 'PIN',
+        status: 'Failed',
+        email: currentUser?.email || state.userProfile?.email || '',
+        userName: currentUser?.displayName || state.userProfile?.fullName || '',
+        failureReason: 'Incorrect PIN entered on lock screen'
+      });
       return false;
     } else {
       setIsLocked(false);
@@ -1007,25 +1036,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const addSentMoney = (entry: Omit<SentMoney, 'id' | 'type'>) => {
-    const newTx: SentMoney = {
-      ...entry,
-      id: crypto.randomUUID(),
-      type: 'sent',
-    };
-    setState(prev => ({ ...prev, transactions: [newTx, ...prev.transactions] }));
-    createNotification({
-      title: 'Expense Added',
-      message: `Sent ₹${Number(entry.amount).toLocaleString()} to ${entry.personName}`,
-      type: 'ledger_expense_added',
-      referenceId: newTx.id
-    });
-    createNotification({
-      title: 'New Transaction Added',
-      message: `Added expense entry of ₹${Number(entry.amount).toLocaleString()}`,
-      type: 'ledger_transaction_added',
-      referenceId: newTx.id
-    });
+  const addSentMoney = (_entry?: any) => {
+    // Deprecated: Money out functionality removed from project
   };
 
   const addPendingMoney = (entry: Omit<PendingMoney, 'id' | 'type' | 'status' | 'nextReminderDate' | 'reminderStatus'>) => {
@@ -1321,12 +1333,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const receivedTransactions = state.transactions.filter((t): t is ReceivedMoney => t.type === 'received');
   const sentTransactions = state.transactions.filter((t): t is SentMoney => t.type === 'sent');
-  const activePendingTransactions = state.transactions.filter((t): t is PendingMoney => t.type === 'pending' && t.status === 'pending');
+  const activePendingTransactions = state.transactions.filter((t): t is PendingMoney => 
+    t.type === 'pending' && (t.status === 'pending' || t.status === 'overdue' || (t.status !== 'completed' && t.status !== 'cancelled' && t.status !== 'closed'))
+  );
 
-  const totalReceived = receivedTransactions.reduce((sum, tx) => sum + Number(tx.amount), 0);
-  const totalSent = sentTransactions.reduce((sum, tx) => sum + Number(tx.amount), 0);
-  const totalPending = activePendingTransactions.reduce((sum, tx) => sum + Number(tx.amount), 0);
-  const currentBalance = Number(state.startingBalance) + totalReceived - totalSent;
+  const totalReceived = receivedTransactions.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+  const totalSent = 0;
+  const totalPending = activePendingTransactions.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+  const currentBalance = (Number(state.startingBalance) || 0) + totalReceived;
 
   return (
     <StoreContext.Provider value={{

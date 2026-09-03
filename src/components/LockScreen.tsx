@@ -22,6 +22,7 @@ import { cn, formatDate } from '../lib/utils';
 import { startAuthentication } from '@simplewebauthn/browser';
 import { createNotification } from '../lib/notificationService';
 import CryptoJS from 'crypto-js';
+import { recordLoginActivity } from '../lib/securityService';
 
 interface LockScreenProps {
   onUnlock: () => void;
@@ -32,7 +33,8 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     securitySettings, 
     updateSecuritySettings, 
     unlockApp,
-    userProfile 
+    userProfile,
+    currentUser
   } = useStore();
 
   const [isUnlocking, setIsUnlocking] = useState(false);
@@ -167,6 +169,13 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
           d.id === matchedDevice.id ? { ...d, lastUsedAt: new Date().toISOString() } : d
         );
         updateSecuritySettings({ registeredDevices: updatedDevices });
+        recordLoginActivity(currentUser?.uid || 'local_user', {
+          method: 'Biometric',
+          status: 'Success',
+          email: currentUser?.email || userProfile?.email || '',
+          userName: currentUser?.displayName || userProfile?.fullName || '',
+          userAvatar: currentUser?.photoURL || userProfile?.profilePhoto || ''
+        });
         setIsUnlocking(true);
         triggerHaptic();
         setTimeout(onUnlock, 400);
@@ -177,6 +186,14 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
       console.warn('Biometric auth failed:', err);
       setBiometricError(true);
       setErrorMsg(err.message || 'Authentication failed');
+      recordLoginActivity(currentUser?.uid || 'local_user', {
+        method: 'Biometric',
+        status: 'Failed',
+        email: currentUser?.email || userProfile?.email || '',
+        userName: currentUser?.displayName || userProfile?.fullName || '',
+        userAvatar: currentUser?.photoURL || userProfile?.profilePhoto || '',
+        failureReason: err?.message || 'Biometric verification failed'
+      });
       setTimeout(() => setBiometricError(false), 3000);
     } finally {
       setIsAuthenticating(false);

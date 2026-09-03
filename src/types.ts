@@ -69,26 +69,53 @@ export interface SecuritySettings {
 export interface LoginHistoryEntry {
   id: string;
   userId: string;
+  userEmail?: string;
+  userName?: string;
+  userAvatar?: string;
   deviceName: string;
+  deviceType?: 'desktop' | 'mobile' | 'tablet';
   browser: string;
   os: string;
   ip: string;
   location: string;
+  city?: string;
+  region?: string;
+  country?: string;
+  countryCode?: string;
+  flagEmoji?: string;
+  latitude?: number;
+  longitude?: number;
+  isp?: string;
+  screenResolution?: string;
   timestamp: string;
   status: 'Success' | 'Failed' | 'Blocked';
   method: 'Google' | 'Email' | 'PIN' | 'Biometric' | 'Password';
+  failureReason?: string;
   userAgent?: string;
 }
 
 export interface UserDevice {
   id: string;
   userId: string;
+  userEmail?: string;
+  userName?: string;
+  userAvatar?: string;
   deviceId: string;
   deviceName: string;
+  deviceType?: 'desktop' | 'mobile' | 'tablet';
   browser: string;
   os: string;
   ip: string;
   location: string;
+  city?: string;
+  region?: string;
+  country?: string;
+  countryCode?: string;
+  flagEmoji?: string;
+  latitude?: number;
+  longitude?: number;
+  isp?: string;
+  screenResolution?: string;
   lastActive: string;
   createdAt: string;
   isCurrent?: boolean;

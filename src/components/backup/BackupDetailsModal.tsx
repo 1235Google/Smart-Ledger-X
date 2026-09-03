@@ -38,7 +38,7 @@ export default function BackupDetailsModal({ backup, onClose }: BackupDetailsMod
             </div>
             <div>
               <h3 className="text-lg font-bold text-white tracking-tight">Snapshot Technical Manifest</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Zero-knowledge envelope and cryptographic metadata</p>
+              <p className="text-xs text-slate-400 mt-0.5">Highly secure encryption and safe backup details</p>
             </div>
           </div>
 

@@ -355,7 +355,7 @@ export default function AdminPending() {
         <M3Card variant="filled" padding="lg">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Total Payables (To Disburse)
+              Total Payables (To Pay)
             </span>
             <div className="w-8 h-8 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center">
               <ArrowUpRight size={18} />
@@ -364,7 +364,7 @@ export default function AdminPending() {
           <div className="text-3xl font-extrabold font-mono text-[#f2b8b5] mt-2">
             ₹{totalPayable.toLocaleString('en-IN')}
           </div>
-          <div className="text-xs text-slate-400 mt-1">Vendor bills and outgoing disbursements</div>
+          <div className="text-xs text-slate-400 mt-1">Vendor bills and outgoing payments</div>
         </M3Card>
       </div>
 

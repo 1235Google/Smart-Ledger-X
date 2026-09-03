@@ -10,7 +10,6 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const CurrentBalance = lazy(() => import('./pages/CurrentBalance'));
 const MoneyReceived = lazy(() => import('./pages/MoneyReceived'));
 const PendingPayments = lazy(() => import('./pages/PendingPayments'));
-const SendMoney = lazy(() => import('./pages/SendMoney'));
 const Analytics = lazy(() => import('./pages/Analytics'));
 const Search = lazy(() => import('./pages/Search'));
 const Settings = lazy(() => import('./pages/Settings'));
@@ -124,7 +123,7 @@ function AppRoutes() {
           <Route index element={<Dashboard />} />
           <Route path="balance" element={<CurrentBalance />} />
           <Route path="received" element={<MoneyReceived />} />
-          <Route path="sent" element={<SendMoney />} />
+          <Route path="sent" element={<Navigate to="/received" replace />} />
           <Route path="pending" element={<PendingPayments />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="search" element={<Search />} />

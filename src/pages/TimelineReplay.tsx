@@ -35,20 +35,19 @@ export default function TimelineReplay() {
     });
 
     let r = 0;
-    let s = 0;
     let p = 0;
     let pc = 0;
 
     historicalTxs.forEach(tx => {
-      if (tx.type === 'received') r += tx.amount;
-      else if (tx.type === 'sent') s += tx.amount;
-      else if (tx.type === 'pending') {
-        p += tx.amount;
+      const amt = Number(tx.amount || 0);
+      if (tx.type === 'received') r += amt;
+      else if (tx.type === 'pending' && (tx.status === 'pending' || tx.status === 'overdue' || (tx.status !== 'completed' && tx.status !== 'cancelled' && tx.status !== 'closed'))) {
+        p += amt;
         pc += 1;
       }
     });
 
-    const bal = startingBalance + r - s;
+    const bal = startingBalance + r;
 
     // Generate chart data for the 30 days leading up to selectedDate
     const chartData = [];
@@ -68,7 +67,6 @@ export default function TimelineReplay() {
       const dStr = (tx as any).date.split('T')[0];
       if (!txByDate[dStr]) txByDate[dStr] = 0;
       if (tx.type === 'received') txByDate[dStr] += tx.amount;
-      if (tx.type === 'sent') txByDate[dStr] -= tx.amount;
     });
 
     // We'll generate data from the first transaction or 30 days ago, whichever is earlier, up to selectedDate
@@ -103,7 +101,6 @@ export default function TimelineReplay() {
     return {
       historicalBalance: bal,
       totalReceived: r,
-      totalSent: s,
       totalPending: p,
       pendingCount: pc,
       filteredTransactions: sortedTxs.reverse(), // most recent first

@@ -22,6 +22,7 @@ import {
   onAuthStateChanged,
   setPersistence,
   browserLocalPersistence,
+  browserPopupRedirectResolver,
   User
 } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
@@ -236,7 +237,7 @@ export async function ensureUserProfileDoc(user: User, customFullName?: string):
 export async function loginWithGoogle(): Promise<{ user: User }> {
   console.log('[Firebase Auth] Launching signInWithPopup for Google...');
   try {
-    const result = await signInWithPopup(auth, googleProvider);
+    const result = await signInWithPopup(auth, googleProvider, browserPopupRedirectResolver);
     const user = result.user;
     
     // Debug logging as required by Task 7
@@ -266,10 +267,10 @@ export async function loginWithGoogle(): Promise<{ user: User }> {
     }
 
     // If popup was blocked by browser security or iframe sandboxing, fall back to redirect
-    if (code === 'auth/popup-blocked') {
-      console.log('[Firebase Auth] Popup blocked by browser. Falling back to signInWithRedirect...');
+    if (code === 'auth/popup-blocked' || code === 'auth/internal-error') {
+      console.log(`[Firebase Auth] Popup blocked or internal error (${code}). Falling back to signInWithRedirect...`);
       try {
-        await signInWithRedirect(auth, googleProvider);
+        await signInWithRedirect(auth, googleProvider, browserPopupRedirectResolver);
         return new Promise(() => {}); // Wait for browser redirect
       } catch (redirectError: any) {
         console.error('[Firebase Auth] signInWithRedirect error:', redirectError);

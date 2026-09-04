@@ -269,13 +269,13 @@ service cloud.firestore {
     // ADMIN RBAC USERS & SECURITY AUDIT LOGS
     // =========================================================================
     match /adminUsers/{adminId} {
-      allow get: if isSignedIn() && (request.auth.uid == adminId || isAdmin());
+      allow get: if isSignedIn() && request.auth.uid == adminId;
+      allow get: if isSignedIn() && isAdmin();
       allow list: if isSignedIn() && isAdmin();
       // Allow initial bootstrap if collection is empty or owner setup, otherwise only active admins
       allow create: if isSignedIn() && isValidAdminUser(incoming()) && (
         isAdmin() || 
-        request.auth.uid == adminId || 
-        !exists(/databases/$(database)/documents/adminUsers/$(adminId))
+        (request.auth.uid == adminId && request.auth.token.email in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io'])
       );
       allow update: if isSignedIn() && isValidAdminUser(incoming()) && (isAdmin() || request.auth.uid == adminId);
       allow delete: if isSignedIn() && isAdmin();

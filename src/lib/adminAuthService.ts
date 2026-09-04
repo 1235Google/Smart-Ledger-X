@@ -118,9 +118,15 @@ export async function verifyOrBootstrapAdminUser(user: User): Promise<{
 
     // 1. Check if direct doc exists with UID
     const directDocRef = doc(db, 'adminUsers', userUid);
-    const directDocSnap = await getDoc(directDocRef);
+    let directDocSnap = null;
+    
+    try {
+      directDocSnap = await getDoc(directDocRef);
+    } catch (err) {
+      console.warn('[AdminAuth] Could not read direct admin doc (expected if new user):', err);
+    }
 
-    if (directDocSnap.exists()) {
+    if (directDocSnap && directDocSnap.exists()) {
       const data = directDocSnap.data() as AdminUser;
       if (data.status === 'Disabled') {
         await logAdminSecurityEvent('LOGIN_DENIED_DISABLED', userEmail, userUid, 'Attempted login with disabled account');
@@ -150,14 +156,23 @@ export async function verifyOrBootstrapAdminUser(user: User): Promise<{
     }
 
     // 2. Check by email if document was created prior to first Google login
-    const q = query(collection(db, 'adminUsers'), where('email', '==', userEmail));
-    const querySnap = await getDocs(q);
+    let foundAdminByEmail: AdminUser | null = null;
+    let firstDocId = '';
+    
+    try {
+      const q = query(collection(db, 'adminUsers'), where('email', '==', userEmail));
+      const querySnap = await getDocs(q);
+      
+      if (!querySnap.empty) {
+        firstDocId = querySnap.docs[0].id;
+        foundAdminByEmail = querySnap.docs[0].data() as AdminUser;
+      }
+    } catch (queryErr) {
+      console.warn('[AdminAuth] Could not query adminUsers by email (expected if not already an admin).');
+    }
 
-    if (!querySnap.empty) {
-      const firstDoc = querySnap.docs[0];
-      const data = firstDoc.data() as AdminUser;
-
-      if (data.status === 'Disabled') {
+    if (foundAdminByEmail) {
+      if (foundAdminByEmail.status === 'Disabled') {
         await logAdminSecurityEvent('LOGIN_DENIED_DISABLED', userEmail, userUid, 'Attempted login with disabled account');
         return {
           authorized: false,
@@ -167,33 +182,34 @@ export async function verifyOrBootstrapAdminUser(user: User): Promise<{
 
       // Migrate / link doc to user.uid
       const updatedAdmin: AdminUser = {
-        ...data,
+        ...foundAdminByEmail,
         uid: userUid,
         email: userEmail,
-        displayName: user.displayName || data.displayName || userEmail,
-        photoURL: user.photoURL || data.photoURL || '',
+        displayName: user.displayName || foundAdminByEmail.displayName || userEmail,
+        photoURL: user.photoURL || foundAdminByEmail.photoURL || '',
         lastLogin: new Date().toISOString()
       };
 
       // Set the UID document and remove old doc if key differed
       await setDoc(doc(db, 'adminUsers', userUid), updatedAdmin);
-      if (firstDoc.id !== userUid) {
+      if (firstDocId && firstDocId !== userUid) {
         try {
-          await deleteDoc(doc(db, 'adminUsers', firstDoc.id));
+          await deleteDoc(doc(db, 'adminUsers', firstDocId));
         } catch (e) {}
       }
 
-      await logAdminSecurityEvent('LOGIN_SUCCESS', userEmail, userUid, `Linked Google account: Role ${updatedAdmin.role}`);
+      try {
+        await logAdminSecurityEvent('LOGIN_SUCCESS', userEmail, userUid, `Linked Google account: Role ${updatedAdmin.role}`);
+      } catch (e) {}
+      
       return { authorized: true, adminUser: updatedAdmin };
     }
 
     // 3. Check for Initial Owner Bootstrap
-    // Check if adminUsers collection is completely empty OR if user is in INITIAL_BOOTSTRAP_EMAILS
-    const allAdminsSnap = await getDocs(collection(db, 'adminUsers'));
-    const isFirstAdmin = allAdminsSnap.empty;
+    // Only attempt if explicitly designated as bootstrap owner
     const isDesignatedOwner = INITIAL_BOOTSTRAP_EMAILS.includes(userEmail);
 
-    if (isFirstAdmin || isDesignatedOwner) {
+    if (isDesignatedOwner) {
       const newOwner: AdminUser = {
         uid: userUid,
         email: userEmail,
@@ -207,25 +223,34 @@ export async function verifyOrBootstrapAdminUser(user: User): Promise<{
         createdByEmail: 'system'
       };
 
-      await setDoc(doc(db, 'adminUsers', userUid), newOwner);
-      await logAdminSecurityEvent('ADMIN_ADDED', userEmail, userUid, 'Initial Owner bootstrap account provisioned');
-      await logAdminSecurityEvent('LOGIN_SUCCESS', userEmail, userUid, 'Owner Initial Sign-in Success');
-
-      return { authorized: true, adminUser: newOwner };
+      try {
+        await setDoc(doc(db, 'adminUsers', userUid), newOwner);
+        try {
+          await logAdminSecurityEvent('ADMIN_ADDED', userEmail, userUid, 'Initial Owner bootstrap account provisioned');
+          await logAdminSecurityEvent('LOGIN_SUCCESS', userEmail, userUid, 'Owner Initial Sign-in Success');
+        } catch (e) {}
+        return { authorized: true, adminUser: newOwner };
+      } catch (err) {
+        console.warn('[AdminAuth] Bootstrap creation failed. Rules may prevent this.', err);
+      }
     }
 
     // 4. Unauthorized User
-    await logAdminSecurityEvent('LOGIN_DENIED_UNAUTHORIZED', userEmail, userUid, 'Google account not in admin whitelist');
+    // We try to log the event, this may fail depending on rules if not admin, but we can try
+    try {
+      await logAdminSecurityEvent('LOGIN_DENIED_UNAUTHORIZED', userEmail, userUid, 'Google account not in admin whitelist');
+    } catch(e) {}
+    
     return {
       authorized: false,
       error: 'You are not authorized to access the Smart Ledger Admin Panel.'
     };
   } catch (err: any) {
     console.error('[AdminAuth] Verification error:', err);
-    handleFirestoreError(err, OperationType.GET, 'adminUsers');
+    // Don't throw full UI error for just permission denied on the top level try catch
     return {
       authorized: false,
-      error: err?.message || 'Database error during authorization check.'
+      error: 'Database error during authorization check.'
     };
   }
 }

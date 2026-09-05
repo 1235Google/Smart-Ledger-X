@@ -48,6 +48,7 @@ import { M3Card } from '../../components/admin/material3/M3Card';
 import { M3Button } from '../../components/admin/material3/M3Button';
 import { M3DataTable, Column } from '../../components/admin/material3/M3DataTable';
 import { useM3Theme } from '../../components/admin/material3/M3ThemeContext';
+import SystemModeControlCard from '../../components/admin/SystemModeControlCard';
 
 export default function AdminDashboard() {
   const { 
@@ -285,6 +286,9 @@ export default function AdminDashboard() {
         />
       </div>
 
+      {/* Enterprise System Availability & Mode Control */}
+      <SystemModeControlCard />
+
       {/* Charts Section: Cash Flow Area Chart + Payment Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Cash Flow Area Chart */}
@@ -373,7 +377,7 @@ export default function AdminDashboard() {
                   dataKey="value"
                 >
                   {methodData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                    <Cell key={`cell-${entry.name}-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
                 <Tooltip
@@ -383,6 +387,7 @@ export default function AdminDashboard() {
                     borderColor: isDark ? '#3c4043' : '#e1e3e1',
                     borderRadius: '1rem',
                     color: isDark ? '#ffffff' : '#1f1f1f',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
                   }}
                 />
               </PieChart>
@@ -390,8 +395,8 @@ export default function AdminDashboard() {
           </div>
 
           <div className="grid grid-cols-2 gap-2 text-xs">
-            {methodData.map((m) => (
-              <div key={m.name} className="flex items-center gap-2">
+            {methodData.map((m, idx) => (
+              <div key={`channel-${m.name}-${idx}`} className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
                 <span className="truncate">{m.name}</span>
               </div>
@@ -409,7 +414,7 @@ export default function AdminDashboard() {
             subtitle="Latest completed customer payments and money sent"
             data={safeTransactions.slice(0, 10)}
             columns={recentColumns}
-            keyExtractor={(item) => item.id || Math.random()}
+            keyExtractor={(item, index) => item?.id ? `tx-${item.id}-${index}` : `tx-${index}`}
             actions={
               <M3Button
                 variant="text"
@@ -444,9 +449,9 @@ export default function AdminDashboard() {
 
           <div className="py-3 space-y-3 flex-1 overflow-y-auto">
             {recentLogs.length > 0 ? (
-              recentLogs.map((log) => (
+              recentLogs.map((log, idx) => (
                 <div
-                  key={log.id}
+                  key={log?.id ? `log-${log.id}-${idx}` : `log-${idx}-${log?.timestamp || ''}`}
                   className={cn(
                     'p-3 rounded-2xl border text-xs flex items-start gap-3 transition-colors',
                     isDark ? 'bg-[#1e1f20] border-[#2d2f31]' : 'bg-[#f0f4f9] border-[#e1e3e1]'

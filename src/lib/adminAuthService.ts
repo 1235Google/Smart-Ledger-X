@@ -1,6 +1,7 @@
 import { 
   signInWithPopup, 
   signInWithRedirect, 
+  signInWithEmailAndPassword,
   getRedirectResult, 
   signOut, 
   User 
@@ -21,6 +22,13 @@ import {
 } from 'firebase/firestore';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from './firebase';
 import { AdminUser, AdminRole, AdminStatus, AdminSecurityLog, AdminSecurityAction } from '../types';
+import {
+  recordSuccessfulAuthEvent,
+  recordFailedAuthEvent,
+  recordUnauthorizedAdminAttempt,
+  recordLogoutAuthEvent,
+  fetchAuthoritativeSecurityLogs
+} from './securityAuditService';
 
 const INITIAL_BOOTSTRAP_EMAILS = [
   'souvikbbsr811@gmail.com',
@@ -106,153 +114,301 @@ export async function logAdminSecurityEvent(
   }
 }
 
-// Verify or bootstrap admin user in Firestore
+// Normalize various role strings (case-insensitive) to recognized AdminRole
+export function normalizeAdminRole(roleStr?: string | null): AdminRole | null {
+  if (!roleStr || typeof roleStr !== 'string') return null;
+  const lower = roleStr.trim().toLowerCase();
+  if (lower === 'owner') return 'Owner';
+  if (lower === 'super admin' || lower === 'superadmin') return 'Super Admin';
+  if (lower === 'admin' || lower === 'administrator') return 'Admin';
+  if (lower === 'manager') return 'Manager';
+  return null;
+}
+
+export interface AdminVerificationResult {
+  authorized: boolean;
+  role?: AdminRole;
+  adminUser?: AdminUser;
+  errorType?: 'NOT_ADMIN' | 'ACCOUNT_DISABLED' | 'DATABASE_ERROR' | 'NONE';
+  errorMessage?: string;
+}
+
+// Dedicated authorization check using secure sources of truth
+export async function verifyAdminAuthorization(user: User): Promise<AdminVerificationResult> {
+  const userEmail = (user.email || '').trim().toLowerCase();
+  const userUid = user.uid;
+
+  // Development-only console logging for auditing
+  console.log('[AdminAuth Debug] Authenticated UID:', userUid);
+  console.log('[AdminAuth Debug] Authenticated Email:', userEmail);
+
+  let databaseErrorOccurred = false;
+  let databaseErrorMessage = '';
+
+  // 1. Check Custom Claims in Firebase Auth ID Token
+  try {
+    const tokenResult = await user.getIdTokenResult(true);
+    const claims = tokenResult?.claims || {};
+    if (claims.admin === true || claims.role) {
+      const normalized = normalizeAdminRole(String(claims.role || 'Admin')) || 'Admin';
+      console.log('[AdminAuth Debug] Role lookup succeeded via Custom Claims. Resolved role:', normalized);
+      const adminObj: AdminUser = {
+        uid: userUid,
+        email: userEmail,
+        displayName: user.displayName || userEmail.split('@')[0] || 'Administrator',
+        photoURL: user.photoURL || '',
+        role: normalized,
+        status: 'Active',
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString()
+      };
+      return {
+        authorized: true,
+        role: normalized,
+        adminUser: adminObj,
+        errorType: 'NONE'
+      };
+    }
+  } catch (claimErr: any) {
+    console.warn('[AdminAuth Debug] Could not fetch ID token result claims:', claimErr?.message);
+  }
+
+  // 2. Check adminUsers/{uid} in Firestore
+  try {
+    const directDocRef = doc(db, 'adminUsers', userUid);
+    const directDocSnap = await getDoc(directDocRef);
+    if (directDocSnap.exists()) {
+      const data = directDocSnap.data() as AdminUser;
+      if (data.status === 'Disabled') {
+        console.log('[AdminAuth Debug] Account found in adminUsers but is Disabled.');
+        return {
+          authorized: false,
+          errorType: 'ACCOUNT_DISABLED',
+          errorMessage: 'Your administrator account has been disabled. Please contact the Owner.'
+        };
+      }
+
+      const normalized = normalizeAdminRole(data.role);
+      if (normalized || data.status === 'Active' || (data as any).isAdmin === true) {
+        const resolvedRole = normalized || 'Admin';
+        console.log('[AdminAuth Debug] Role lookup succeeded via adminUsers/{uid}. Resolved role:', resolvedRole);
+
+        const updatedData: Partial<AdminUser> = {
+          lastLogin: new Date().toISOString(),
+          displayName: user.displayName || data.displayName || userEmail,
+          photoURL: user.photoURL || data.photoURL || ''
+        };
+        // Update non-blocking
+        updateDoc(directDocRef, updatedData).catch(() => {});
+
+        const resolvedAdmin: AdminUser = {
+          ...data,
+          ...updatedData,
+          uid: userUid,
+          email: userEmail || data.email,
+          role: resolvedRole,
+          status: 'Active'
+        };
+        return {
+          authorized: true,
+          role: resolvedRole,
+          adminUser: resolvedAdmin,
+          errorType: 'NONE'
+        };
+      }
+    }
+  } catch (directErr: any) {
+    console.warn('[AdminAuth Debug] Error reading adminUsers direct doc:', directErr?.code, directErr?.message);
+    if (directErr?.code === 'unavailable') {
+      databaseErrorOccurred = true;
+      databaseErrorMessage = directErr.message;
+    }
+  }
+
+  // 3. Check users/{uid} in Firestore (Source of truth: users/{uid}.role === "admin" or isAdmin: true)
+  try {
+    const userDocRef = doc(db, 'users', userUid);
+    const userDocSnap = await getDoc(userDocRef);
+    if (userDocSnap.exists()) {
+      const uData = userDocSnap.data();
+      const normalized = normalizeAdminRole(uData?.role);
+      if (normalized || uData?.isAdmin === true) {
+        const resolvedRole = normalized || 'Admin';
+        console.log('[AdminAuth Debug] Role lookup succeeded via users/{uid}. Resolved role:', resolvedRole);
+
+        const adminObj: AdminUser = {
+          uid: userUid,
+          email: userEmail || uData?.email || '',
+          displayName: user.displayName || uData?.fullName || uData?.displayName || userEmail.split('@')[0] || 'Admin',
+          photoURL: user.photoURL || uData?.photoURL || '',
+          role: resolvedRole,
+          status: 'Active',
+          createdAt: uData?.createdAt || new Date().toISOString(),
+          lastLogin: new Date().toISOString()
+        };
+
+        // Mirror in adminUsers for admin management views
+        setDoc(doc(db, 'adminUsers', userUid), adminObj, { merge: true }).catch(() => {});
+
+        return {
+          authorized: true,
+          role: resolvedRole,
+          adminUser: adminObj,
+          errorType: 'NONE'
+        };
+      }
+    }
+  } catch (uErr: any) {
+    console.warn('[AdminAuth Debug] Error reading users doc:', uErr?.code, uErr?.message);
+    if (uErr?.code === 'unavailable') {
+      databaseErrorOccurred = true;
+      databaseErrorMessage = uErr.message;
+    }
+  }
+
+  // 4. Check users/{uid}/profile/info in Firestore
+  try {
+    const profileRef = doc(db, 'users', userUid, 'profile', 'info');
+    const profileSnap = await getDoc(profileRef);
+    if (profileSnap.exists()) {
+      const pData = profileSnap.data();
+      const normalized = normalizeAdminRole(pData?.role);
+      if (normalized || pData?.isAdmin === true) {
+        const resolvedRole = normalized || 'Admin';
+        console.log('[AdminAuth Debug] Role lookup succeeded via profile/info. Resolved role:', resolvedRole);
+
+        const adminObj: AdminUser = {
+          uid: userUid,
+          email: userEmail || pData?.email || '',
+          displayName: user.displayName || pData?.fullName || userEmail.split('@')[0] || 'Admin',
+          photoURL: user.photoURL || pData?.photoURL || '',
+          role: resolvedRole,
+          status: 'Active',
+          createdAt: pData?.createdAt || new Date().toISOString(),
+          lastLogin: new Date().toISOString()
+        };
+
+        setDoc(doc(db, 'adminUsers', userUid), adminObj, { merge: true }).catch(() => {});
+
+        return {
+          authorized: true,
+          role: resolvedRole,
+          adminUser: adminObj,
+          errorType: 'NONE'
+        };
+      }
+    }
+  } catch (pErr: any) {
+    console.warn('[AdminAuth Debug] Error reading users profile/info:', pErr?.code, pErr?.message);
+  }
+
+  // 5. Check for Pre-added / Pending Admin by email
+  if (userEmail) {
+    try {
+      const pendingDocId = `pending_${userEmail.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      const pendingRef = doc(db, 'adminUsers', pendingDocId);
+      const pendingSnap = await getDoc(pendingRef);
+      if (pendingSnap.exists()) {
+        const pendingData = pendingSnap.data() as AdminUser;
+        if (pendingData.status === 'Disabled') {
+          return {
+            authorized: false,
+            errorType: 'ACCOUNT_DISABLED',
+            errorMessage: 'Your administrator account has been disabled. Please contact the Owner.'
+          };
+        }
+        const resolvedRole = normalizeAdminRole(pendingData.role) || 'Admin';
+        console.log('[AdminAuth Debug] Found pending admin record for email. Migrating to UID:', userUid);
+
+        const linkedAdmin: AdminUser = {
+          ...pendingData,
+          uid: userUid,
+          email: userEmail,
+          displayName: user.displayName || pendingData.displayName || userEmail.split('@')[0] || 'Admin',
+          photoURL: user.photoURL || pendingData.photoURL || '',
+          role: resolvedRole,
+          status: 'Active',
+          lastLogin: new Date().toISOString()
+        };
+
+        await setDoc(doc(db, 'adminUsers', userUid), linkedAdmin);
+        try {
+          await deleteDoc(pendingRef);
+        } catch (e) {}
+
+        return {
+          authorized: true,
+          role: resolvedRole,
+          adminUser: linkedAdmin,
+          errorType: 'NONE'
+        };
+      }
+    } catch (pendingErr: any) {
+      console.warn('[AdminAuth Debug] Error checking pending doc:', pendingErr?.code, pendingErr?.message);
+    }
+  }
+
+  // 6. Initial Bootstrap Owners
+  if (INITIAL_BOOTSTRAP_EMAILS.includes(userEmail)) {
+    console.log('[AdminAuth Debug] User matched initial bootstrap owner list:', userEmail);
+    const newOwner: AdminUser = {
+      uid: userUid,
+      email: userEmail,
+      displayName: user.displayName || 'System Owner',
+      photoURL: user.photoURL || '',
+      role: 'Owner',
+      status: 'Active',
+      createdAt: new Date().toISOString(),
+      lastLogin: new Date().toISOString(),
+      createdById: userUid,
+      createdByEmail: 'system'
+    };
+
+    try {
+      await setDoc(doc(db, 'adminUsers', userUid), newOwner);
+    } catch (bootstrapErr) {
+      console.warn('[AdminAuth Debug] Bootstrap setDoc warning:', bootstrapErr);
+    }
+
+    return {
+      authorized: true,
+      role: 'Owner',
+      adminUser: newOwner,
+      errorType: 'NONE'
+    };
+  }
+
+  // If there was a database network failure (not just missing document)
+  if (databaseErrorOccurred) {
+    console.error('[AdminAuth Debug] Database connection error during role lookup:', databaseErrorMessage);
+    return {
+      authorized: false,
+      errorType: 'DATABASE_ERROR',
+      errorMessage: 'Database connection error during authorization check. Please check your network and try again.'
+    };
+  }
+
+  // 7. Not Authorized: All sources verified, account has NO administrator role
+  console.log('[AdminAuth Debug] Role lookup failed: Account has no admin role. UID:', userUid, 'Email:', userEmail);
+  return {
+    authorized: false,
+    errorType: 'NOT_ADMIN',
+    errorMessage: 'This account does not have administrator access.'
+  };
+}
+
+// Wrapper for backwards compatibility
 export async function verifyOrBootstrapAdminUser(user: User): Promise<{
   authorized: boolean;
   adminUser?: AdminUser;
   error?: string;
 }> {
-  try {
-    const userEmail = (user.email || '').trim().toLowerCase();
-    const userUid = user.uid;
-
-    // 1. Check if direct doc exists with UID
-    const directDocRef = doc(db, 'adminUsers', userUid);
-    let directDocSnap = null;
-    
-    try {
-      directDocSnap = await getDoc(directDocRef);
-    } catch (err) {
-      console.warn('[AdminAuth] Could not read direct admin doc (expected if new user):', err);
-    }
-
-    if (directDocSnap && directDocSnap.exists()) {
-      const data = directDocSnap.data() as AdminUser;
-      if (data.status === 'Disabled') {
-        await logAdminSecurityEvent('LOGIN_DENIED_DISABLED', userEmail, userUid, 'Attempted login with disabled account');
-        return {
-          authorized: false,
-          error: 'Your admin account has been disabled. Please contact the Owner.'
-        };
-      }
-
-      // Update lastLogin and profile fields
-      const updatedData: Partial<AdminUser> = {
-        lastLogin: new Date().toISOString(),
-        displayName: user.displayName || data.displayName || userEmail,
-        photoURL: user.photoURL || data.photoURL || ''
-      };
-      await updateDoc(directDocRef, updatedData);
-
-      const resolvedAdmin: AdminUser = {
-        ...data,
-        ...updatedData,
-        uid: userUid,
-        email: userEmail
-      };
-
-      await logAdminSecurityEvent('LOGIN_SUCCESS', userEmail, userUid, `Google Sign-in: Role ${resolvedAdmin.role}`);
-      return { authorized: true, adminUser: resolvedAdmin };
-    }
-
-    // 2. Check by email if document was created prior to first Google login
-    let foundAdminByEmail: AdminUser | null = null;
-    let firstDocId = '';
-    
-    try {
-      const q = query(collection(db, 'adminUsers'), where('email', '==', userEmail));
-      const querySnap = await getDocs(q);
-      
-      if (!querySnap.empty) {
-        firstDocId = querySnap.docs[0].id;
-        foundAdminByEmail = querySnap.docs[0].data() as AdminUser;
-      }
-    } catch (queryErr) {
-      console.warn('[AdminAuth] Could not query adminUsers by email (expected if not already an admin).');
-    }
-
-    if (foundAdminByEmail) {
-      if (foundAdminByEmail.status === 'Disabled') {
-        await logAdminSecurityEvent('LOGIN_DENIED_DISABLED', userEmail, userUid, 'Attempted login with disabled account');
-        return {
-          authorized: false,
-          error: 'Your admin account has been disabled. Please contact the Owner.'
-        };
-      }
-
-      // Migrate / link doc to user.uid
-      const updatedAdmin: AdminUser = {
-        ...foundAdminByEmail,
-        uid: userUid,
-        email: userEmail,
-        displayName: user.displayName || foundAdminByEmail.displayName || userEmail,
-        photoURL: user.photoURL || foundAdminByEmail.photoURL || '',
-        lastLogin: new Date().toISOString()
-      };
-
-      // Set the UID document and remove old doc if key differed
-      await setDoc(doc(db, 'adminUsers', userUid), updatedAdmin);
-      if (firstDocId && firstDocId !== userUid) {
-        try {
-          await deleteDoc(doc(db, 'adminUsers', firstDocId));
-        } catch (e) {}
-      }
-
-      try {
-        await logAdminSecurityEvent('LOGIN_SUCCESS', userEmail, userUid, `Linked Google account: Role ${updatedAdmin.role}`);
-      } catch (e) {}
-      
-      return { authorized: true, adminUser: updatedAdmin };
-    }
-
-    // 3. Check for Initial Owner Bootstrap
-    // Only attempt if explicitly designated as bootstrap owner
-    const isDesignatedOwner = INITIAL_BOOTSTRAP_EMAILS.includes(userEmail);
-
-    if (isDesignatedOwner) {
-      const newOwner: AdminUser = {
-        uid: userUid,
-        email: userEmail,
-        displayName: user.displayName || 'System Owner',
-        photoURL: user.photoURL || '',
-        role: 'Owner',
-        status: 'Active',
-        createdAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString(),
-        createdById: userUid,
-        createdByEmail: 'system'
-      };
-
-      try {
-        await setDoc(doc(db, 'adminUsers', userUid), newOwner);
-        try {
-          await logAdminSecurityEvent('ADMIN_ADDED', userEmail, userUid, 'Initial Owner bootstrap account provisioned');
-          await logAdminSecurityEvent('LOGIN_SUCCESS', userEmail, userUid, 'Owner Initial Sign-in Success');
-        } catch (e) {}
-        return { authorized: true, adminUser: newOwner };
-      } catch (err) {
-        console.warn('[AdminAuth] Bootstrap creation failed. Rules may prevent this.', err);
-      }
-    }
-
-    // 4. Unauthorized User
-    // We try to log the event, this may fail depending on rules if not admin, but we can try
-    try {
-      await logAdminSecurityEvent('LOGIN_DENIED_UNAUTHORIZED', userEmail, userUid, 'Google account not in admin whitelist');
-    } catch(e) {}
-    
-    return {
-      authorized: false,
-      error: 'You are not authorized to access the Smart Ledger Admin Panel.'
-    };
-  } catch (err: any) {
-    console.error('[AdminAuth] Verification error:', err);
-    // Don't throw full UI error for just permission denied on the top level try catch
-    return {
-      authorized: false,
-      error: 'Database error during authorization check.'
-    };
-  }
+  const result = await verifyAdminAuthorization(user);
+  return {
+    authorized: result.authorized,
+    adminUser: result.adminUser,
+    error: result.errorMessage
+  };
 }
 
 // Google Sign-In with popup + automatic redirect fallback
@@ -266,13 +422,15 @@ export async function signInAdminWithGoogle(): Promise<{
     try {
       authResult = await signInWithPopup(auth, googleProvider);
     } catch (popupErr: any) {
-      console.warn('[AdminAuth] Popup sign-in error, trying fallback:', popupErr);
+      console.warn('[AdminAuth Debug] Popup sign-in error, trying fallback:', popupErr);
       if (
         popupErr?.code === 'auth/popup-blocked' ||
         popupErr?.code === 'auth/cancelled-popup-request' ||
         popupErr?.code === 'auth/popup-closed-by-user'
       ) {
-        // Fallback to redirect flow if supported
+        if (popupErr?.code === 'auth/popup-closed-by-user') {
+          return { success: false, error: 'Google sign-in popup was closed before completing.' };
+        }
         try {
           await signInWithRedirect(auth, googleProvider);
           return { success: false, error: 'Redirecting to Google Sign-In...' };
@@ -293,13 +451,29 @@ export async function signInAdminWithGoogle(): Promise<{
       return { success: false, error: 'Authentication returned no user credentials.' };
     }
 
-    const verification = await verifyOrBootstrapAdminUser(authResult.user);
+    const authUser = authResult.user;
+
+    // Verify Admin Role Authorization
+    const verification = await verifyAdminAuthorization(authUser);
+    console.log('[AdminAuth Debug] Role lookup succeeded:', verification.authorized);
+    console.log('[AdminAuth Debug] Resolved role:', verification.role || 'None');
+
     if (!verification.authorized) {
-      // User is not an authorized admin, sign out immediately
+      // Authenticated but not an admin: sign out immediately
       await signOut(auth);
+      try {
+        await recordUnauthorizedAdminAttempt('Google sign-in rejected: Account lacks administrator privileges');
+        await logAdminSecurityEvent(
+          'LOGIN_DENIED_UNAUTHORIZED', 
+          authUser.email || '', 
+          authUser.uid, 
+          'Google sign-in rejected: Account lacks administrator privileges'
+        );
+      } catch (e) {}
+
       return {
         success: false,
-        error: verification.error || 'You are not authorized to access the Smart Ledger Admin Panel.'
+        error: verification.errorMessage || 'This account does not have administrator access.'
       };
     }
 
@@ -308,12 +482,22 @@ export async function signInAdminWithGoogle(): Promise<{
     sessionStorage.setItem('smartledger-admin-email', verification.adminUser!.email);
     sessionStorage.setItem('smartledger-admin-role', verification.adminUser!.role);
 
+    try {
+      await recordSuccessfulAuthEvent({ authProvider: 'google', isExplicitAdmin: true, force: true });
+      await logAdminSecurityEvent(
+        'LOGIN_SUCCESS', 
+        authUser.email || '', 
+        authUser.uid, 
+        `Google Sign-in: Role ${verification.adminUser!.role}`
+      );
+    } catch (e) {}
+
     return {
       success: true,
       adminUser: verification.adminUser
     };
   } catch (err: any) {
-    console.error('[AdminAuth] Google sign-in failed:', err);
+    console.error('[AdminAuth Debug] Google sign-in failed:', err?.code, err?.message);
     try {
       await signOut(auth);
     } catch (e) {}
@@ -322,6 +506,110 @@ export async function signInAdminWithGoogle(): Promise<{
       error: err?.message || 'An unexpected error occurred during Google sign in.'
     };
   }
+}
+
+// Password sign-in using Firebase Authentication with separate authentication & authorization
+export async function signInAdminWithPassword(
+  email: string,
+  pass: string
+): Promise<{
+  success: boolean;
+  adminUser?: AdminUser;
+  error?: string;
+}> {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const cleanPass = (pass || '').trim();
+
+  if (!cleanEmail) {
+    return { success: false, error: 'Please enter your admin email address.' };
+  }
+  if (!cleanPass) {
+    return { success: false, error: 'Please enter your admin password.' };
+  }
+
+  // Step 1: Authenticate with Firebase Authentication
+  let userCredential;
+  try {
+    userCredential = await signInWithEmailAndPassword(auth, cleanEmail, cleanPass);
+  } catch (authErr: any) {
+    const code = authErr?.code || '';
+    console.error('[AdminAuth Debug] Firebase error code:', code, authErr?.message);
+
+    if (
+      code === 'auth/invalid-credential' || 
+      code === 'auth/wrong-password' || 
+      code === 'auth/user-not-found'
+    ) {
+      recordFailedAuthEvent(cleanEmail, 'Invalid email address or password', 'password').catch(() => {});
+      return { 
+        success: false, 
+        error: 'Invalid email address or password. Please verify your credentials.' 
+      };
+    }
+    if (code === 'auth/invalid-email') {
+      return { success: false, error: 'Please enter a valid email address format.' };
+    }
+    if (code === 'auth/user-disabled') {
+      return { success: false, error: 'This administrator account has been disabled in Firebase Auth.' };
+    }
+    if (code === 'auth/too-many-requests') {
+      return { 
+        success: false, 
+        error: 'Access temporarily disabled due to multiple failed login attempts. Please try again later.' 
+      };
+    }
+
+    return { 
+      success: false, 
+      error: authErr?.message || 'Authentication failed. Please verify your credentials.' 
+    };
+  }
+
+  const authUser = userCredential.user;
+
+  // Step 2: Verify Admin Role Authorization
+  const verification = await verifyAdminAuthorization(authUser);
+  console.log('[AdminAuth Debug] Role lookup succeeded:', verification.authorized);
+  console.log('[AdminAuth Debug] Resolved role:', verification.role || 'None');
+
+  if (!verification.authorized) {
+    // Valid credentials in Firebase Auth, but account lacks administrator role
+    await signOut(auth);
+    try {
+      await recordUnauthorizedAdminAttempt('Password sign-in rejected: Account lacks administrator privileges');
+      await logAdminSecurityEvent(
+        'LOGIN_DENIED_UNAUTHORIZED', 
+        cleanEmail, 
+        authUser.uid, 
+        'Password sign-in rejected: Account lacks administrator privileges'
+      );
+    } catch (e) {}
+
+    return {
+      success: false,
+      error: verification.errorMessage || 'This account does not have administrator access.'
+    };
+  }
+
+  // Set local session flags
+  sessionStorage.setItem('smartledger-admin-auth', 'true');
+  sessionStorage.setItem('smartledger-admin-email', verification.adminUser!.email);
+  sessionStorage.setItem('smartledger-admin-role', verification.adminUser!.role);
+
+  try {
+    await recordSuccessfulAuthEvent({ authProvider: 'password', isExplicitAdmin: true, force: true });
+    await logAdminSecurityEvent(
+      'LOGIN_SUCCESS', 
+      cleanEmail, 
+      authUser.uid, 
+      `Password Sign-in: Role ${verification.adminUser!.role}`
+    );
+  } catch (e) {}
+
+  return {
+    success: true,
+    adminUser: verification.adminUser
+  };
 }
 
 // Check redirect sign-in result on page load
@@ -333,20 +621,26 @@ export async function checkAdminRedirectAuth(): Promise<{
   try {
     const result = await getRedirectResult(auth);
     if (result && result.user) {
-      const verification = await verifyOrBootstrapAdminUser(result.user);
+      const authUser = result.user;
+      const verification = await verifyAdminAuthorization(authUser);
       if (!verification.authorized) {
         await signOut(auth);
         return {
           success: false,
-          error: verification.error || 'You are not authorized to access the Smart Ledger Admin Panel.'
+          error: verification.errorMessage || 'This account does not have administrator access.'
         };
       }
       sessionStorage.setItem('smartledger-admin-auth', 'true');
+      sessionStorage.setItem('smartledger-admin-email', verification.adminUser!.email);
+      sessionStorage.setItem('smartledger-admin-role', verification.adminUser!.role);
+      try {
+        await recordSuccessfulAuthEvent({ authProvider: 'google', isExplicitAdmin: true });
+      } catch (e) {}
       return { success: true, adminUser: verification.adminUser };
     }
     return null;
   } catch (err: any) {
-    console.warn('[AdminAuth] Check redirect result error:', err);
+    console.warn('[AdminAuth Debug] Check redirect result error:', err);
     return null;
   }
 }
@@ -356,18 +650,21 @@ export function subscribeToAdminUser(
   uid: string,
   onUpdate: (admin: AdminUser | null) => void
 ): () => void {
+  if (!uid || typeof uid !== 'string' || uid.startsWith('admin_local') || uid.startsWith('admin_server')) {
+    return () => {};
+  }
   const docRef = doc(db, 'adminUsers', uid);
   return onSnapshot(
     docRef,
     (snap) => {
       if (snap.exists()) {
-        onUpdate(snap.data() as AdminUser);
+        onUpdate({ ...snap.data(), uid: snap.id } as AdminUser);
       } else {
         onUpdate(null);
       }
     },
     (err) => {
-      console.error('[AdminAuth] Admin subscription error:', err);
+      console.warn('[AdminAuth] Admin subscription notice:', err?.message || err);
     }
   );
 }
@@ -387,7 +684,7 @@ export function subscribeToAllAdmins(
       onUpdate(list);
     },
     (err) => {
-      console.error('[AdminAuth] Fetch all admins error:', err);
+      console.warn('[AdminAuth] Fetch all admins notice:', err?.message || err);
     }
   );
 }
@@ -399,23 +696,64 @@ export function subscribeToAdminLogs(
 ): () => void {
   const colRef = collection(db, 'adminSecurityLogs');
   const q = query(colRef, orderBy('timestamp', 'desc'), limit(logLimit));
+
+  let firestoreLogs: AdminSecurityLog[] = [];
+  let serverLogs: AdminSecurityLog[] = [];
+
+  const mergeAndNotify = () => {
+    const combinedMap = new Map<string, AdminSecurityLog>();
+    for (const log of serverLogs) {
+      combinedMap.set(log.id, log);
+    }
+    for (const log of firestoreLogs) {
+      combinedMap.set(log.id, { ...combinedMap.get(log.id), ...log });
+    }
+    const combined = Array.from(combinedMap.values());
+    combined.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    onUpdate(combined.slice(0, logLimit));
+  };
+
+  // Fetch server authoritative logs
+  fetchAuthoritativeSecurityLogs().then((sLogs) => {
+    serverLogs = sLogs.map(s => ({
+      id: s.id,
+      email: s.email,
+      uid: s.uid,
+      ip: s.ip,
+      device: `${s.device?.browser || 'Browser'} on ${s.device?.os || 'OS'} (${s.device?.category || 'Device'})`,
+      browser: s.device?.browser || 'Unknown',
+      timestamp: s.timestamp,
+      action: (s.eventType || 'LOGIN_SUCCESS') as AdminSecurityAction,
+      details: s.details || '',
+      location: s.location,
+      deviceInfo: s.device,
+      newDevice: s.newDevice,
+      sessionId: s.sessionId,
+      authorizationResult: s.authorizationResult
+    }));
+    mergeAndNotify();
+  }).catch(() => {});
+
   return onSnapshot(
     q,
     (snap) => {
-      const logs: AdminSecurityLog[] = [];
+      firestoreLogs = [];
       snap.forEach((d) => {
-        logs.push(d.data() as AdminSecurityLog);
+        const data = d.data() as AdminSecurityLog;
+        firestoreLogs.push({ ...data, id: data.id || d.id });
       });
-      onUpdate(logs);
+      mergeAndNotify();
     },
     (err) => {
-      console.error('[AdminAuth] Fetch admin logs error:', err);
+      console.warn('[AdminAuth] Fetch admin logs notice:', err?.message || err);
       // Fallback query without orderBy if index is still building
       getDocs(colRef).then((fallbackSnap) => {
-        const logs: AdminSecurityLog[] = [];
-        fallbackSnap.forEach((d) => logs.push(d.data() as AdminSecurityLog));
-        logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        onUpdate(logs.slice(0, logLimit));
+        firestoreLogs = [];
+        fallbackSnap.forEach((d) => {
+          const data = d.data() as AdminSecurityLog;
+          firestoreLogs.push({ ...data, id: data.id || d.id });
+        });
+        mergeAndNotify();
       }).catch(() => {});
     }
   );
@@ -589,6 +927,7 @@ export async function removeAdminUser(
 // Complete Admin Sign Out
 export async function performAdminLogout(currentAdmin?: AdminUser | null): Promise<void> {
   try {
+    await recordLogoutAuthEvent({ uid: currentAdmin?.uid, email: currentAdmin?.email });
     if (currentAdmin) {
       await logAdminSecurityEvent('LOGOUT', currentAdmin.email, currentAdmin.uid, 'Admin logged out');
     }

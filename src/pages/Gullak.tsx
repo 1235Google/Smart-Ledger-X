@@ -20,6 +20,13 @@ import { useWindowSize } from 'react-use';
 import { calculateProgress, ACHIEVEMENTS, getCurrentLevel, getNextLevel } from '../lib/achievements';
 import DataStateGuard from '../components/ui/DataStateGuard';
 import CountUp from '../components/ui/CountUp';
+import { 
+  getGullakEntryDirection, 
+  getGullakAbsoluteAmount, 
+  getGullakSignedAmount,
+  calculateGullakBalance 
+} from '../lib/gullakAccounting';
+import { cn } from '../lib/utils';
 
 const iconMap: Record<string, React.ReactNode> = {
   medal: <Medal size={24} />, coins: <Coins size={24} />, banknote: <Banknote size={24} />,
@@ -53,27 +60,27 @@ export default function Gullak() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<GullakEntry | null>(null);
   
-  const totalSavings = useMemo(() => (gullakEntries || []).reduce((acc, curr) => acc + curr.amount, 0), [gullakEntries]);
+  const totalSavings = useMemo(() => calculateGullakBalance(gullakEntries || []), [gullakEntries]);
   
   const thisMonthSavings = useMemo(() => {
     const now = new Date();
-    return (gullakEntries || []).filter(e => isSameMonth(new Date(e.date), now)).reduce((acc, curr) => acc + curr.amount, 0);
+    return calculateGullakBalance((gullakEntries || []).filter(e => isSameMonth(new Date(e.date), now)));
   }, [gullakEntries]);
 
   const lastMonthSavings = useMemo(() => {
     const lastMonth = new Date();
     lastMonth.setMonth(lastMonth.getMonth() - 1);
-    return (gullakEntries || []).filter(e => isSameMonth(new Date(e.date), lastMonth)).reduce((acc, curr) => acc + curr.amount, 0);
+    return calculateGullakBalance((gullakEntries || []).filter(e => isSameMonth(new Date(e.date), lastMonth)));
   }, [gullakEntries]);
 
   const todaySavings = useMemo(() => {
     const today = format(new Date(), 'yyyy-MM-dd');
-    return (gullakEntries || []).filter(e => e.date === today).reduce((acc, curr) => acc + curr.amount, 0);
+    return calculateGullakBalance((gullakEntries || []).filter(e => e.date === today));
   }, [gullakEntries]);
 
   const highestDeposit = useMemo(() => {
     if (!gullakEntries || gullakEntries.length === 0) return 0;
-    return Math.max(...gullakEntries.map(e => e.amount));
+    return Math.max(...gullakEntries.map(e => getGullakAbsoluteAmount(e)));
   }, [gullakEntries]);
 
   const averageDeposit = useMemo(() => {
@@ -169,7 +176,7 @@ export default function Gullak() {
 
     gullakEntries.forEach(entry => {
       if (aggregated[entry.date] !== undefined) {
-        aggregated[entry.date] += entry.amount;
+        aggregated[entry.date] += getGullakSignedAmount(entry);
       }
     });
 
@@ -183,7 +190,7 @@ export default function Gullak() {
     if (!gullakEntries || gullakEntries.length === 0) return [];
     const aggregated: Record<string, number> = {};
     gullakEntries.forEach(entry => {
-      aggregated[entry.category] = (aggregated[entry.category] || 0) + entry.amount;
+      aggregated[entry.category] = (aggregated[entry.category] || 0) + getGullakAbsoluteAmount(entry);
     });
     const COLORS = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6'];
     return Object.entries(aggregated).map(([name, value], i) => ({ name, value, color: COLORS[i % COLORS.length] }));
@@ -193,7 +200,7 @@ export default function Gullak() {
     if (!gullakEntries || gullakEntries.length === 0) return [];
     const aggregated: Record<string, number> = {};
     gullakEntries.forEach(entry => {
-      aggregated[entry.personName] = (aggregated[entry.personName] || 0) + entry.amount;
+      aggregated[entry.personName] = (aggregated[entry.personName] || 0) + getGullakAbsoluteAmount(entry);
     });
     return Object.entries(aggregated)
       .map(([name, total]) => ({ name, total }))
@@ -205,10 +212,19 @@ export default function Gullak() {
 
   const handleAddEntry = (e: React.FormEvent) => {
     e.preventDefault();
+    const absAmt = Math.abs(Number(formData.amount) || 0);
+    const isWithdrawal = formData.category?.toLowerCase() === 'withdrawal';
     addGullakEntry({
-      personName: formData.personName, amount: Number(formData.amount),
-      date: formData.date, time: formData.time, paymentMethod: formData.paymentMethod,
-      category: formData.category, note: formData.note
+      personName: formData.personName,
+      amount: absAmt,
+      date: formData.date,
+      time: formData.time,
+      paymentMethod: formData.paymentMethod,
+      category: formData.category,
+      note: formData.note || (isWithdrawal ? 'Vault Withdrawal' : 'Gullak Allocation'),
+      type: 'savings',
+      operation: isWithdrawal ? 'withdrawal' : 'allocation',
+      direction: isWithdrawal ? 'debit' : 'credit'
     });
     setFormData({ personName: '', amount: '', date: format(new Date(), 'yyyy-MM-dd'), time: format(new Date(), 'HH:mm'), paymentMethod: 'Cash', category: 'Savings', note: '' });
     setIsAddModalOpen(false);
@@ -219,10 +235,19 @@ export default function Gullak() {
   const handleEditEntry = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingEntry) return;
+    const absAmt = Math.abs(Number(formData.amount) || 0);
+    const isWithdrawal = formData.category?.toLowerCase() === 'withdrawal';
     updateGullakEntry(editingEntry.id, {
-      personName: formData.personName, amount: Number(formData.amount),
-      date: formData.date, time: formData.time, paymentMethod: formData.paymentMethod,
-      category: formData.category, note: formData.note
+      personName: formData.personName,
+      amount: absAmt,
+      date: formData.date,
+      time: formData.time,
+      paymentMethod: formData.paymentMethod,
+      category: formData.category,
+      note: formData.note,
+      type: editingEntry.type || 'savings',
+      operation: isWithdrawal ? 'withdrawal' : (editingEntry.operation || 'allocation'),
+      direction: isWithdrawal ? 'debit' : (editingEntry.direction || 'credit')
     });
     setEditingEntry(null);
     setIsEditModalOpen(false);
@@ -663,22 +688,28 @@ export default function Gullak() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {filteredEntries.map(entry => (
-                      <tr key={entry.id} className="hover:bg-white/5 transition-colors group">
-                        <td className="p-4"><div className="text-white font-medium">{format(parseISO(entry.date), 'dd MMM yyyy')}</div><div className="text-slate-500 text-xs">{entry.time}</div></td>
-                        <td className="p-4 text-white">{entry.personName}</td>
-                        <td className="p-4 text-right font-bold text-emerald-400">₹{entry.amount.toLocaleString('en-IN')}</td>
-                        <td className="p-4"><span className="px-2.5 py-1 bg-white/5 rounded-md text-slate-300 text-xs">{entry.category}</span></td>
-                        <td className="p-4 text-slate-400 text-sm">{entry.paymentMethod}</td>
-                        <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => handleDuplicate(entry)} className="p-1.5 text-slate-400 hover:text-white rounded-md hover:bg-white/10"><Copy size={16} /></button>
-                            <button onClick={() => openEditModal(entry)} className="p-1.5 text-slate-400 hover:text-indigo-400 rounded-md hover:bg-white/10"><Edit2 size={16} /></button>
-                            <button onClick={() => openDeleteModal(entry.id)} className="p-1.5 text-slate-400 hover:text-red-400 rounded-md hover:bg-white/10"><Trash2 size={16} /></button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {filteredEntries.map(entry => {
+                      const isCredit = getGullakEntryDirection(entry) === 'credit';
+                      const absAmt = getGullakAbsoluteAmount(entry);
+                      return (
+                        <tr key={entry.id} className="hover:bg-white/5 transition-colors group">
+                          <td className="p-4"><div className="text-white font-medium">{format(parseISO(entry.date), 'dd MMM yyyy')}</div><div className="text-slate-500 text-xs">{entry.time}</div></td>
+                          <td className="p-4 text-white">{entry.personName}</td>
+                          <td className={cn("p-4 text-right font-bold tabular-nums", isCredit ? "text-emerald-400" : "text-rose-400")}>
+                            {isCredit ? '+' : '-'}₹{absAmt.toLocaleString('en-IN')}
+                          </td>
+                          <td className="p-4"><span className="px-2.5 py-1 bg-white/5 rounded-md text-slate-300 text-xs">{entry.category || 'Savings'}</span></td>
+                          <td className="p-4 text-slate-400 text-sm">{entry.paymentMethod}</td>
+                          <td className="p-4 text-right">
+                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => handleDuplicate(entry)} className="p-1.5 text-slate-400 hover:text-white rounded-md hover:bg-white/10"><Copy size={16} /></button>
+                              <button onClick={() => openEditModal(entry)} className="p-1.5 text-slate-400 hover:text-indigo-400 rounded-md hover:bg-white/10"><Edit2 size={16} /></button>
+                              <button onClick={() => openDeleteModal(entry.id)} className="p-1.5 text-slate-400 hover:text-red-400 rounded-md hover:bg-white/10"><Trash2 size={16} /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {filteredEntries.length === 0 && (
                        <tr><td colSpan={6} className="p-10 text-center text-slate-500">No entries found.</td></tr>
                     )}

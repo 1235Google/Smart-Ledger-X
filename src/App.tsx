@@ -4,6 +4,7 @@ import { StoreProvider, useStore } from './context/StoreContext';
 import Layout from './components/Layout';
 import SecurityWrapper from './components/SecurityWrapper';
 import PageFallback from './components/ui/PageFallback';
+import MaintenanceScreen from './components/MaintenanceScreen';
 
 // Lazy load all page routes
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -41,11 +42,14 @@ const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
 const AdminGullak = lazy(() => import('./pages/admin/AdminGullak'));
 const AdminLogs = lazy(() => import('./pages/admin/AdminLogs'));
 const AdminBackup = lazy(() => import('./pages/admin/AdminBackup'));
+const AdminScheduledJobs = lazy(() => import('./pages/admin/AdminScheduledJobs'));
+const AdminRecycleBin = lazy(() => import('./pages/admin/AdminRecycleBin'));
+const AdminTrustedDevices = lazy(() => import('./pages/admin/AdminTrustedDevices'));
 
 const Login = lazy(() => import('./pages/Login'));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isAuthReady } = useStore();
+  const { isAuthenticated, isAuthReady, systemConfig, isAdminAuthenticated } = useStore();
   
   if (!isAuthReady) {
     return (
@@ -56,6 +60,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // If system is in maintenance mode and user is not an administrator, show maintenance screen
+  if (systemConfig?.mode === 'maintenance' && !isAdminAuthenticated) {
+    return <MaintenanceScreen />;
+  }
+
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
@@ -63,7 +72,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function LoginRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isAuthReady } = useStore();
+  const { isAuthenticated, isAuthReady, systemConfig, isAdminAuthenticated } = useStore();
   
   if (!isAuthReady) {
     return (
@@ -72,6 +81,11 @@ function LoginRoute({ children }: { children: React.ReactNode }) {
         <p className="text-xs text-neutral-400 font-medium">Loading Smart Ledger...</p>
       </div>
     );
+  }
+
+  // If system is in maintenance mode and user is not an administrator, show maintenance screen
+  if (systemConfig?.mode === 'maintenance' && !isAdminAuthenticated) {
+    return <MaintenanceScreen />;
   }
 
   if (isAuthenticated) {
@@ -106,7 +120,10 @@ function AppRoutes() {
           <Route path="analytics" element={<AdminAnalytics />} />
           <Route path="reports" element={<AdminReports />} />
           <Route path="backup" element={<AdminBackup />} />
+          <Route path="jobs" element={<AdminScheduledJobs />} />
           <Route path="gullak" element={<AdminGullak />} />
+          <Route path="recycle-bin" element={<AdminRecycleBin />} />
+          <Route path="trusted-devices" element={<AdminTrustedDevices />} />
           <Route path="logs" element={<AdminLogs />} />
           <Route path="settings" element={<AdminSettings />} />
         </Route>

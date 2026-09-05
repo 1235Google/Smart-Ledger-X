@@ -1,0 +1,23 @@
+{
+  "auto_backup": {
+    "enabled": true
+  },
+  "payment_reminders": {
+    "enabled": true
+  },
+  "ledger_integrity_check": {
+    "enabled": true
+  },
+  "daily_financial_snapshot": {
+    "enabled": true
+  },
+  "system_cleanup_maintenance": {
+    "enabled": true
+  },
+  "security_notifications_scan": {
+    "enabled": true
+  },
+  "monthly_financial_report": {
+    "enabled": true
+  }
+}

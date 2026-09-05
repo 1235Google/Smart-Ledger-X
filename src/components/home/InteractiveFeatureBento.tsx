@@ -7,11 +7,12 @@ import {
 import { Link } from 'react-router-dom';
 import { useStore } from '../../context/StoreContext';
 import { formatCurrency } from '../../lib/utils';
+import { calculateGullakBalance } from '../../lib/gullakAccounting';
 
 export default function InteractiveFeatureBento() {
   const { gullakEntries, gullakSettings, transactions } = useStore();
 
-  const totalGullakSaved = (gullakEntries || []).reduce((acc, curr) => acc + (curr.amount || 0), 0);
+  const totalGullakSaved = calculateGullakBalance(gullakEntries || []);
   const targetGoal = gullakSettings?.monthlyGoal || 10000;
   const goalPercent = targetGoal > 0 ? Math.min(100, Math.round((totalGullakSaved / targetGoal) * 100)) : 0;
   const hasGullakData = gullakEntries && gullakEntries.length > 0;

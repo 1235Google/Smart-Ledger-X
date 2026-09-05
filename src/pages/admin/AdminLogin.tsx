@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShieldCheck, Mail, Lock, ArrowRight, AlertCircle, CheckCircle2, Eye, EyeOff, Loader2, Sparkles, Shield, KeyRound } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../../lib/firebase';
 
 export default function AdminLogin() {
   const { adminLogin, adminGoogleLogin, isAdminAuthenticated, isAdminLoading } = useStore();
@@ -18,6 +20,8 @@ export default function AdminLogin() {
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
+  const [forgotError, setForgotError] = useState('');
+  const [isSendingForgot, setIsSendingForgot] = useState(false);
 
   const passwordInputRef = useRef<HTMLInputElement>(null);
 
@@ -37,7 +41,7 @@ export default function AdminLogin() {
       if (res.success) {
         navigate('/admin/dashboard', { replace: true });
       } else {
-        setError(res.error || 'You are not authorized to access the Smart Ledger Admin Panel.');
+        setError(res.error || 'This account does not have administrator access.');
       }
     } catch (err: any) {
       setError(err?.message || 'Google sign-in could not be completed. Please try again.');
@@ -63,7 +67,7 @@ export default function AdminLogin() {
       if (result.success) {
         navigate('/admin/dashboard', { replace: true });
       } else {
-        setError(result.error || 'Invalid Admin Password');
+        setError(result.error || 'Invalid administrator credentials.');
       }
     } catch (err: any) {
       setError('An error occurred during verification. Please try again.');
@@ -72,17 +76,63 @@ export default function AdminLogin() {
     }
   };
 
-  const handleForgotSubmit = (e: React.FormEvent) => {
+  const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!forgotEmail) return;
-    setForgotSent(true);
-    setTimeout(() => {
-      setShowForgotModal(false);
-      setForgotSent(false);
-      setForgotEmail('');
-    }, 2500);
+    const cleanForgotEmail = forgotEmail.trim();
+    if (!cleanForgotEmail) return;
+
+    setIsSendingForgot(true);
+    setForgotError('');
+    try {
+      await sendPasswordResetEmail(auth, cleanForgotEmail);
+      setForgotSent(true);
+      setTimeout(() => {
+        setShowForgotModal(false);
+        setForgotSent(false);
+        setForgotEmail('');
+      }, 3000);
+    } catch (err: any) {
+      console.warn('[AdminAuth Debug] Password reset email error:', err?.code, err?.message);
+      if (err?.code === 'auth/user-not-found') {
+        setForgotError('No administrator account found with this email address.');
+      } else if (err?.code === 'auth/invalid-email') {
+        setForgotError('Please enter a valid email address.');
+      } else {
+        // Don't expose sensitive details, still show confirmation to prevent enumeration
+        setForgotSent(true);
+        setTimeout(() => {
+          setShowForgotModal(false);
+          setForgotSent(false);
+          setForgotEmail('');
+        }, 3000);
+      }
+    } finally {
+      setIsSendingForgot(false);
+    }
   };
 
+  // State 1: Loading / checking session state
+  if (isAdminLoading) {
+    return (
+      <div className="min-h-screen bg-[#06080e] text-slate-100 flex items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none" />
+        <div className="bg-slate-900/70 backdrop-blur-2xl border border-white/10 rounded-[2rem] p-8 max-w-sm w-full text-center shadow-2xl flex flex-col items-center gap-4 relative z-10">
+          <div className="p-3.5 rounded-2xl bg-gradient-to-tr from-blue-500/20 via-emerald-500/20 to-teal-500/20 border border-emerald-500/30 shadow-[0_0_25px_rgba(16,185,129,0.2)]">
+            <ShieldCheck size={36} className="text-emerald-400 animate-pulse" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-white">SmartLedger Admin</h2>
+            <p className="text-xs text-slate-400 flex items-center justify-center gap-2 mt-2">
+              <Loader2 size={15} className="animate-spin text-emerald-400" />
+              <span>Verifying administrator authorization...</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // State 2 & 3: Unauthenticated / login form view (redirect handled by useEffect if authenticated)
   return (
     <div className="min-h-screen bg-[#06080e] text-slate-100 flex items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
       {/* Dynamic Background Glass & Mesh Spheres */}
@@ -314,6 +364,12 @@ export default function AdminLogin() {
               </div>
             ) : (
               <form onSubmit={handleForgotSubmit} className="space-y-4">
+                {forgotError && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
+                    <AlertCircle size={15} />
+                    <span>{forgotError}</span>
+                  </div>
+                )}
                 <input 
                   type="email" 
                   value={forgotEmail}
@@ -332,9 +388,11 @@ export default function AdminLogin() {
                   </button>
                   <button 
                     type="submit" 
-                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-semibold text-xs text-white"
+                    disabled={isSendingForgot}
+                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-semibold text-xs text-white disabled:opacity-50 flex items-center justify-center gap-1.5"
                   >
-                    Send Instructions
+                    {isSendingForgot ? <Loader2 size={14} className="animate-spin" /> : null}
+                    <span>{isSendingForgot ? 'Sending...' : 'Send Instructions'}</span>
                   </button>
                 </div>
               </form>

@@ -560,6 +560,52 @@ export function getLocalLoginHistory(): LoginHistoryEntry[] {
 /**
  * Subscribe to real-time login activity history for a user
  */
+export async function updateUserDevice(userId: string, deviceId: string, updates: Partial<UserDevice>): Promise<void> {
+  if (userId === 'local_user') {
+    let devices = getLocalDevices();
+    devices = devices.map(d => d.id === deviceId ? { ...d, ...updates } : d);
+    try {
+      localStorage.setItem(LOCAL_DEVICES_KEY, JSON.stringify(devices));
+    } catch(e) {}
+    return;
+  }
+
+  try {
+    const { doc, updateDoc } = await import('firebase/firestore');
+    const { db } = await import('./firebase');
+    
+    if (!db) return;
+    const docRef = doc(db, 'users', userId, 'devices', deviceId);
+    await updateDoc(docRef, { ...updates, updatedAt: new Date().toISOString() });
+  } catch (error) {
+    console.error('Error updating device:', error);
+    throw error;
+  }
+}
+
+export async function removeUserDevice(userId: string, deviceId: string): Promise<void> {
+  if (userId === 'local_user') {
+    let devices = getLocalDevices();
+    devices = devices.filter(d => d.id !== deviceId);
+    try {
+      localStorage.setItem(LOCAL_DEVICES_KEY, JSON.stringify(devices));
+    } catch(e) {}
+    return;
+  }
+
+  try {
+    const { doc, deleteDoc } = await import('firebase/firestore');
+    const { db } = await import('./firebase');
+    
+    if (!db) return;
+    const docRef = doc(db, 'users', userId, 'devices', deviceId);
+    await deleteDoc(docRef);
+  } catch (error) {
+    console.error('Error removing device:', error);
+    throw error;
+  }
+}
+
 export function subscribeToLoginHistory(
   userId: string,
   onUpdate: (logs: LoginHistoryEntry[]) => void

@@ -32,7 +32,10 @@ import {
   Layers,
   ArrowUpRight,
   Database,
-  Loader2
+  Loader2,
+  CalendarClock,
+  Trash2,
+  Smartphone
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { useToast } from '../../context/ToastContext';
@@ -40,6 +43,7 @@ import { cn } from '../../lib/utils';
 import { M3ThemeProvider, useM3Theme, M3ThemeMode } from '../../components/admin/material3/M3ThemeContext';
 import { M3Button } from '../../components/admin/material3/M3Button';
 import { M3Dialog } from '../../components/admin/material3/M3Dialog';
+import SystemModeBanner from '../../components/SystemModeBanner';
 
 function AdminLayoutInner() {
   const { 
@@ -103,12 +107,15 @@ function AdminLayoutInner() {
     { label: 'Transactions', path: '/admin/ledger', icon: Wallet },
     { label: 'Pending Payments', path: '/admin/pending', icon: Clock },
     { label: 'Analytics', path: '/admin/analytics', icon: BarChart3 },
-    { label: 'Reports', path: '/admin/reports', icon: FileText },
+    { label: 'Reports Center', path: '/admin/reports', icon: FileText },
     { label: 'Backup & Recovery', path: '/admin/backup', icon: Cloud },
+    { label: 'Scheduled Jobs', path: '/admin/jobs', icon: CalendarClock },
     { label: 'Gullak Savings', path: '/admin/gullak', icon: Database },
     { label: 'Reminders', path: '/admin/reminders', icon: Bell },
     { label: 'Admin RBAC', path: '/admin/users', icon: Users },
+    { label: 'Trusted Devices', path: '/admin/trusted-devices', icon: Smartphone },
     { label: 'Security Logs', path: '/admin/logs', icon: Activity },
+    { label: 'Recycle Bin', path: '/admin/recycle-bin', icon: Trash2 },
     { label: 'Settings', path: '/admin/settings', icon: Settings },
   ];
 
@@ -546,6 +553,9 @@ function AdminLayoutInner() {
             </div>
           </div>
         </header>
+
+        {/* Global Admin System Availability Banner */}
+        <SystemModeBanner isAdmin={true} />
 
         {/* Page Content Body */}
         <main className="flex-1 p-4 sm:p-8 max-w-[1600px] w-full mx-auto">

@@ -1,6 +1,6 @@
 {
   "name": "Remix: Smart Ledger",
-  "description": "Premium AI finance management application featuring cinematic product showcase, automated cash flow analysis, end-to-end encryption, and real-time ledger tracking.",
+  "description": "Smart Ledger is a comprehensive financial ledger and cash flow management platform with automated backups, real-time background scheduled jobs monitoring, biometric security, and audit analytics.",
   "requestFramePermissions": [
     "publickey-credentials-create",
     "publickey-credentials-get"

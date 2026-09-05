@@ -1,0 +1,92 @@
+[
+  {
+    "id": "audit_job_toggle_1788620306020_d09e8e",
+    "uid": "admin",
+    "email": "admin@smartledgerx.io",
+    "eventType": "JOB_CONFIG_TOGGLE",
+    "authProvider": "none",
+    "timestamp": "2026-09-05T14:58:26.020Z",
+    "serverTimestampMs": 1788620306020,
+    "ip": "127.0.0.1",
+    "location": {
+      "country": "Local Network / Cloud Sandbox",
+      "region": "Development Environment",
+      "city": "Container Ingress",
+      "source": "Approximate location based on IP"
+    },
+    "device": {
+      "category": "Desktop",
+      "model": "Unavailable",
+      "os": "Unknown OS",
+      "osVersion": "Unavailable",
+      "browser": "Unknown Browser",
+      "browserVersion": "Unavailable",
+      "userAgent": "curl/7.88.1",
+      "clientHints": {}
+    },
+    "sessionId": "sess_1788620306020",
+    "newDevice": false,
+    "authorizationResult": "admin",
+    "details": "Job 'system_cleanup_maintenance' enabled by admin@smartledgerx.io."
+  },
+  {
+    "id": "audit_job_toggle_1788620305999_811f9d",
+    "uid": "admin",
+    "email": "admin@smartledgerx.io",
+    "eventType": "JOB_CONFIG_TOGGLE",
+    "authProvider": "none",
+    "timestamp": "2026-09-05T14:58:25.999Z",
+    "serverTimestampMs": 1788620305999,
+    "ip": "127.0.0.1",
+    "location": {
+      "country": "Local Network / Cloud Sandbox",
+      "region": "Development Environment",
+      "city": "Container Ingress",
+      "source": "Approximate location based on IP"
+    },
+    "device": {
+      "category": "Desktop",
+      "model": "Unavailable",
+      "os": "Unknown OS",
+      "osVersion": "Unavailable",
+      "browser": "Unknown Browser",
+      "browserVersion": "Unavailable",
+      "userAgent": "curl/7.88.1",
+      "clientHints": {}
+    },
+    "sessionId": "sess_1788620305999",
+    "newDevice": false,
+    "authorizationResult": "admin",
+    "details": "Job 'system_cleanup_maintenance' disabled by admin@smartledgerx.io."
+  },
+  {
+    "id": "audit_job_run_1788620298231_dbbaf3",
+    "uid": "admin",
+    "email": "admin@smartledgerx.io",
+    "eventType": "JOB_MANUAL_RUN",
+    "authProvider": "none",
+    "timestamp": "2026-09-05T14:58:18.231Z",
+    "serverTimestampMs": 1788620298231,
+    "ip": "127.0.0.1",
+    "location": {
+      "country": "Local Network / Cloud Sandbox",
+      "region": "Development Environment",
+      "city": "Container Ingress",
+      "source": "Approximate location based on IP"
+    },
+    "device": {
+      "category": "Desktop",
+      "model": "Unavailable",
+      "os": "Unknown OS",
+      "osVersion": "Unavailable",
+      "browser": "Unknown Browser",
+      "browserVersion": "Unavailable",
+      "userAgent": "curl/7.88.1",
+      "clientHints": {}
+    },
+    "sessionId": "sess_1788620298231",
+    "newDevice": false,
+    "authorizationResult": "admin",
+    "details": "Manual trigger of background job 'Ledger Integrity Check' initiated by admin@smartledgerx.io. Result: SUCCESS (0.00s)."
+  }
+]

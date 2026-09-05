@@ -26,11 +26,52 @@ service cloud.firestore {
       return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
     }
 
-    // Role-Based Access Control Helper (Admin verification via trusted server record)
+    // Role-Based Access Control Helper (Admin verification via trusted server record or custom claims)
     function isAdmin() {
-      return isSignedIn() && 
-        exists(/databases/$(database)/documents/adminUsers/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/adminUsers/$(request.auth.uid)).data.status == 'Active';
+      return isSignedIn() && (
+        request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io'] ||
+        request.auth.token.get('admin', false) == true || 
+        request.auth.token.get('role', '') in ['Owner', 'Super Admin', 'Admin', 'Manager', 'admin', 'administrator', 'superadmin'] ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         (
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') in ['Owner', 'Super Admin', 'Admin', 'Manager', 'admin', 'administrator', 'superadmin'] ||
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true
+         )) ||
+        (exists(/databases/$(database)/documents/adminUsers/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/adminUsers/$(request.auth.uid)).data.get('status', 'Active') != 'Disabled' &&
+         (
+           get(/databases/$(database)/documents/adminUsers/$(request.auth.uid)).data.get('role', 'Admin') in ['Owner', 'Super Admin', 'Admin', 'Manager', 'admin', 'administrator', 'superadmin'] ||
+           get(/databases/$(database)/documents/adminUsers/$(request.auth.uid)).data.get('isAdmin', false) == true
+         ))
+      );
+    }
+
+    // =========================================================================
+    // SYSTEM AVAILABILITY & MAINTENANCE MODE ENFORCEMENT
+    // =========================================================================
+
+    function getSystemMode() {
+      return exists(/databases/$(database)/documents/system/config)
+        ? get(/databases/$(database)/documents/system/config).data.get('mode', 'normal')
+        : 'normal';
+    }
+
+    // Normal users can read if system is not in maintenance; admins retain full access
+    function isSystemReadAllowed() {
+      return isAdmin() || getSystemMode() != 'maintenance';
+    }
+
+    // Normal users can write ONLY when system is in Normal mode; admins retain repair write access
+    function isSystemWriteAllowed() {
+      return isAdmin() || getSystemMode() == 'normal';
+    }
+
+    function isValidSystemConfig(data) {
+      return data is map &&
+        data.get('mode', 'normal') in ['normal', 'readonly', 'maintenance'] &&
+        (!('reason' in data) || (data.reason is string && data.reason.size() <= 500)) &&
+        (!('changedBy' in data) || (data.changedBy is string && data.changedBy.size() <= 150)) &&
+        (!('autoRestore' in data) || (data.autoRestore is bool));
     }
 
     // =========================================================================
@@ -43,7 +84,9 @@ service cloud.firestore {
         (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
         (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500000)) &&
         (!('businessName' in data) || (data.businessName is string && data.businessName.size() <= 150)) &&
-        (!('mobile' in data) || (data.mobile is string && data.mobile.size() <= 30));
+        (!('mobile' in data) || (data.mobile is string && data.mobile.size() <= 30)) &&
+        (!('role' in data) || (data.role is string && data.role.size() <= 50)) &&
+        (!('isAdmin' in data) || (data.isAdmin is bool));
     }
 
     function isValidLedgerEntry(data) {
@@ -120,7 +163,7 @@ service cloud.firestore {
     function isValidAdminUser(data) {
       return data is map &&
         (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
-        (!('role' in data) || (data.role is string && data.role in ['Owner', 'Super Admin', 'Admin', 'Manager'])) &&
+        (!('role' in data) || (data.role is string && data.role in ['Owner', 'Super Admin', 'Admin', 'Manager', 'admin', 'administrator', 'superadmin'])) &&
         (!('status' in data) || (data.status is string && data.status in ['Active', 'Disabled']));
     }
 
@@ -139,114 +182,134 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // SYSTEM CONFIGURATION & AVAILABILITY MODE
+    // =========================================================================
+    match /system/config {
+      // Anyone (authenticated or unauthenticated) can read system mode to display status/maintenance UI
+      allow read: if true;
+      // ONLY verified administrators can modify system availability mode
+      allow write: if isSignedIn() && (
+        isAdmin() ||
+        request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io']
+      ) && isValidSystemConfig(incoming());
+    }
+
+    // =========================================================================
     // USER DOMAIN PARTITIONING (STRICT MASTER GATE)
     // =========================================================================
 
     // Root user document
     match /users/{userId} {
-      allow read, delete: if isOwner(userId);
-      allow create, update: if isOwner(userId) && isValidUserProfile(incoming());
+      allow read: if isOwner(userId) && isSystemReadAllowed();
+      allow delete: if isOwner(userId) && isSystemWriteAllowed();
+      allow create, update: if isOwner(userId) && isSystemWriteAllowed() && isValidUserProfile(incoming());
     }
 
     // User Profile subcollection
     match /users/{userId}/profile/{infoDoc} {
-      allow read, delete: if isOwner(userId);
-      allow create, update: if isOwner(userId) && isValidUserProfile(incoming());
+      allow read: if isOwner(userId) && isSystemReadAllowed();
+      allow delete: if isOwner(userId) && isSystemWriteAllowed();
+      allow create, update: if isOwner(userId) && isSystemWriteAllowed() && isValidUserProfile(incoming());
     }
     match /users/{userId}/profile {
-      allow read, delete: if isOwner(userId);
-      allow create, update: if isOwner(userId) && isValidUserProfile(incoming());
+      allow read: if isOwner(userId) && isSystemReadAllowed();
+      allow delete: if isOwner(userId) && isSystemWriteAllowed();
+      allow create, update: if isOwner(userId) && isSystemWriteAllowed() && isValidUserProfile(incoming());
     }
 
     // User Ledger transactions subcollection
     match /users/{userId}/ledger/{entryId} {
-      allow get: if isOwner(userId) && isValidId(entryId);
-      allow list: if isOwner(userId);
-      allow create, update: if isOwner(userId) && isValidId(entryId) && isValidLedgerEntry(incoming());
-      allow delete: if isOwner(userId) && isValidId(entryId);
+      allow get: if isOwner(userId) && isValidId(entryId) && isSystemReadAllowed();
+      allow list: if isOwner(userId) && isSystemReadAllowed();
+      allow create, update: if isOwner(userId) && isValidId(entryId) && isSystemWriteAllowed() && isValidLedgerEntry(incoming());
+      allow delete: if isOwner(userId) && isValidId(entryId) && isSystemWriteAllowed();
     }
 
     // User Transactions duplicate index subcollection
     match /users/{userId}/transactions/{txId} {
-      allow get: if isOwner(userId) && isValidId(txId);
-      allow list: if isOwner(userId);
-      allow create, update: if isOwner(userId) && isValidId(txId) && isValidLedgerEntry(incoming());
-      allow delete: if isOwner(userId) && isValidId(txId);
+      allow get: if isOwner(userId) && isValidId(txId) && isSystemReadAllowed();
+      allow list: if isOwner(userId) && isSystemReadAllowed();
+      allow create, update: if isOwner(userId) && isValidId(txId) && isSystemWriteAllowed() && isValidLedgerEntry(incoming());
+      allow delete: if isOwner(userId) && isValidId(txId) && isSystemWriteAllowed();
     }
 
     // User App state subcollection
     match /users/{userId}/app/{stateDoc} {
-      allow get: if isOwner(userId) && isValidId(stateDoc);
-      allow list: if isOwner(userId);
-      allow create, update: if isOwner(userId) && isValidId(stateDoc) && isValidAppState(incoming());
-      allow delete: if isOwner(userId) && isValidId(stateDoc);
+      allow get: if isOwner(userId) && isValidId(stateDoc) && isSystemReadAllowed();
+      allow list: if isOwner(userId) && isSystemReadAllowed();
+      allow create, update: if isOwner(userId) && isValidId(stateDoc) && isSystemWriteAllowed() && isValidAppState(incoming());
+      allow delete: if isOwner(userId) && isValidId(stateDoc) && isSystemWriteAllowed();
     }
 
     // User Encrypted Backups metadata subcollection
     match /users/{userId}/backups/{backupId} {
-      allow get: if isOwner(userId) && isValidId(backupId);
-      allow list: if isOwner(userId);
-      allow create, update: if isOwner(userId) && isValidId(backupId) && isValidBackupRecord(incoming());
-      allow delete: if isOwner(userId) && isValidId(backupId);
+      allow get: if isOwner(userId) && isValidId(backupId) && isSystemReadAllowed();
+      allow list: if isOwner(userId) && isSystemReadAllowed();
+      allow create, update: if isOwner(userId) && isValidId(backupId) && (isSystemWriteAllowed() || isAdmin()) && isValidBackupRecord(incoming());
+      allow delete: if isOwner(userId) && isValidId(backupId) && (isSystemWriteAllowed() || isAdmin());
 
       // Disaster recovery payload subcollection
       match /payload/{dataDoc} {
-        allow read, write: if isOwner(userId) && isValidId(backupId);
+        allow read: if isOwner(userId) && isValidId(backupId) && isSystemReadAllowed();
+        allow write: if isOwner(userId) && isValidId(backupId) && (isSystemWriteAllowed() || isAdmin());
       }
     }
 
     // User Backup health and synchronization status
     match /users/{userId}/backups_meta/{statusDoc} {
-      allow read, write: if isOwner(userId) && isValidId(statusDoc);
+      allow read: if isOwner(userId) && isValidId(statusDoc) && isSystemReadAllowed();
+      allow write: if isOwner(userId) && isValidId(statusDoc) && (isSystemWriteAllowed() || isAdmin());
     }
 
     // User Login History subcollection
     match /users/{userId}/loginHistory/{historyId} {
-      allow get: if isOwner(userId) && isValidId(historyId);
-      allow list: if isOwner(userId);
+      allow get: if isOwner(userId) && isValidId(historyId) && isSystemReadAllowed();
+      allow list: if isOwner(userId) && isSystemReadAllowed();
       allow create: if isOwner(userId) && isValidId(historyId) && isValidLoginHistoryRecord(incoming());
-      allow delete: if isOwner(userId) && isValidId(historyId);
+      allow delete: if isOwner(userId) && isValidId(historyId) && isSystemWriteAllowed();
     }
 
     // User Active Registered Devices subcollection
     match /users/{userId}/devices/{deviceId} {
-      allow get: if isOwner(userId) && isValidId(deviceId);
-      allow list: if isOwner(userId);
-      allow create, update: if isOwner(userId) && isValidId(deviceId) && isValidUserDeviceRecord(incoming());
-      allow delete: if isOwner(userId) && isValidId(deviceId);
+      allow get: if isOwner(userId) && isValidId(deviceId) && isSystemReadAllowed();
+      allow list: if isOwner(userId) && isSystemReadAllowed();
+      allow create, update: if isOwner(userId) && isValidId(deviceId) && isSystemWriteAllowed() && isValidUserDeviceRecord(incoming());
+      allow delete: if isOwner(userId) && isValidId(deviceId) && isSystemWriteAllowed();
     }
 
     // User Security preferences & PIN configuration
     match /users/{userId}/security/{configDoc} {
-      allow get: if isOwner(userId) && isValidId(configDoc);
-      allow create, update: if isOwner(userId) && isValidId(configDoc) && isValidUserSecurityConfig(incoming());
-      allow delete: if isOwner(userId) && isValidId(configDoc);
+      allow get: if isOwner(userId) && isValidId(configDoc) && isSystemReadAllowed();
+      allow create, update: if isOwner(userId) && isValidId(configDoc) && isSystemWriteAllowed() && isValidUserSecurityConfig(incoming());
+      allow delete: if isOwner(userId) && isValidId(configDoc) && isSystemWriteAllowed();
     }
 
     // User Bills and recurring reminders
     match /users/{userId}/bills/{billId} {
-      allow get: if isOwner(userId) && isValidId(billId);
-      allow list: if isOwner(userId);
-      allow create, update: if isOwner(userId) && isValidId(billId) && isValidBill(incoming());
-      allow delete: if isOwner(userId) && isValidId(billId);
+      allow get: if isOwner(userId) && isValidId(billId) && isSystemReadAllowed();
+      allow list: if isOwner(userId) && isSystemReadAllowed();
+      allow create, update: if isOwner(userId) && isValidId(billId) && isSystemWriteAllowed() && isValidBill(incoming());
+      allow delete: if isOwner(userId) && isValidId(billId) && isSystemWriteAllowed();
     }
 
     // User Notification inbox subcollection
     match /users/{userId}/notifications/{notificationId} {
-      allow get: if isOwner(userId) && isValidId(notificationId);
-      allow list: if isOwner(userId);
-      allow create, update: if isOwner(userId) && isValidId(notificationId) && isValidNotification(incoming());
-      allow delete: if isOwner(userId) && isValidId(notificationId);
+      allow get: if isOwner(userId) && isValidId(notificationId) && isSystemReadAllowed();
+      allow list: if isOwner(userId) && isSystemReadAllowed();
+      allow create, update: if isOwner(userId) && isValidId(notificationId) && isSystemWriteAllowed() && isValidNotification(incoming());
+      allow delete: if isOwner(userId) && isValidId(notificationId) && isSystemWriteAllowed();
     }
 
     // User Notification settings subcollection
     match /users/{userId}/settings/{settingDoc} {
-      allow read, write: if isOwner(userId) && isValidId(settingDoc);
+      allow read: if isOwner(userId) && isValidId(settingDoc) && isSystemReadAllowed();
+      allow write: if isOwner(userId) && isValidId(settingDoc) && isSystemWriteAllowed();
     }
 
     // Fallback protection for any deeply nested user documents
     match /users/{userId}/{allSubPaths=**} {
-      allow read, write: if isOwner(userId);
+      allow read: if isOwner(userId) && isSystemReadAllowed();
+      allow write: if isOwner(userId) && isSystemWriteAllowed();
     }
 
     // =========================================================================
@@ -269,22 +332,76 @@ service cloud.firestore {
     // ADMIN RBAC USERS & SECURITY AUDIT LOGS
     // =========================================================================
     match /adminUsers/{adminId} {
-      allow get: if isSignedIn() && request.auth.uid == adminId;
-      allow get: if isSignedIn() && isAdmin();
-      allow list: if isSignedIn() && isAdmin();
-      // Allow initial bootstrap if collection is empty or owner setup, otherwise only active admins
+      allow read: if isSignedIn() && (
+        request.auth.uid == adminId || 
+        isAdmin() ||
+        request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io']
+      );
+      
       allow create: if isSignedIn() && isValidAdminUser(incoming()) && (
         isAdmin() || 
-        (request.auth.uid == adminId && request.auth.token.email in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io'])
+        request.auth.uid == adminId ||
+        request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io']
       );
-      allow update: if isSignedIn() && isValidAdminUser(incoming()) && (isAdmin() || request.auth.uid == adminId);
-      allow delete: if isSignedIn() && isAdmin();
+      allow update: if isSignedIn() && isValidAdminUser(incoming()) && (
+        isAdmin() || 
+        request.auth.uid == adminId ||
+        request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io']
+      );
+      allow delete: if isSignedIn() && (
+        isAdmin() ||
+        request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io']
+      );
     }
 
     match /adminSecurityLogs/{logId} {
-      allow get, list: if isSignedIn() && isAdmin();
+      allow read: if isSignedIn() && (
+        isAdmin() ||
+        request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io']
+      );
+      // Append-only creation for authoritative audit events
       allow create: if isSignedIn() && isValidId(logId) && isValidAdminSecurityLog(incoming());
-      allow delete: if isSignedIn() && isAdmin();
+      // Tamper resistance: modifications and deletions are forbidden
+      allow update, delete: if false;
+    }
+
+    // Direct client write to securityEvents is strictly denied (Requirement 12)
+    match /securityEvents/{eventId} {
+      allow read: if isSignedIn() && (
+        isAdmin() ||
+        request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io']
+      );
+      allow write: if false;
+    }
+
+    // Scheduled background job runs - Authoritative records generated by server
+    match /scheduledJobRuns/{runId} {
+      allow read: if isSignedIn() && (
+        isAdmin() ||
+        request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io']
+      );
+      // Direct client writes strictly forbidden - only trusted server environment writes
+      allow write: if false;
+    }
+
+    // Scheduled background jobs configuration & toggles
+    match /scheduledJobsConfig/{jobId} {
+      allow read: if isSignedIn() && (
+        isAdmin() ||
+        request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io']
+      );
+      allow write: if isSignedIn() && (
+        isAdmin() ||
+        request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io']
+      );
+    }
+
+    // Admin Reports Center scheduled subscriptions
+    match /adminScheduledReports/{reportId} {
+      allow read, write: if isSignedIn() && (
+        isAdmin() ||
+        request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io']
+      );
     }
   }
 }

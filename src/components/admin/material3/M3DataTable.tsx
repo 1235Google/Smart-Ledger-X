@@ -34,7 +34,7 @@ export interface Column<T> {
 export interface M3DataTableProps<T> {
   data: T[];
   columns: Column<T>[];
-  keyExtractor: (item: T) => string | number;
+  keyExtractor: (item: T, index?: number) => string | number;
   title?: string;
   subtitle?: string;
   searchPlaceholder?: string;
@@ -320,11 +320,12 @@ export function M3DataTable<T extends Record<string, any>>({
               ))
             ) : paginatedData.length > 0 ? (
               paginatedData.map((item, index) => {
-                const id = keyExtractor(item);
+                const id = keyExtractor(item, startIndex + index);
+                const rowKey = id !== undefined && id !== null && id !== '' ? `row-${id}-${startIndex + index}` : `row-${startIndex + index}`;
                 const isSelected = selectedIds?.has(id);
                 return (
                   <motion.tr
-                    key={id}
+                    key={rowKey}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.15, delay: index * 0.015 }}

@@ -2,6 +2,7 @@ import { saveAs } from 'file-saver';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format, parseISO, isSameDay, isSameWeek, isSameMonth, isAfter, isBefore, startOfDay, endOfDay } from 'date-fns';
+import { getGullakEntryDirection, getGullakAbsoluteAmount } from './gullakAccounting';
 
 export type ExportFormat = 'excel' | 'pdf';
 export type ExportFilterType = 'all' | 'today' | 'week' | 'month' | 'custom' | 'selected';
@@ -364,9 +365,11 @@ export async function generateGullakReport(options: ExportOptions): Promise<void
   const dateStrPretty = format(new Date(), 'dd MMM yyyy, hh:mm a');
 
   if (options.format === 'excel') {
-    let csvContent = 'Date,Type,Amount,Notes\n';
+    let csvContent = 'Date,Type,Direction,Amount,Notes\n';
     filteredData.forEach(item => {
-      csvContent += `${item.date},"${item.category}",${item.amount},"${item.note}"\n`;
+      const isCredit = getGullakEntryDirection(item) === 'credit';
+      const absAmt = getGullakAbsoluteAmount(item);
+      csvContent += `${item.date},"${item.category}","${isCredit ? 'Credit' : 'Debit'}",${isCredit ? '+' : '-'}${absAmt},"${(item.note || '').replace(/"/g, '""')}"\n`;
     });
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     saveAs(blob, `Gullak_Entries_${format(new Date(), 'yyyy-MM-dd')}.csv`);
@@ -374,8 +377,18 @@ export async function generateGullakReport(options: ExportOptions): Promise<void
     const doc = new jsPDF();
     doc.text('Gullak Entries Report', 14, 14);
     autoTable(doc, {
-      head: [['Date', 'Type', 'Amount', 'Notes']],
-      body: filteredData.map(item => [item.date, item.category, item.amount, item.note]),
+      head: [['Date', 'Type', 'Direction', 'Amount', 'Notes']],
+      body: filteredData.map(item => {
+        const isCredit = getGullakEntryDirection(item) === 'credit';
+        const absAmt = getGullakAbsoluteAmount(item);
+        return [
+          item.date, 
+          item.category, 
+          isCredit ? 'Credit' : 'Debit',
+          `${isCredit ? '+' : '-'}Rs ${absAmt.toLocaleString('en-IN')}`, 
+          item.note || '-'
+        ];
+      }),
       startY: 20
     });
     doc.save(`Gullak_Entries_${format(new Date(), 'yyyy-MM-dd')}.pdf`);

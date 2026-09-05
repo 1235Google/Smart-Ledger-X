@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { format, parseISO } from 'date-fns';
 import { GullakEntry, UnlockedAchievement } from '../types';
 import { ACHIEVEMENTS, calculateProgress, getCurrentLevel } from './achievements';
+import { calculateGullakBalance, getGullakEntryDirection, getGullakAbsoluteAmount } from './gullakAccounting';
 
 export const exportGullakPDF = (entries: GullakEntry[], unlockedAchievements: UnlockedAchievement[], settings: any) => {
   const doc = new jsPDF();
@@ -13,20 +14,22 @@ export const exportGullakPDF = (entries: GullakEntry[], unlockedAchievements: Un
   doc.setFontSize(11);
   doc.text(`Generated on: ${format(new Date(), 'dd MMM yyyy, HH:mm')}`, 14, 30);
   
-  const total = entries.reduce((sum, entry) => sum + entry.amount, 0);
+  const total = calculateGullakBalance(entries);
   doc.text(`Total Savings: Rs ${total.toLocaleString('en-IN')}`, 14, 36);
 
   const tableColumn = ["Date", "Time", "Person Name", "Category", "Payment Method", "Amount", "Notes"];
   const tableRows: any[][] = [];
 
   entries.forEach(entry => {
+    const isCredit = getGullakEntryDirection(entry) === 'credit';
+    const absAmt = getGullakAbsoluteAmount(entry);
     const entryData = [
       entry.date,
       entry.time,
       entry.personName,
       entry.category,
       entry.paymentMethod,
-      entry.amount.toLocaleString('en-IN'),
+      `${isCredit ? '+' : '-'}Rs ${absAmt.toLocaleString('en-IN')}`,
       entry.note || '-'
     ];
     tableRows.push(entryData);

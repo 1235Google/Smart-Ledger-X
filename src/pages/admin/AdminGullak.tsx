@@ -17,6 +17,14 @@ import { useStore } from '../../context/StoreContext';
 import { useToast } from '../../context/ToastContext';
 import { GullakEntry } from '../../types';
 import { cn, formatDate } from '../../lib/utils';
+import { 
+  getGullakEntryDirection, 
+  getGullakAbsoluteAmount, 
+  calculateGullakBalance, 
+  formatGullakLedgerDisplay,
+  GullakDirection,
+  GullakOperation
+} from '../../lib/gullakAccounting';
 import { M3DataTable, Column } from '../../components/admin/material3/M3DataTable';
 import { M3Card } from '../../components/admin/material3/M3Card';
 import { M3Button } from '../../components/admin/material3/M3Button';
@@ -36,13 +44,9 @@ export default function AdminGullak() {
   const { resolvedTheme } = useM3Theme();
   const isDark = resolvedTheme === 'dark';
 
-  const gullakBalance = (gullakEntries || []).reduce((acc: number, curr: any) => {
-    if (curr.category === 'deposit' || curr.category === 'transfer_in') return acc + (curr.amount || 0);
-    if (curr.category === 'withdrawal' || curr.category === 'transfer_out') return acc - (curr.amount || 0);
-    return acc;
-  }, 0);
+  const gullakBalance = calculateGullakBalance(gullakEntries || []);
 
-  const [typeFilter, setTypeFilter] = useState<'all' | 'deposit' | 'withdrawal' | 'transfer_in' | 'transfer_out'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'credit' | 'debit'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<GullakEntry | null>(null);
   const [deletingEntry, setDeletingEntry] = useState<GullakEntry | null>(null);
@@ -53,9 +57,10 @@ export default function AdminGullak() {
   const [formNotes, setFormNotes] = useState('');
   const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const filtered = gullakEntries.filter((entry) => {
-    if (typeFilter !== 'all' && entry.category !== typeFilter) return false;
-    return true;
+  const filtered = (gullakEntries || []).filter((entry) => {
+    if (typeFilter === 'all') return true;
+    const dir = getGullakEntryDirection(entry);
+    return dir === typeFilter;
   });
 
   const handleSave = (e: React.FormEvent) => {
@@ -66,12 +71,23 @@ export default function AdminGullak() {
       return;
     }
 
+    const isCredit = formType === 'deposit' || formType === 'transfer_in';
+    const direction: GullakDirection = isCredit ? 'credit' : 'debit';
+    const operation: GullakOperation = isCredit 
+      ? (formType === 'transfer_in' ? 'transfer_in' : 'allocation')
+      : (formType === 'transfer_out' ? 'transfer_out' : 'withdrawal');
+    const categoryName = isCredit ? 'Savings' : 'Withdrawal';
+    const noteText = formNotes || (isCredit ? 'Gullak Allocation' : 'Vault Withdrawal');
+
     try {
       if (editingEntry) {
         updateGullakEntry(editingEntry.id, {
-          amount: num,
-          category: formType,
-          note: formNotes,
+          amount: Math.abs(num),
+          category: categoryName,
+          type: 'savings',
+          operation,
+          direction,
+          note: noteText,
           date: formDate,
         });
         showSuccess('Gullak Updated', 'Savings entry updated.');
@@ -79,14 +95,17 @@ export default function AdminGullak() {
       } else {
         addGullakEntry({
           personName: 'Admin',
-          amount: num,
+          amount: Math.abs(num),
           date: formDate,
           time: new Date().toLocaleTimeString(),
           paymentMethod: 'Cash',
-          category: formType,
-          note: formNotes || 'Gullak Allocation',
+          category: categoryName,
+          type: 'savings',
+          operation,
+          direction,
+          note: noteText,
         });
-        showSuccess('Gullak Saved', `Saved ₹${num.toLocaleString()} to Gullak.`);
+        showSuccess('Gullak Saved', `${isCredit ? 'Allocated' : 'Withdrew'} ₹${num.toLocaleString('en-IN')} ${isCredit ? 'to' : 'from'} Gullak.`);
         setShowAddModal(false);
       }
       setFormAmount('');
@@ -112,27 +131,31 @@ export default function AdminGullak() {
       key: 'category',
       header: 'Type & Operation',
       render: (item) => {
-        const isDeposit = item.category === 'deposit' || item.category === 'transfer_in';
+        const display = formatGullakLedgerDisplay(item, isDark);
         return (
           <div className="flex items-center gap-3">
             <div className={cn(
-              'w-9 h-9 rounded-2xl flex items-center justify-center font-bold text-xs shrink-0',
-              isDeposit
-                ? isDark ? 'bg-[#0f5223] text-[#b4f3b8]' : 'bg-[#c4eed0] text-[#073814]'
-                : isDark ? 'bg-[#601410] text-[#f9dedc]' : 'bg-[#f9dedc] text-[#410e0b]'
+              'w-9 h-9 rounded-2xl flex items-center justify-center font-bold text-xs shrink-0 transition-colors',
+              display.iconBg
             )}>
-              {isDeposit ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
+              {display.isCredit ? <ArrowDownLeft size={16} /> : <ArrowUpRight size={16} />}
             </div>
             <div>
-              <span className={cn(
-                'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider',
-                isDeposit
-                  ? isDark ? 'bg-[#0f5223]/50 text-[#85e197]' : 'bg-[#e6f4ea] text-[#137333]'
-                  : isDark ? 'bg-[#601410]/50 text-[#f2b8b5]' : 'bg-[#fce8e6] text-[#c5221f]'
-              )}>
-                {item.category}
-              </span>
-              <div className="text-[11px] text-slate-400 mt-0.5">{item.note || 'Gullak Allocation'}</div>
+              <div className="flex items-center gap-1.5">
+                <span className={cn(
+                  'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider',
+                  display.badgeClass
+                )}>
+                  {display.typeLabel}
+                </span>
+                <span className={cn(
+                  'text-[10px] font-semibold tracking-wide uppercase',
+                  display.directionTagClass
+                )}>
+                  {display.isCredit ? 'Credit' : 'Debit'}
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-400 mt-0.5">{display.operationLabel}</div>
             </div>
           </div>
         );
@@ -144,13 +167,13 @@ export default function AdminGullak() {
       align: 'right',
       sortable: true,
       render: (item) => {
-        const isDeposit = item.category === 'deposit' || item.category === 'transfer_in';
+        const display = formatGullakLedgerDisplay(item, isDark);
         return (
           <span className={cn(
-            'font-mono font-bold text-sm',
-            isDeposit ? 'text-[#6dd58c]' : 'text-[#f2b8b5]'
+            'font-mono font-bold text-sm tabular-nums',
+            display.amountColor
           )}>
-            {isDeposit ? '+' : '-'}₹{item.amount.toLocaleString('en-IN')}
+            {display.formattedAmount}
           </span>
         );
       },
@@ -172,8 +195,9 @@ export default function AdminGullak() {
           <button
             onClick={() => {
               setEditingEntry(item);
-              setFormAmount(String(item.amount));
-              setFormType(item.category as any);
+              setFormAmount(String(getGullakAbsoluteAmount(item)));
+              const dir = getGullakEntryDirection(item);
+              setFormType(dir === 'credit' ? 'deposit' : 'withdrawal');
               setFormNotes(item.note || '');
               setFormDate(item.date);
             }}
@@ -212,6 +236,8 @@ export default function AdminGullak() {
             setEditingEntry(null);
             setFormAmount('');
             setFormNotes('');
+            setFormType('deposit');
+            setFormDate(new Date().toISOString().split('T')[0]);
             setShowAddModal(true);
           }}
         >
@@ -229,23 +255,30 @@ export default function AdminGullak() {
             <PiggyBank size={18} />
           </div>
         </div>
-        <div className="text-3xl font-extrabold font-mono text-[#6dd58c] mt-2">
+        <div className={cn('text-3xl font-extrabold font-mono mt-2 tabular-nums', gullakBalance >= 0 ? 'text-[#6dd58c]' : 'text-[#f2b8b5]')}>
           ₹{(gullakBalance || 0).toLocaleString('en-IN')}
         </div>
-        <div className="text-xs text-slate-400 mt-1">{gullakEntries.length} total vault allocations</div>
+        <div className="text-xs text-slate-400 mt-1">{gullakEntries?.length || 0} total vault allocations</div>
       </M3Card>
 
       {/* Type Filter Chips */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
         <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">Type:</span>
-        {['all', 'deposit', 'withdrawal', 'transfer_in', 'transfer_out'].map((t) => (
-          <M3Chip
-            key={t}
-            label={t === 'all' ? 'All Entries' : t}
-            selected={typeFilter === t}
-            onClick={() => setTypeFilter(t as any)}
-          />
-        ))}
+        <M3Chip
+          label="All Entries"
+          selected={typeFilter === 'all'}
+          onClick={() => setTypeFilter('all')}
+        />
+        <M3Chip
+          label="Allocations & Deposits (+ Credit)"
+          selected={typeFilter === 'credit'}
+          onClick={() => setTypeFilter('credit')}
+        />
+        <M3Chip
+          label="Withdrawals (- Debit)"
+          selected={typeFilter === 'debit'}
+          onClick={() => setTypeFilter('debit')}
+        />
       </div>
 
       {/* Main Table */}
@@ -256,7 +289,7 @@ export default function AdminGullak() {
         columns={columns}
         keyExtractor={(item) => item.id}
         searchPlaceholder="Search notes, amount, type..."
-        searchFields={['note', 'amount', 'category']}
+        searchFields={['note', 'amount', 'category', 'type', 'operation']}
         emptyMessage="No vault entries found"
       />
 
@@ -307,10 +340,10 @@ export default function AdminGullak() {
                 isDark ? 'bg-[#1e1f20] text-white border-[#3c4043]' : 'bg-[#f0f4f9] text-black border-[#c4c7c5]'
               )}
             >
-              <option value="deposit">Deposit to Vault</option>
-              <option value="withdrawal">Withdrawal from Vault</option>
-              <option value="transfer_in">Transfer In</option>
-              <option value="transfer_out">Transfer Out</option>
+              <option value="deposit">Gullak Allocation / Deposit (+ Credit)</option>
+              <option value="withdrawal">Withdrawal from Vault (- Debit)</option>
+              <option value="transfer_in">Transfer In (+ Credit)</option>
+              <option value="transfer_out">Transfer Out (- Debit)</option>
             </select>
           </div>
 

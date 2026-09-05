@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import { AppState, PendingMoney, ReceivedMoney, SentMoney, Transaction, SecuritySettings, EmailSettings, EmailHistoryLog, GeneralSettings, GullakEntry, GullakSettings, UnlockedAchievement, AiRecognitionSettings, AiRecognitionHistory, PosterTemplate, Customer, ReportSettings, GeneratedReport, UserProfile, ReminderHistoryLog, SavingsGoal, SecurityLog, AutomationRule, Investment, FinanceHabit, DataLoadStatus, BackupSettings, AdminUser } from '../types';
+import { AppState, PendingMoney, ReceivedMoney, SentMoney, Transaction, SecuritySettings, EmailSettings, EmailHistoryLog, GeneralSettings, GullakEntry, GullakSettings, UnlockedAchievement, AiRecognitionSettings, AiRecognitionHistory, PosterTemplate, Customer, ReportSettings, GeneratedReport, UserProfile, ReminderHistoryLog, SavingsGoal, SecurityLog, AutomationRule, Investment, FinanceHabit, DataLoadStatus, BackupSettings, AdminUser, SystemMode, SystemConfig } from '../types';
 import CryptoJS from 'crypto-js';
 import { calculateProgress, ACHIEVEMENTS } from '../lib/achievements';
 import { DEFAULT_REMINDER_TEMPLATE } from '../lib/utils';
@@ -7,11 +7,20 @@ import { auth } from '../lib/firebase';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { subscribeToState, queueStateSync, migrateLocalDataToCloud, syncUserProfile, fetchUserState } from "../lib/cloudSync";
 import { createNotification } from '../lib/notificationService';
+import { systemModeService } from '../lib/systemModeService';
+import { 
+  getGullakEntryDirection, 
+  getGullakAbsoluteAmount, 
+  GullakDirection, 
+  GullakOperation 
+} from '../lib/gullakAccounting';
 import { 
   signInAdminWithGoogle, 
+  signInAdminWithPassword,
   checkAdminRedirectAuth, 
   subscribeToAdminUser, 
   performAdminLogout, 
+  verifyAdminAuthorization,
   verifyOrBootstrapAdminUser,
   logAdminSecurityEvent 
 } from '../lib/adminAuthService';
@@ -44,6 +53,8 @@ interface StoreContextType extends AppState {
   addPendingMoney: (entry: Omit<PendingMoney, 'id' | 'type' | 'status' | 'nextReminderDate' | 'reminderStatus'>) => void;
   markAsReceived: (id: string) => void;
   deleteTransaction: (id: string) => void;
+  restoreTransaction: (id: string) => void;
+  permanentDeleteTransaction: (id: string) => void;
   updateTransaction: (id: string, updated: Partial<Transaction>) => void;
   toggleReminderStatus: (id: string) => void;
   updateReminderFrequency: (id: string, frequency: PendingMoney['reminderFrequency']) => void;
@@ -67,6 +78,8 @@ interface StoreContextType extends AppState {
   addGullakEntry: (entry: Omit<GullakEntry, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateGullakEntry: (id: string, entry: Partial<Omit<GullakEntry, 'id' | 'createdAt' | 'updatedAt'>>) => void;
   deleteGullakEntry: (id: string) => void;
+  restoreGullakEntry: (id: string) => void;
+  permanentDeleteGullakEntry: (id: string) => void;
   addSavingsGoal: (goal: Omit<SavingsGoal, 'id' | 'createdAt'>) => void;
   updateSavingsGoal: (id: string, goal: Partial<Omit<SavingsGoal, 'id' | 'createdAt'>>) => void;
   deleteSavingsGoal: (id: string) => void;
@@ -110,6 +123,13 @@ interface StoreContextType extends AppState {
   currentUser: User | null;
   isAuthenticated: boolean;
   logout: () => Promise<void>;
+  systemConfig: SystemConfig;
+  setSystemMode: (mode: SystemMode, reason?: string, expectedEndAt?: string | null, autoRestore?: boolean) => Promise<{ success: boolean; message: string; config: SystemConfig }>;
+  refreshSystemMode: () => Promise<SystemConfig>;
+  isReadOnly: boolean;
+  isMaintenance: boolean;
+  rawTransactions: Transaction[];
+  rawGullakEntries: GullakEntry[];
 }
 
 export const defaultState: AppState = {
@@ -231,6 +251,50 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
   });
+
+  // Enterprise System Availability & Mode State
+  const [systemConfig, setSystemConfig] = useState<SystemConfig>(() => systemModeService.getCurrentConfig());
+
+  useEffect(() => {
+    const unsub = systemModeService.subscribe((cfg) => {
+      setSystemConfig(cfg);
+    });
+    return () => unsub();
+  }, []);
+
+  const setSystemMode = useCallback(async (
+    mode: SystemMode, 
+    reason?: string, 
+    expectedEndAt?: string | null, 
+    autoRestore?: boolean
+  ) => {
+    const res = await systemModeService.setSystemMode(mode, reason, expectedEndAt, autoRestore);
+    if (res.config) {
+      setSystemConfig(res.config);
+    }
+    return res;
+  }, []);
+
+  const refreshSystemMode = useCallback(async () => {
+    const cfg = await systemModeService.fetchFromApi();
+    setSystemConfig(cfg);
+    return cfg;
+  }, []);
+
+  const isReadOnly = systemConfig.mode === 'readonly';
+  const isMaintenance = systemConfig.mode === 'maintenance';
+
+  const ensureWritable = (): boolean => {
+    if (systemConfig.mode === 'readonly') {
+      createNotification({
+        title: 'Read-Only Mode Active',
+        message: 'Modifications, new records, and deletions are disabled while SmartLedger is in Read-Only Mode.',
+        type: 'warning' as any
+      });
+      return false;
+    }
+    return true;
+  };
 
   const prevStateRef = React.useRef<AppState>(defaultState);
   const isRemoteUpdateRef = React.useRef<boolean>(false);
@@ -544,23 +608,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           setAdminUser(redirectRes.adminUser);
           setIsAdminAuthenticated(true);
           sessionStorage.setItem('smartledger-admin-auth', 'true');
+          sessionStorage.setItem('smartledger-admin-email', redirectRes.adminUser.email);
+          sessionStorage.setItem('smartledger-admin-role', redirectRes.adminUser.role);
         }
       } catch (e) {
-        console.warn('[AdminAuth] Redirect check error:', e);
+        console.warn('[AdminAuth Debug] Redirect check error:', e);
       }
 
       // 2. Watch auth state for admin user
       const unsubAuth = onAuthStateChanged(auth, async (user) => {
         if (user) {
-          const isSessionFlagged = sessionStorage.getItem('smartledger-admin-auth') === 'true';
-          // Check admin verification
-          const verification = await verifyOrBootstrapAdminUser(user);
+          console.log('[AdminAuth Debug] Auth state changed - user detected:', user.email, user.uid);
+          const verification = await verifyAdminAuthorization(user);
           if (verification.authorized && verification.adminUser) {
             setAdminUser(verification.adminUser);
-            if (isSessionFlagged || window.location.pathname.startsWith('/admin')) {
-              setIsAdminAuthenticated(true);
-              sessionStorage.setItem('smartledger-admin-auth', 'true');
-            }
+            setIsAdminAuthenticated(true);
+            sessionStorage.setItem('smartledger-admin-auth', 'true');
+            sessionStorage.setItem('smartledger-admin-email', verification.adminUser.email);
+            sessionStorage.setItem('smartledger-admin-role', verification.adminUser.role);
 
             // Real-time admin user document sync
             if (unsubscribeAdminDoc) unsubscribeAdminDoc();
@@ -570,6 +635,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
                   setAdminUser(null);
                   setIsAdminAuthenticated(false);
                   sessionStorage.removeItem('smartledger-admin-auth');
+                  sessionStorage.removeItem('smartledger-admin-email');
+                  sessionStorage.removeItem('smartledger-admin-role');
                   createNotification({
                     title: 'Admin Access Disabled',
                     message: 'Your administrator account has been disabled by the Owner.',
@@ -581,22 +648,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               }
             });
           } else {
-            // Not an authorized admin
-            if (sessionStorage.getItem('smartledger-admin-auth') === 'true' && !sessionStorage.getItem('smartledger-admin-session')) {
-              setIsAdminAuthenticated(false);
-              setAdminUser(null);
-              sessionStorage.removeItem('smartledger-admin-auth');
-            }
+            // User is signed in to Firebase Auth, but does not possess an administrator role
+            setAdminUser(null);
+            setIsAdminAuthenticated(false);
+            sessionStorage.removeItem('smartledger-admin-auth');
+            sessionStorage.removeItem('smartledger-admin-email');
+            sessionStorage.removeItem('smartledger-admin-role');
           }
         } else {
-          // If no firebase user, check if logged in via server session token
-          const token = sessionStorage.getItem('smartledger-admin-session');
-          if (!token) {
-            setAdminUser(null);
-            if (sessionStorage.getItem('smartledger-admin-auth') !== 'true') {
-              setIsAdminAuthenticated(false);
-            }
-          }
+          // No user signed in to Firebase Auth
+          setAdminUser(null);
+          setIsAdminAuthenticated(false);
+          sessionStorage.removeItem('smartledger-admin-auth');
+          sessionStorage.removeItem('smartledger-admin-email');
+          sessionStorage.removeItem('smartledger-admin-role');
         }
         setIsAdminLoading(false);
       });
@@ -695,64 +760,28 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const adminLogin = async (pass: string, email?: string) => {
+  const adminLogin = async (pass: string, email?: string): Promise<{ success: boolean; error?: string }> => {
+    setIsAdminLoading(true);
     try {
-      const res = await fetch('/api/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pass, email })
-      });
-
-      const contentType = res.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        const data = await res.json();
-        if (data.success) {
-          setIsAdminAuthenticated(true);
-          if (data.token) {
-            sessionStorage.setItem('smartledger-admin-session', data.token);
-          }
-          sessionStorage.setItem('smartledger-admin-auth', 'true');
-          
-          // Setup fallback admin profile
-          const fallbackAdmin: AdminUser = {
-            uid: 'admin_server_session',
-            email: email || 'admin@smartledgerx.io',
-            displayName: 'System Admin',
-            role: 'Super Admin',
-            status: 'Active',
-            createdAt: new Date().toISOString(),
-            lastLogin: new Date().toISOString()
-          };
-          setAdminUser(fallbackAdmin);
-          logAdminSecurityEvent('PASSWORD_LOGIN', fallbackAdmin.email, fallbackAdmin.uid, 'Logged in via Admin Password');
-
-          return { success: true };
-        } else {
-          return { success: false, error: data.error || 'Invalid Admin Password' };
-        }
+      const targetEmail = (email || 'admin@smartledgerx.io').trim();
+      const result = await signInAdminWithPassword(targetEmail, pass);
+      if (result.success && result.adminUser) {
+        setAdminUser(result.adminUser);
+        setIsAdminAuthenticated(true);
+        createNotification({
+          title: 'Admin Signed In',
+          message: `Logged in as ${result.adminUser.displayName} (${result.adminUser.role})`,
+          type: 'auth_login'
+        });
+        return { success: true };
+      } else {
+        return { success: false, error: result.error || 'Invalid administrator credentials.' };
       }
     } catch (err: any) {
-      console.warn("[AdminAuth] Server API login unhandled/offline, falling back to client verification:", err);
-    }
-
-    // Client-side local authentication fallback if server API is unreachable
-    const storedPass = localStorage.getItem('smartledger_admin_password') || 'admin123';
-    if (pass === storedPass) {
-      setIsAdminAuthenticated(true);
-      sessionStorage.setItem('smartledger-admin-auth', 'true');
-      const fallbackAdmin: AdminUser = {
-        uid: 'admin_local_session',
-        email: email || 'admin@smartledgerx.io',
-        displayName: 'Master Administrator',
-        role: 'Owner',
-        status: 'Active',
-        createdAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString()
-      };
-      setAdminUser(fallbackAdmin);
-      return { success: true };
-    } else {
-      return { success: false, error: 'Invalid Admin Password' };
+      console.error('[AdminAuth Debug] Admin login error:', err);
+      return { success: false, error: err?.message || 'Authentication failed. Please verify your credentials.' };
+    } finally {
+      setIsAdminLoading(false);
     }
   };
 
@@ -1016,6 +1045,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addReceivedMoney = (entry: Omit<ReceivedMoney, 'id' | 'type'>) => {
+    if (!ensureWritable()) return;
     const newTx: ReceivedMoney = {
       ...entry,
       id: crypto.randomUUID(),
@@ -1041,6 +1071,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addPendingMoney = (entry: Omit<PendingMoney, 'id' | 'type' | 'status' | 'nextReminderDate' | 'reminderStatus'>) => {
+    if (!ensureWritable()) return;
     const newTx: PendingMoney = {
       ...entry,
       id: crypto.randomUUID(),
@@ -1095,6 +1126,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const markAsReceived = (id: string) => {
+    if (!ensureWritable()) return;
     let targetTx: PendingMoney | undefined;
     setState(prev => {
       const tx = prev.transactions.find(t => t.id === id);
@@ -1131,19 +1163,49 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteTransaction = (id: string) => {
+    if (!ensureWritable()) return;
     setState(prev => ({
       ...prev,
-      transactions: prev.transactions.filter(t => t.id !== id)
+      transactions: prev.transactions.map(t => t.id === id ? {
+        ...t,
+        deleted: true,
+        deletedAt: new Date().toISOString(),
+        deletedBy: currentUser?.uid || 'local_user',
+        purgeAfter: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+      } as Transaction : t)
     }));
     createNotification({
       title: 'Transaction Deleted',
-      message: 'Transaction removed from ledger',
+      message: 'Transaction moved to recycle bin',
       type: 'ledger_transaction_deleted',
       referenceId: id
     });
   };
 
+  const restoreTransaction = (id: string) => {
+    if (!ensureWritable()) return;
+    setState(prev => ({
+      ...prev,
+      transactions: prev.transactions.map(t => {
+        if (t.id === id) {
+          const { deleted, deletedAt, deletedBy, purgeAfter, ...rest } = t;
+          return rest as Transaction;
+        }
+        return t;
+      })
+    }));
+  };
+
+  const permanentDeleteTransaction = (id: string) => {
+    if (!ensureWritable()) return;
+    setState(prev => ({
+      ...prev,
+      transactions: prev.transactions.filter(t => t.id !== id)
+    }));
+  };
+
   const updateTransaction = (id: string, updated: Partial<Transaction>) => {
+    if (!ensureWritable()) return;
     setState(prev => ({
       ...prev,
       transactions: prev.transactions.map(t => t.id === id ? { ...t, ...updated } as Transaction : t)
@@ -1157,8 +1219,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addGullakEntry = (entry: Omit<GullakEntry, 'id' | 'createdAt' | 'updatedAt'>) => {
+    if (!ensureWritable()) return;
+    const rawAmt = Number(entry.amount) || 0;
+    const direction: GullakDirection = entry.direction || getGullakEntryDirection(entry);
+    const operation: GullakOperation = (entry.operation as GullakOperation) || (direction === 'credit' ? 'allocation' : 'withdrawal');
+    const type = entry.type || 'savings';
+    const amount = Math.abs(rawAmt);
+
     const newEntry: GullakEntry = {
       ...entry,
+      amount,
+      direction,
+      operation,
+      type,
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -1167,13 +1240,60 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateGullakEntry = (id: string, entry: Partial<Omit<GullakEntry, 'id' | 'createdAt' | 'updatedAt'>>) => {
+    if (!ensureWritable()) return;
     setState(prev => ({
       ...prev,
-      gullakEntries: (prev.gullakEntries || []).map(e => e.id === id ? { ...e, ...entry, updatedAt: new Date().toISOString() } : e)
+      gullakEntries: (prev.gullakEntries || []).map(e => {
+        if (e.id !== id) return e;
+        const merged = { ...e, ...entry };
+        const rawAmt = Number(merged.amount) || 0;
+        const direction: GullakDirection = merged.direction || getGullakEntryDirection(merged);
+        const operation: GullakOperation = (merged.operation as GullakOperation) || (direction === 'credit' ? 'allocation' : 'withdrawal');
+        const type = merged.type || 'savings';
+        const amount = Math.abs(rawAmt);
+
+        return {
+          ...merged,
+          amount,
+          direction,
+          operation,
+          type,
+          updatedAt: new Date().toISOString(),
+        };
+      })
     }));
   };
 
   const deleteGullakEntry = (id: string) => {
+    if (!ensureWritable()) return;
+    setState(prev => ({
+      ...prev,
+      gullakEntries: (prev.gullakEntries || []).map(e => e.id === id ? {
+        ...e,
+        deleted: true,
+        deletedAt: new Date().toISOString(),
+        deletedBy: currentUser?.uid || 'local_user',
+        purgeAfter: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+      } : e)
+    }));
+  };
+
+  const restoreGullakEntry = (id: string) => {
+    if (!ensureWritable()) return;
+    setState(prev => ({
+      ...prev,
+      gullakEntries: (prev.gullakEntries || []).map(e => {
+        if (e.id === id) {
+          const { deleted, deletedAt, deletedBy, purgeAfter, ...rest } = e;
+          return rest as GullakEntry;
+        }
+        return e;
+      })
+    }));
+  };
+
+  const permanentDeleteGullakEntry = (id: string) => {
+    if (!ensureWritable()) return;
     setState(prev => ({
       ...prev,
       gullakEntries: (prev.gullakEntries || []).filter(e => e.id !== id)
@@ -1331,10 +1451,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const receivedTransactions = state.transactions.filter((t): t is ReceivedMoney => t.type === 'received');
-  const sentTransactions = state.transactions.filter((t): t is SentMoney => t.type === 'sent');
+  const receivedTransactions = state.transactions.filter((t): t is ReceivedMoney => t.type === 'received' && !t.deleted);
+  const sentTransactions = state.transactions.filter((t): t is SentMoney => t.type === 'sent' && !t.deleted);
   const activePendingTransactions = state.transactions.filter((t): t is PendingMoney => 
-    t.type === 'pending' && (t.status === 'pending' || t.status === 'overdue' || (t.status !== 'completed' && t.status !== 'cancelled' && t.status !== 'closed'))
+    t.type === 'pending' && !t.deleted && (t.status === 'pending' || t.status === 'overdue' || (t.status !== 'completed' && t.status !== 'cancelled' && t.status !== 'closed'))
   );
 
   const totalReceived = receivedTransactions.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
@@ -1345,6 +1465,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   return (
     <StoreContext.Provider value={{
       ...state,
+      transactions: state.transactions.filter(t => !t.deleted),
+      gullakEntries: (state.gullakEntries || []).filter(e => !e.deleted),
+      rawTransactions: state.transactions,
+      rawGullakEntries: state.gullakEntries || [],
       setStartingBalance,
       addCustomer,
       updateCustomer,
@@ -1354,6 +1478,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       addPendingMoney,
       markAsReceived,
       deleteTransaction,
+      restoreTransaction,
+      permanentDeleteTransaction,
       updateTransaction,
       toggleReminderStatus,
       updateReminderFrequency,
@@ -1377,6 +1503,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       addGullakEntry,
       updateGullakEntry,
       deleteGullakEntry,
+      restoreGullakEntry,
+      permanentDeleteGullakEntry,
       addSavingsGoal,
       updateSavingsGoal,
       deleteSavingsGoal,
@@ -1420,6 +1548,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       currentUser,
       isAuthenticated,
       logout,
+      systemConfig,
+      setSystemMode,
+      refreshSystemMode,
+      isReadOnly,
+      isMaintenance,
     }}>
       {children}
     </StoreContext.Provider>

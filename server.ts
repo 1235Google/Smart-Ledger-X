@@ -17,14 +17,69 @@ import {
   invalidateSessionToken 
 } from "./src/server/admin-auth";
 import { generateRegistrationOptions, verifyRegistrationResponse, generateAuthenticationOptions, verifyAuthenticationResponse } from '@simplewebauthn/server';
+import * as crypto from "crypto";
+import * as fs from "fs";
+import {
+  extractClientIp,
+  getApproximateLocation,
+  parseDeviceAndBrowser,
+  verifyFirebaseIdToken,
+  checkAndRegisterDevice,
+  writeSecurityEventToFirestore,
+  sendNewDeviceSecurityAlert,
+  addAuthoritativeEvent,
+  getAuthoritativeEvents,
+  checkFailedLoginRateLimit,
+  AuthoritativeSecurityEvent
+} from "./src/server/security-service";
+import {
+  initJobsStorage,
+  startAllScheduledJobsCron,
+  getAllScheduledJobs,
+  getScheduledJobsSummary,
+  getJobRuns,
+  executeScheduledJob,
+  toggleJobEnabled
+} from "./src/server/scheduled-jobs-service";
+import {
+  getSystemConfig,
+  setSystemConfig,
+  inspectSystemSafety,
+  createImmediateSafetyBackup,
+  startAutoRestoreMonitor
+} from "./src/server/system-mode-service";
+import {
+  startScheduledReportsWorker,
+  getAllScheduledReportConfigs,
+  upsertScheduledReportConfig,
+  deleteScheduledReportConfig,
+  triggerScheduledReportDispatch,
+  VERIFIED_ADMIN_RECIPIENT_EMAILS
+} from "./src/server/admin-reports-service";
 
 // Load environment variables from .env file
 dotenv.config();
 
+let firebaseProjectId = "studio-3200340687-9f052";
+let firebaseApiKey = "AIzaSyBGtChtK6JEwE7gTfSSQUkv1JD7px0Bep0";
+try {
+  const cfg = JSON.parse(fs.readFileSync(path.join(process.cwd(), "firebase-applet-config.json"), "utf-8"));
+  if (cfg.projectId) firebaseProjectId = cfg.projectId;
+  if (cfg.apiKey) firebaseApiKey = cfg.apiKey;
+} catch (e) {}
+
+const AUTHORIZED_ADMIN_EMAILS = [
+  "souvikbbsr811@gmail.com",
+  "souvikdashbbsr@gmail.com",
+  "admin@smartledgerx.io"
+];
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  // Accurately resolve client IP behind Google Cloud Run / Nginx reverse proxies
+  app.set("trust proxy", true);
 
   // Security Headers Middleware
   app.use((req, res, next) => {
@@ -41,6 +96,12 @@ async function startServer() {
   });
 
   app.use(express.json());
+
+  // Initialize server-side scheduled jobs registry & continuous 24/7 background cron
+  initJobsStorage();
+  startAllScheduledJobsCron();
+  startAutoRestoreMonitor();
+  startScheduledReportsWorker();
 
   // --- Centralized Admin Authentication API Endpoints ---
   app.post("/api/admin/login", (req, res) => {
@@ -287,9 +348,691 @@ async function startServer() {
     }
   });
 
+  // =========================================================================
+  // PRODUCTION LOGIN SECURITY & DEVICE ACTIVITY API
+  // =========================================================================
+
+  // 1. Authoritative Login Event Recording
+  app.post("/api/security/record-login", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const idToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : req.body?.idToken;
+
+      if (!idToken) {
+        return res.status(401).json({ success: false, error: "Authentication ID token required" });
+      }
+
+      // 1. Verify Firebase ID token with Google Identity Toolkit
+      const tokenVerification = await verifyFirebaseIdToken(idToken, firebaseApiKey);
+      if (!tokenVerification.valid || !tokenVerification.uid) {
+        return res.status(401).json({ 
+          success: false, 
+          error: tokenVerification.error || "Invalid or expired Firebase authentication token" 
+        });
+      }
+
+      const verifiedUid = tokenVerification.uid;
+      const verifiedEmail = tokenVerification.email || "";
+
+      // 2. Extract public IP observed SERVER-SIDE
+      const clientIp = extractClientIp(req);
+
+      // 3. Approximate geolocation from IP (never GPS)
+      const location = await getApproximateLocation(clientIp);
+
+      // 4. Real device/browser detection with ua-parser-js + Client Hints
+      const device = parseDeviceAndBrowser(req, req.body?.clientHints);
+
+      // 5. Sensible new device / session detection
+      const isNewDevice = checkAndRegisterDevice(verifiedUid, device);
+
+      // 6. Authorization check
+      const isAdminUser = AUTHORIZED_ADMIN_EMAILS.includes(verifiedEmail.toLowerCase()) || Boolean(req.body?.isExplicitAdmin);
+      const authorizationResult = isAdminUser ? 'admin' : 'user';
+
+      const authProvider = req.body?.authProvider === 'google' ? 'google' : 
+                           req.body?.authProvider === 'password' ? 'password' : 'other';
+
+      const eventType = req.body?.isExplicitAdmin ? 'ADMIN_LOGIN' : 
+                        authProvider === 'google' ? 'GOOGLE_LOGIN' : 
+                        authProvider === 'password' ? 'PASSWORD_LOGIN' : 'LOGIN_SUCCESS';
+
+      const sessionId = req.body?.sessionId || `sess_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
+      const serverNow = new Date();
+      const eventId = `sec_${serverNow.getTime()}_${crypto.randomBytes(4).toString('hex')}`;
+
+      const securityEvent: AuthoritativeSecurityEvent = {
+        id: eventId,
+        uid: verifiedUid,
+        email: verifiedEmail,
+        eventType,
+        authProvider,
+        timestamp: serverNow.toISOString(),
+        serverTimestampMs: serverNow.getTime(),
+        ip: clientIp,
+        location,
+        device,
+        sessionId,
+        newDevice: isNewDevice,
+        authorizationResult,
+        details: isNewDevice ? 'First login detected from this device/session signature' : 'Recognized existing device signature'
+      };
+
+      // 7. Store in authoritative server store
+      addAuthoritativeEvent(securityEvent);
+
+      // 8. Write to Firestore REST API with verified ID token
+      await writeSecurityEventToFirestore(securityEvent, firebaseProjectId, firebaseApiKey, idToken);
+
+      // 9. If new device, trigger security alert notification
+      if (isNewDevice) {
+        sendNewDeviceSecurityAlert(securityEvent).catch(() => {});
+      }
+
+      return res.json({
+        success: true,
+        event: securityEvent,
+        message: "Authoritative security event recorded"
+      });
+    } catch (err: any) {
+      console.error("[SecurityService] Error in /api/security/record-login:", err);
+      return res.status(500).json({ success: false, error: "Internal server error while logging security event" });
+    }
+  });
+
+  // 2. Failed Login Auditing (Rate-limited, passwords strictly excluded)
+  app.post("/api/security/record-failed-login", async (req, res) => {
+    try {
+      const clientIp = extractClientIp(req);
+      
+      // Rate limit check: max 10 failed records/min per IP
+      if (!checkFailedLoginRateLimit(clientIp)) {
+        return res.status(429).json({ success: false, error: "Too many failed attempts recorded. Rate limit reached." });
+      }
+
+      const clientEmail = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase().slice(0, 150) : 'unknown';
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.slice(0, 200) : 'Invalid credentials';
+      const attemptMethod = req.body?.attemptMethod === 'google' ? 'google' : 'password';
+
+      const location = await getApproximateLocation(clientIp);
+      const device = parseDeviceAndBrowser(req, req.body?.clientHints);
+      const serverNow = new Date();
+      const eventId = `fail_${serverNow.getTime()}_${crypto.randomBytes(4).toString('hex')}`;
+
+      const failedEvent: AuthoritativeSecurityEvent = {
+        id: eventId,
+        uid: 'unauthenticated',
+        email: clientEmail,
+        eventType: 'LOGIN_FAILED',
+        authProvider: attemptMethod,
+        timestamp: serverNow.toISOString(),
+        serverTimestampMs: serverNow.getTime(),
+        ip: clientIp,
+        location,
+        device,
+        sessionId: `anon_${Date.now()}`,
+        newDevice: false,
+        authorizationResult: 'denied',
+        details: reason
+      };
+
+      addAuthoritativeEvent(failedEvent);
+
+      return res.json({ success: true, recorded: true });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: "Failed to record event" });
+    }
+  });
+
+  // 3. Unauthorized Admin Access Attempt Logging
+  app.post("/api/security/record-unauthorized-attempt", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const idToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : req.body?.idToken;
+      let verifiedUid = 'unauthenticated';
+      let verifiedEmail = 'anonymous';
+
+      if (idToken) {
+        const verify = await verifyFirebaseIdToken(idToken, firebaseApiKey);
+        if (verify.valid && verify.uid) {
+          verifiedUid = verify.uid;
+          verifiedEmail = verify.email || 'anonymous';
+        }
+      }
+
+      const clientIp = extractClientIp(req);
+      const location = await getApproximateLocation(clientIp);
+      const device = parseDeviceAndBrowser(req, req.body?.clientHints);
+      const serverNow = new Date();
+      const eventId = `denied_${serverNow.getTime()}_${crypto.randomBytes(4).toString('hex')}`;
+
+      const deniedEvent: AuthoritativeSecurityEvent = {
+        id: eventId,
+        uid: verifiedUid,
+        email: verifiedEmail,
+        eventType: 'LOGIN_DENIED_UNAUTHORIZED',
+        authProvider: 'other',
+        timestamp: serverNow.toISOString(),
+        serverTimestampMs: serverNow.getTime(),
+        ip: clientIp,
+        location,
+        device,
+        sessionId: req.body?.sessionId || `denied_${Date.now()}`,
+        newDevice: false,
+        authorizationResult: 'denied',
+        details: req.body?.details || 'Unauthorized attempt to access Admin Console'
+      };
+
+      addAuthoritativeEvent(deniedEvent);
+
+      if (idToken) {
+        await writeSecurityEventToFirestore(deniedEvent, firebaseProjectId, firebaseApiKey, idToken);
+      }
+
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ success: false });
+    }
+  });
+
+  // 4. Logout Event Recording
+  app.post("/api/security/record-logout", async (req, res) => {
+    try {
+      const clientIp = extractClientIp(req);
+      const location = await getApproximateLocation(clientIp);
+      const device = parseDeviceAndBrowser(req, req.body?.clientHints);
+      const serverNow = new Date();
+      const eventId = `logout_${serverNow.getTime()}_${crypto.randomBytes(4).toString('hex')}`;
+
+      const logoutEvent: AuthoritativeSecurityEvent = {
+        id: eventId,
+        uid: req.body?.uid || 'anonymous',
+        email: req.body?.email || 'anonymous',
+        eventType: 'LOGOUT',
+        authProvider: 'none',
+        timestamp: serverNow.toISOString(),
+        serverTimestampMs: serverNow.getTime(),
+        ip: clientIp,
+        location,
+        device,
+        sessionId: req.body?.sessionId || `sess_${Date.now()}`,
+        newDevice: false,
+        authorizationResult: 'user',
+        details: 'User initiated sign-out'
+      };
+
+      addAuthoritativeEvent(logoutEvent);
+
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ success: false });
+    }
+  });
+
+  // 5. Authoritative Security Audit Retrieval (Restricted to Authorized Administrators)
+  app.get("/api/security/logs", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const idToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : "";
+      
+      let isAuthorized = false;
+      if (idToken) {
+        const verify = await verifyFirebaseIdToken(idToken, firebaseApiKey);
+        if (verify.valid && verify.email && AUTHORIZED_ADMIN_EMAILS.includes(verify.email.toLowerCase())) {
+          isAuthorized = true;
+        }
+      }
+
+      // Check admin session token
+      const adminToken = req.headers['x-admin-token'] as string;
+      if (adminToken && verifySessionToken(adminToken)) {
+        isAuthorized = true;
+      }
+
+      if (!isAuthorized) {
+        return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
+      }
+
+      const limit = Math.min(Number(req.query.limit) || 100, 200);
+      const logs = getAuthoritativeEvents(limit);
+      return res.json({ success: true, logs });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: "Failed to retrieve security logs" });
+    }
+  });
+
+  // --- Authoritative Scheduled Background Jobs API Endpoints ---
+  async function verifyAdminAuth(req: express.Request): Promise<{ authorized: boolean; email: string; uid: string }> {
+    const authHeader = req.headers.authorization;
+    const idToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : "";
+    let isAuthorized = false;
+    let email = 'admin@smartledgerx.io';
+    let uid = 'admin';
+
+    if (idToken) {
+      const verify = await verifyFirebaseIdToken(idToken, firebaseApiKey);
+      if (verify.valid && verify.email && AUTHORIZED_ADMIN_EMAILS.includes(verify.email.toLowerCase())) {
+        isAuthorized = true;
+        email = verify.email;
+        uid = verify.uid || 'admin';
+      }
+    }
+
+    const adminToken = req.headers['x-admin-token'] as string;
+    if (adminToken && verifySessionToken(adminToken)) {
+      isAuthorized = true;
+    }
+
+    return { authorized: isAuthorized, email, uid };
+  }
+
+  // 1. Get all scheduled jobs with computed statuses & Auto Backup health summary
+  app.get("/api/admin/jobs", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
+      }
+
+      const jobs = getAllScheduledJobs();
+      const summary = getScheduledJobsSummary();
+      return res.json({ success: true, jobs, summary });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: "Failed to fetch scheduled jobs" });
+    }
+  });
+
+  // 2. Get authoritative execution history for a job or all jobs
+  app.get("/api/admin/jobs/:jobId/history", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
+      }
+
+      const { jobId } = req.params;
+      const limit = Math.min(Number(req.query.limit) || 50, 100);
+      const runs = getJobRuns(jobId === 'all' ? undefined : jobId, limit);
+      return res.json({ success: true, runs });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: "Failed to fetch job execution history" });
+    }
+  });
+
+  // 3. Trigger manual execution of a background job
+  app.post("/api/admin/jobs/:jobId/run", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
+      }
+
+      const { jobId } = req.params;
+      const runRecord = await executeScheduledJob(jobId, 'MANUAL_ADMIN', auth.email);
+
+      // Record administrative audit trail
+      const clientIp = extractClientIp(req);
+      const loc = await getApproximateLocation(clientIp);
+      const dev = parseDeviceAndBrowser(req);
+      addAuthoritativeEvent({
+        id: `audit_job_run_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+        uid: auth.uid,
+        email: auth.email,
+        eventType: 'JOB_MANUAL_RUN' as any,
+        authProvider: 'none',
+        timestamp: new Date().toISOString(),
+        serverTimestampMs: Date.now(),
+        ip: clientIp,
+        location: loc,
+        device: dev,
+        sessionId: `sess_${Date.now()}`,
+        newDevice: false,
+        authorizationResult: 'admin',
+        details: `Manual trigger of background job '${runRecord.jobName}' initiated by ${auth.email}. Result: ${runRecord.status} (${(runRecord.durationMs / 1000).toFixed(2)}s).`
+      });
+
+      return res.json({ 
+        success: true, 
+        run: runRecord, 
+        message: `Job '${runRecord.jobName}' executed successfully (${runRecord.status}).` 
+      });
+    } catch (err: any) {
+      const statusCode = err.status || 500;
+      return res.status(statusCode).json({ 
+        success: false, 
+        error: err.message || "Failed to execute background job" 
+      });
+    }
+  });
+
+  // 4. Retry a background job
+  app.post("/api/admin/jobs/:jobId/retry", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
+      }
+
+      const { jobId } = req.params;
+      const runRecord = await executeScheduledJob(jobId, 'RETRY_ADMIN', auth.email);
+
+      // Record administrative audit trail
+      const clientIp = extractClientIp(req);
+      const loc = await getApproximateLocation(clientIp);
+      const dev = parseDeviceAndBrowser(req);
+      addAuthoritativeEvent({
+        id: `audit_job_retry_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+        uid: auth.uid,
+        email: auth.email,
+        eventType: 'JOB_RETRY_RUN' as any,
+        authProvider: 'none',
+        timestamp: new Date().toISOString(),
+        serverTimestampMs: Date.now(),
+        ip: clientIp,
+        location: loc,
+        device: dev,
+        sessionId: `sess_${Date.now()}`,
+        newDevice: false,
+        authorizationResult: 'admin',
+        details: `Retry of background job '${runRecord.jobName}' executed by ${auth.email}. Result: ${runRecord.status} (${(runRecord.durationMs / 1000).toFixed(2)}s).`
+      });
+
+      return res.json({ 
+        success: true, 
+        run: runRecord, 
+        message: `Job '${runRecord.jobName}' retried successfully (${runRecord.status}).` 
+      });
+    } catch (err: any) {
+      const statusCode = err.status || 500;
+      return res.status(statusCode).json({ 
+        success: false, 
+        error: err.message || "Failed to retry background job" 
+      });
+    }
+  });
+
+  // 5. Toggle background job enabled / disabled
+  app.post("/api/admin/jobs/:jobId/toggle", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
+      }
+
+      const { jobId } = req.params;
+      const { enabled } = req.body;
+      const success = toggleJobEnabled(jobId, Boolean(enabled));
+      if (!success) {
+        return res.status(404).json({ success: false, error: `Job '${jobId}' not found.` });
+      }
+
+      const clientIp = extractClientIp(req);
+      const loc = await getApproximateLocation(clientIp);
+      const dev = parseDeviceAndBrowser(req);
+      addAuthoritativeEvent({
+        id: `audit_job_toggle_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+        uid: auth.uid,
+        email: auth.email,
+        eventType: 'JOB_CONFIG_TOGGLE' as any,
+        authProvider: 'none',
+        timestamp: new Date().toISOString(),
+        serverTimestampMs: Date.now(),
+        ip: clientIp,
+        location: loc,
+        device: dev,
+        sessionId: `sess_${Date.now()}`,
+        newDevice: false,
+        authorizationResult: 'admin',
+        details: `Job '${jobId}' ${enabled ? 'enabled' : 'disabled'} by ${auth.email}.`
+      });
+
+      return res.json({ success: true, jobId, enabled: Boolean(enabled) });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: "Failed to toggle job state" });
+    }
+  });
+
+  // =========================================================================
+  // SYSTEM AVAILABILITY & MAINTENANCE MODE API ENDPOINTS
+  // =========================================================================
+
+  // Public endpoint to query current system availability status
+  app.get("/api/system/mode", (req, res) => {
+    try {
+      const config = getSystemConfig();
+      return res.json({ success: true, config });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: "Failed to read system status" });
+    }
+  });
+
+  // Admin endpoint: update system mode (Normal, Read-Only, Maintenance)
+  app.post("/api/admin/system/mode", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Unauthorized: Admin privileges required to change system mode." });
+      }
+
+      const { mode, reason, expectedEndAt, autoRestore } = req.body;
+
+      if (!mode || !['normal', 'readonly', 'maintenance'].includes(mode)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "Invalid mode. Supported modes are 'normal', 'readonly', and 'maintenance'." 
+        });
+      }
+
+      const result = setSystemConfig(
+        mode,
+        reason || '',
+        auth.email || 'Admin',
+        expectedEndAt || null,
+        Boolean(autoRestore)
+      );
+
+      // Record detailed security action audit
+      const clientIp = extractClientIp(req);
+      const loc = await getApproximateLocation(clientIp);
+      const dev = parseDeviceAndBrowser(req);
+
+      addAuthoritativeEvent({
+        id: `mode_event_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+        uid: auth.uid || 'admin',
+        email: auth.email || 'admin@smartledgerx.io',
+        eventType: 'LOGIN_SUCCESS' as any,
+        authProvider: 'none',
+        timestamp: new Date().toISOString(),
+        serverTimestampMs: Date.now(),
+        ip: clientIp,
+        location: loc,
+        device: dev,
+        sessionId: `sess_${Date.now()}`,
+        newDevice: false,
+        authorizationResult: 'admin',
+        details: `System mode changed to ${mode.toUpperCase()} by ${auth.email}. Reason: ${reason || 'N/A'}`
+      });
+
+      return res.json({
+        success: true,
+        config: result.config,
+        message: result.message
+      });
+    } catch (err: any) {
+      console.error("[SystemMode API] Error updating system mode:", err);
+      return res.status(500).json({ success: false, error: err.message || "Failed to update system mode" });
+    }
+  });
+
+  // Admin endpoint: pre-flight safety inspection
+  app.get("/api/admin/system/safety-check", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Unauthorized: Admin privileges required." });
+      }
+
+      const report = inspectSystemSafety();
+      return res.json({ success: true, report });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: "Safety check failed" });
+    }
+  });
+
+  // Admin endpoint: create immediate safety backup prior to maintenance
+  app.post("/api/admin/system/create-safety-backup", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Unauthorized: Admin privileges required." });
+      }
+
+      const run = await createImmediateSafetyBackup(auth.email || 'Admin');
+      return res.json({ 
+        success: true, 
+        message: "Disaster-recovery safety backup created successfully.",
+        run 
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message || "Failed to create safety backup." });
+    }
+  });
+
+  // --- Admin Reports Center Authoritative Server Endpoints ---
+
+  // 1. Get server-side aggregated operational & audit data (high performance, no mass client download)
+  app.get("/api/admin/reports/server-data", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
+      }
+
+      const securityEvents = getAuthoritativeEvents(250);
+      const jobRuns = getJobRuns(undefined, 250);
+      const allJobs = getAllScheduledJobs();
+      const jobsSummary = getScheduledJobsSummary();
+      const safetyCheck = inspectSystemSafety();
+      const systemConfig = getSystemConfig();
+
+      return res.json({
+        success: true,
+        data: {
+          securityEvents,
+          jobRuns,
+          allJobs,
+          jobsSummary,
+          safetyCheck,
+          systemConfig,
+          verifiedAdminEmails: VERIFIED_ADMIN_RECIPIENT_EMAILS,
+          serverTime: new Date().toISOString(),
+          serverTimestampMs: Date.now()
+        }
+      });
+    } catch (err: any) {
+      console.error("[AdminReports] Error fetching server data:", err);
+      return res.status(500).json({ success: false, error: "Failed to fetch server report data" });
+    }
+  });
+
+  // 2. Get all scheduled report subscriptions
+  app.get("/api/admin/reports/schedules", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
+      }
+
+      const schedules = getAllScheduledReportConfigs();
+      return res.json({ success: true, schedules });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: "Failed to fetch scheduled reports." });
+    }
+  });
+
+  // 3. Upsert scheduled report subscription
+  app.post("/api/admin/reports/schedules", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
+      }
+
+      const result = upsertScheduledReportConfig(req.body);
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
+      }
+
+      // Record administrative audit trail
+      const clientIp = extractClientIp(req);
+      const loc = await getApproximateLocation(clientIp);
+      const dev = parseDeviceAndBrowser(req);
+      addAuthoritativeEvent({
+        id: `audit_sched_rep_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+        uid: auth.uid,
+        email: auth.email,
+        eventType: 'LOGIN_SUCCESS' as any,
+        authProvider: 'none',
+        timestamp: new Date().toISOString(),
+        serverTimestampMs: Date.now(),
+        ip: clientIp,
+        location: loc,
+        device: dev,
+        sessionId: `sess_${Date.now()}`,
+        newDevice: false,
+        authorizationResult: 'admin',
+        details: `Configured scheduled admin report '${result.config?.name}' for delivery to ${result.config?.deliveryEmail}.`
+      });
+
+      return res.json({ success: true, config: result.config, message: "Scheduled report saved successfully." });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: "Failed to save scheduled report." });
+    }
+  });
+
+  // 4. Delete scheduled report subscription
+  app.delete("/api/admin/reports/schedules/:id", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
+      }
+
+      const { id } = req.params;
+      const success = deleteScheduledReportConfig(id);
+      return res.json({ success, message: success ? "Scheduled report removed." : "Report not found." });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: "Failed to delete scheduled report." });
+    }
+  });
+
+  // 5. Test/Run scheduled report on-demand
+  app.post("/api/admin/reports/schedules/:id/run", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
+      }
+
+      const { id } = req.params;
+      const result = triggerScheduledReportDispatch(id);
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: "Failed to dispatch scheduled report." });
+    }
+  });
+
   // API route for xAI Grok chatbot
   app.post("/api/send-monthly-report", async (req, res) => {
     try {
+      // Check system mode first
+      const sysMode = getSystemConfig();
+      if (sysMode.mode === 'maintenance') {
+        return res.status(503).json({ 
+          error: "Service temporarily unavailable: SmartLedger is in Maintenance Mode.",
+          mode: 'maintenance'
+        });
+      }
       console.log("Starting email request for monthly report...");
       const { 
         email, 

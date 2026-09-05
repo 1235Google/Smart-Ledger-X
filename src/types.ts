@@ -8,6 +8,10 @@ export interface ReceivedMoney {
   date: string;
   purpose: string;
   invoiceNumber?: string;
+  deleted?: boolean;
+  deletedAt?: string;
+  deletedBy?: string;
+  purgeAfter?: string;
 }
 
 export interface SentMoney {
@@ -18,6 +22,10 @@ export interface SentMoney {
   date: string;
   purpose: string;
   invoiceNumber?: string;
+  deleted?: boolean;
+  deletedAt?: string;
+  deletedBy?: string;
+  purgeAfter?: string;
 }
 
 export interface PendingMoney {
@@ -38,6 +46,10 @@ export interface PendingMoney {
   penaltyValue?: number;
   gracePeriod?: number; // in days
   aiTone?: 'friendly' | 'professional' | 'strict' | 'formal';
+  deleted?: boolean;
+  deletedAt?: string;
+  deletedBy?: string;
+  purgeAfter?: string;
 }
 
 export type Transaction = ReceivedMoney | PendingMoney | SentMoney;
@@ -120,6 +132,11 @@ export interface UserDevice {
   createdAt: string;
   isCurrent?: boolean;
   status: 'active' | 'revoked';
+  trustStatus?: 'trusted' | 'unrecognized' | 'blocked';
+  trustedAt?: string;
+  trustedBy?: string;
+  blockedAt?: string;
+  blockedBy?: string;
   userAgent?: string;
 }
 
@@ -259,6 +276,10 @@ export interface FinanceHabit {
   totalTrackedDays: number;
 }
 
+export type GullakDirection = 'credit' | 'debit';
+export type GullakOperation = 'allocation' | 'deposit' | 'withdrawal' | 'transfer_in' | 'transfer_out' | string;
+export type GullakType = 'savings' | 'deposit' | 'withdrawal' | string;
+
 export interface GullakEntry {
   id: string;
   personName: string;
@@ -271,6 +292,13 @@ export interface GullakEntry {
   receiptImage?: string;
   createdAt: string;
   updatedAt: string;
+  type?: GullakType;
+  operation?: GullakOperation;
+  direction?: GullakDirection;
+  deleted?: boolean;
+  deletedAt?: string;
+  deletedBy?: string;
+  purgeAfter?: string;
 }
 
 export interface GullakSettings {
@@ -524,6 +552,10 @@ export interface Bill {
   createdAt: string;
   updatedAt: string;
   userId?: string;
+  deleted?: boolean;
+  deletedAt?: string;
+  deletedBy?: string;
+  purgeAfter?: string;
 }
 
 export interface NotificationSettings {
@@ -566,14 +598,39 @@ export interface AdminUser {
 export type AdminSecurityAction = 
   | 'LOGIN_SUCCESS' 
   | 'LOGIN_FAILED' 
+  | 'GOOGLE_LOGIN'
+  | 'PASSWORD_LOGIN'
+  | 'ADMIN_LOGIN'
   | 'LOGIN_DENIED_UNAUTHORIZED' 
   | 'LOGIN_DENIED_DISABLED' 
   | 'LOGOUT' 
+  | 'NEW_DEVICE_DETECTED'
+  | 'SESSION_REVOKED'
+  | 'JOB_MANUAL_RUN'
+  | 'JOB_RETRY_RUN'
+  | 'JOB_CONFIG_TOGGLE'
   | 'ADMIN_ADDED' 
   | 'ADMIN_ROLE_UPDATED' 
   | 'ADMIN_STATUS_CHANGED' 
-  | 'ADMIN_REMOVED'
-  | 'PASSWORD_LOGIN';
+  | 'ADMIN_REMOVED';
+
+export interface SecurityLocationInfo {
+  country: string;
+  region: string;
+  city: string;
+  source: string;
+}
+
+export interface SecurityDeviceInfo {
+  category: 'Desktop' | 'Mobile' | 'Tablet' | 'Unknown';
+  model: string;
+  os: string;
+  osVersion: string;
+  browser: string;
+  browserVersion: string;
+  userAgent?: string;
+  clientHints?: Record<string, any>;
+}
 
 export interface AdminSecurityLog {
   id: string;
@@ -584,6 +641,347 @@ export interface AdminSecurityLog {
   browser: string;
   timestamp: string;
   action: AdminSecurityAction;
+  eventType?: AdminSecurityAction;
+  authProvider?: 'google' | 'password' | 'other' | 'none';
   details?: string;
+  location?: SecurityLocationInfo;
+  deviceInfo?: SecurityDeviceInfo;
+  newDevice?: boolean;
+  sessionId?: string;
+  authorizationResult?: 'admin' | 'user' | 'denied';
+  serverTimestampMs?: number;
+}
+
+export type ScheduledJobStatus = 
+  | 'HEALTHY' 
+  | 'RUNNING' 
+  | 'DELAYED' 
+  | 'CRITICAL_DELAY' 
+  | 'FAILED' 
+  | 'DISABLED' 
+  | 'UNKNOWN';
+
+export type ScheduledJobTriggerType = 'SCHEDULED_CRON' | 'MANUAL_ADMIN' | 'RETRY_ADMIN';
+
+export interface ScheduledJobRun {
+  runId: string;
+  jobId: string;
+  jobName: string;
+  startedAt: string;
+  completedAt?: string;
+  status: 'SUCCESS' | 'FAILED' | 'RUNNING';
+  durationMs: number;
+  errorCode?: string;
+  errorSummary?: string;
+  triggerType: ScheduledJobTriggerType;
+  executionId: string;
+  executedBy?: string;
+  details?: Record<string, any>;
+  serverTimestampMs: number;
+}
+
+export interface ScheduledJob {
+  jobId: string;
+  jobName: string;
+  description: string;
+  iconType: 'backup' | 'bell' | 'calculator' | 'camera' | 'broom' | 'shield' | 'report' | 'trash';
+  scheduleCron: string;
+  scheduleHuman: string;
+  status: ScheduledJobStatus;
+  statusMessage?: string;
+  enabled: boolean;
+  safeToRetry: boolean;
+  safeToRunManually: boolean;
+  lastRun: {
+    runId: string;
+    startedAt: string;
+    completedAt?: string;
+    status: 'SUCCESS' | 'FAILED' | 'RUNNING';
+    durationMs: number;
+    result: string;
+    errorSummary?: string;
+    triggerType: ScheduledJobTriggerType;
+  } | null;
+  lastSuccessfulRun: {
+    runId: string;
+    startedAt: string;
+    completedAt?: string;
+    durationMs: number;
+  } | null;
+  nextExpectedRun: string; // ISO string
+  nextExpectedRunMs: number;
+  isOverdue: boolean;
+  overdueDurationMs?: number;
+  recentFailureCount: number;
+  estimatedDurationMs: number;
+}
+
+export interface ScheduledJobsSummary {
+  totalJobs: number;
+  healthyCount: number;
+  runningCount: number;
+  delayedCount: number;
+  failedCount: number;
+  disabledCount: number;
+  serverTime: string;
+  serverTimestampMs: number;
+  schedulerActive: boolean;
+  autoBackupSystem: {
+    status: 'HEALTHY' | 'WARNING' | 'FAILED' | 'DISABLED';
+    message: string;
+    lastAttempt: string | null;
+    lastSuccessfulBackup: string | null;
+    nextBackup: string | null;
+    backupDuration: string;
+    failureCount: number;
+    realBackupsFound: number;
+  };
+}
+
+export type SystemMode = 'normal' | 'readonly' | 'maintenance';
+
+export interface SystemConfig {
+  mode: SystemMode;
+  reason: string;
+  changedAt: string;
+  changedBy: string;
+  expectedEndAt: string | null;
+  autoRestore: boolean;
+  previousMode?: SystemMode;
+}
+
+export interface SystemSafetyReport {
+  databaseConnected: boolean;
+  databaseLatencyMs: number;
+  activeCriticalOperations: number;
+  activeJobs: string[];
+  backupStatus: {
+    hasRecentBackup: boolean;
+    lastBackupTimestamp: string | null;
+    lastBackupHoursAgo: number | null;
+    status: 'HEALTHY' | 'WARNING' | 'CRITICAL';
+    message: string;
+  };
+  safeToProceed: boolean;
+  warnings: string[];
+}
+
+// --- Admin Reports Center Types ---
+
+export type AdminReportCategory = 
+  | 'system_health' 
+  | 'backup' 
+  | 'security' 
+  | 'data_integrity' 
+  | 'scheduled_jobs' 
+  | 'admin_activity';
+
+export type AdminReportDatePreset = 
+  | 'today' 
+  | 'last_7_days' 
+  | 'last_30_days' 
+  | 'this_month' 
+  | 'prev_month' 
+  | 'this_year' 
+  | 'custom';
+
+export type HealthSeverity = 'healthy' | 'warning' | 'problem';
+
+export interface ScoreDeduction {
+  reason: string;
+  deduction: number;
+  severity: HealthSeverity;
+  category: string;
+}
+
+export interface SystemHealthReportData {
+  status: HealthSeverity;
+  score: number; // 0 - 100 deterministic formula
+  maxScore: number;
+  formulaDescription: string;
+  scoreBreakdown: ScoreDeduction[];
+  components: {
+    firestore: { status: HealthSeverity; latencyMs: number; message: string };
+    auth: { status: HealthSeverity; message: string; activeAdminsCount: number };
+    backup: { status: HealthSeverity; message: string; lastBackupTime: string | null; hoursAgo: number | null };
+    scheduledJobs: { status: HealthSeverity; message: string; healthyCount: number; delayedCount: number; failedCount: number };
+    dataIntegrity: { status: HealthSeverity; message: string; discrepancyCount: number };
+    adminSecurity: { status: HealthSeverity; message: string; unauthorizedAttemptsCount: number };
+  };
+  warningsCount: number;
+  criticalIssuesCount: number;
+  generatedAt: string;
+}
+
+export interface MissingBackupDay {
+  dateString: string;
+  formattedDate: string;
+}
+
+export interface BackupReportData {
+  totalBackupsInRange: number;
+  successfulBackups: number;
+  failedBackups: number;
+  successRate: number;
+  lastSuccessfulBackup: {
+    id?: string;
+    createdAt: string;
+    formattedTime: string;
+    sizeBytes: number;
+    formattedSize: string;
+    type: string;
+  } | null;
+  totalSizeBytes: number;
+  formattedTotalSize: string;
+  averageSizeBytes: number;
+  formattedAverageSize: string;
+  scheduledCount: number;
+  manualCount: number;
+  averageDurationMs: number;
+  missingExpectedBackupDays: MissingBackupDay[];
+  records: Array<{
+    id: string;
+    createdAt: string;
+    name: string;
+    type: string;
+    status: string;
+    sizeBytes: number;
+    formattedSize: string;
+    durationMs: number;
+    sha256?: string;
+    recordsCount?: number;
+  }>;
+}
+
+export interface SecurityReportData {
+  successfulLogins: number;
+  failedAttempts: number;
+  newUnrecognizedDevices: number;
+  unauthorizedAdminAttempts: number;
+  sessionEvents: number;
+  totalEvents: number;
+  uniqueIpsCount: number;
+  uniqueUsersCount: number;
+  geoDistribution: Array<{ location: string; count: number }>;
+  deviceDistribution: Array<{ category: string; count: number }>;
+  events: AdminSecurityLog[];
+}
+
+export interface DuplicateTransactionCandidate {
+  id: string;
+  matchId: string;
+  amount: number;
+  date: string;
+  personName: string;
+  type: string;
+  reason: string;
+}
+
+export interface MissingFieldItem {
+  id: string;
+  date: string;
+  amount: number;
+  missingField: string;
+  description: string;
+}
+
+export interface InvalidAmountItem {
+  id: string;
+  amount: any;
+  date: string;
+  personName: string;
+  issue: string;
+}
+
+export interface BrokenReferenceItem {
+  id: string;
+  type: string;
+  referenceField: string;
+  referenceId: string;
+  issue: string;
+}
+
+export interface DataIntegrityReportData {
+  overallStatus: HealthSeverity;
+  totalDiscrepancies: number;
+  mainLedger: {
+    storedBalance: number;
+    calculatedBalance: number;
+    inflows: number;
+    outflows: number;
+    pendingReceivables: number;
+    discrepancyAmount: number;
+    isBalanced: boolean;
+  };
+  gullak: {
+    storedBalance: number;
+    calculatedBalance: number;
+    totalCredits: number;
+    totalDebits: number;
+    discrepancyAmount: number;
+    isBalanced: boolean;
+    entriesCount: number;
+  };
+  duplicates: DuplicateTransactionCandidate[];
+  missingRequiredFields: MissingFieldItem[];
+  invalidAmounts: InvalidAmountItem[];
+  brokenReferences: BrokenReferenceItem[];
+}
+
+export interface ScheduledJobsReportData {
+  totalJobsConfigured: number;
+  totalExecutionsInRange: number;
+  successExecutionsCount: number;
+  failedExecutionsCount: number;
+  successRate: number;
+  overallHealth: HealthSeverity;
+  jobSummaries: Array<{
+    jobId: string;
+    jobName: string;
+    scheduleHuman: string;
+    status: ScheduledJobStatus;
+    totalRunsInRange: number;
+    successRunsInRange: number;
+    failedRunsInRange: number;
+    averageDurationMs: number;
+    lastExecutedAt: string | null;
+    isOverdue: boolean;
+  }>;
+  recentRuns: ScheduledJobRun[];
+}
+
+export interface AdminActivityReportData {
+  totalActions: number;
+  modeChangesCount: number;
+  backupActionsCount: number;
+  jobTriggersCount: number;
+  securityConfigCount: number;
+  actions: Array<{
+    id: string;
+    action: string;
+    timestamp: string;
+    adminEmail: string;
+    ip: string;
+    device: string;
+    result: 'success' | 'failed' | 'denied';
+    details: string;
+  }>;
+}
+
+export interface ScheduledReportConfig {
+  id: string;
+  name: string;
+  reportType: 'weekly_system' | 'monthly_security' | 'monthly_backup';
+  frequency: 'weekly' | 'monthly';
+  dayOfWeek?: number; // 0 = Sunday, 1 = Monday
+  dayOfMonth?: number; // 1 = 1st
+  time: string; // "09:00"
+  deliveryEmail: string;
+  verifiedAdmin: boolean;
+  format: 'pdf' | 'csv' | 'both';
+  enabled: boolean;
+  createdAt: string;
+  lastRunAt?: string;
+  nextRunAt?: string;
 }
 

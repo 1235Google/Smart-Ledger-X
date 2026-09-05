@@ -213,6 +213,24 @@
         "emailToggles": { "type": "object" },
         "updatedAt": { "type": "string" }
       }
+    },
+    "ScheduledJobRun": {
+      "title": "ScheduledJobRun",
+      "description": "Execution record for server-side background scheduled job",
+      "type": "object",
+      "properties": {
+        "runId": { "type": "string" },
+        "jobId": { "type": "string" },
+        "jobName": { "type": "string" },
+        "startedAt": { "type": "string" },
+        "completedAt": { "type": "string" },
+        "status": { "type": "string" },
+        "durationMs": { "type": "number" },
+        "triggerType": { "type": "string" },
+        "executionId": { "type": "string" },
+        "executedBy": { "type": "string" },
+        "serverTimestampMs": { "type": "number" }
+      }
     }
   },
   "firestore": {
@@ -271,6 +289,14 @@
     "/adminSecurityLogs/{logId}": {
       "schema": "AdminSecurityLog",
       "description": "SmartLedger Admin audit logs"
+    },
+    "/scheduledJobRuns/{runId}": {
+      "schema": "ScheduledJobRun",
+      "description": "Server-side background job execution history"
+    },
+    "/system/config": {
+      "schema": "SystemConfig",
+      "description": "Global SmartLedger system availability mode and maintenance configuration"
     }
   }
 }

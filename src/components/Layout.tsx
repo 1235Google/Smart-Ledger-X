@@ -41,6 +41,7 @@ import NotificationDropdown, { NotificationDropdownRef } from './NotificationDro
 import UserProfileDropdown from './UserProfileDropdown';
 import SyncStatusBadge from './SyncStatusBadge';
 import LiquidSpotlight from './ui/LiquidSpotlight';
+import SystemModeBanner from './SystemModeBanner';
 
 // Primary Apple Floating Bottom Tab Bar Items - Simple & Clear
 const mobilePrimaryTabs = [
@@ -596,6 +597,9 @@ export default function Layout() {
             <UserProfileDropdown onOpenNotifications={() => desktopNotifRef.current?.open()} />
           </div>
         </header>
+
+        {/* Global Read-Only / Availability Mode Banner */}
+        <SystemModeBanner isAdmin={false} />
 
         {/* Fast, Smooth Page Routing Container (Instant & Stutter-Free) */}
         <div className="flex-1 w-full pt-[calc(4.5rem+env(safe-area-inset-top))] md:pt-0">

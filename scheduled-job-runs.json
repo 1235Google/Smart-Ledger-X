@@ -1,0 +1,153 @@
+[
+  {
+    "runId": "run_ledger_integrity_check_1788620298193_f34464ee",
+    "jobId": "ledger_integrity_check",
+    "jobName": "Ledger Integrity Check",
+    "startedAt": "2026-09-05T14:58:18.193Z",
+    "completedAt": "2026-09-05T14:58:18.193Z",
+    "status": "SUCCESS",
+    "durationMs": 0,
+    "triggerType": "MANUAL_ADMIN",
+    "executionId": "exec_1788620298192_2c16a28c",
+    "executedBy": "admin@smartledgerx.io",
+    "serverTimestampMs": 1788620298193,
+    "details": {
+      "transactionsAudited": 194,
+      "doubleEntryBalanced": true,
+      "startingBalanceVerified": true,
+      "hashDiscrepancies": 0,
+      "anomalousNegativeBalances": 0,
+      "integrityScore": "100.0%"
+    }
+  },
+  {
+    "runId": "run_auto_backup_1788573600000_a1b1",
+    "jobId": "auto_backup",
+    "jobName": "Automatic Backup",
+    "startedAt": "2026-09-05T02:00:00.000Z",
+    "completedAt": "2026-09-05T02:00:04.230Z",
+    "status": "SUCCESS",
+    "durationMs": 4230,
+    "triggerType": "SCHEDULED_CRON",
+    "executionId": "exec_1788573600000_01",
+    "executedBy": "SYSTEM_SCHEDULER",
+    "serverTimestampMs": 1788573600000,
+    "details": {
+      "recordsProcessed": 184,
+      "archiveSizeBytes": 14820,
+      "checksum": "sha256_b79f82c49e0a84d12f45",
+      "storageLocation": "cloud_backup/auto_snapshot.backup"
+    }
+  },
+  {
+    "runId": "run_auto_backup_1788487200000_a1b2",
+    "jobId": "auto_backup",
+    "jobName": "Automatic Backup",
+    "startedAt": "2026-09-04T02:00:00.000Z",
+    "completedAt": "2026-09-04T02:00:03.940Z",
+    "status": "SUCCESS",
+    "durationMs": 3940,
+    "triggerType": "SCHEDULED_CRON",
+    "executionId": "exec_1788487200000_02",
+    "executedBy": "SYSTEM_SCHEDULER",
+    "serverTimestampMs": 1788487200000,
+    "details": {
+      "recordsProcessed": 172,
+      "archiveSizeBytes": 14190,
+      "checksum": "sha256_fa8192a09c21d89b14",
+      "storageLocation": "cloud_backup/auto_snapshot.backup"
+    }
+  },
+  {
+    "runId": "run_ledger_integrity_1788577200000_l1a1",
+    "jobId": "ledger_integrity_check",
+    "jobName": "Ledger Integrity Check",
+    "startedAt": "2026-09-05T03:00:00.000Z",
+    "completedAt": "2026-09-05T03:00:03.120Z",
+    "status": "SUCCESS",
+    "durationMs": 3120,
+    "triggerType": "SCHEDULED_CRON",
+    "executionId": "exec_1788577200000_03",
+    "executedBy": "SYSTEM_SCHEDULER",
+    "serverTimestampMs": 1788577200000,
+    "details": {
+      "transactionsReconciled": 184,
+      "balanceVariance": 0,
+      "checksumValid": true,
+      "integrityScore": "100.0%"
+    }
+  },
+  {
+    "runId": "run_security_scan_1788619437225_s1a1",
+    "jobId": "security_notifications_scan",
+    "jobName": "Security Notifications & Audit Scan",
+    "startedAt": "2026-09-05T14:43:57.225Z",
+    "completedAt": "2026-09-05T14:43:58.375Z",
+    "status": "SUCCESS",
+    "durationMs": 1150,
+    "triggerType": "SCHEDULED_CRON",
+    "executionId": "exec_1788619437225_04",
+    "executedBy": "SYSTEM_SCHEDULER",
+    "serverTimestampMs": 1788619437225,
+    "details": {
+      "eventsScanned": 38,
+      "unauthorizedSpikes": 0,
+      "anomaliesDetected": 0
+    }
+  },
+  {
+    "runId": "run_daily_snapshot_1788562800000_d1a1",
+    "jobId": "daily_financial_snapshot",
+    "jobName": "Daily Financial Snapshot",
+    "startedAt": "2026-09-04T23:00:00.000Z",
+    "completedAt": "2026-09-04T23:00:02.740Z",
+    "status": "SUCCESS",
+    "durationMs": 2740,
+    "triggerType": "SCHEDULED_CRON",
+    "executionId": "exec_1788562800000_05",
+    "executedBy": "SYSTEM_SCHEDULER",
+    "serverTimestampMs": 1788562800000,
+    "details": {
+      "snapshotDate": "2026-09-04",
+      "totalBalance": 245000,
+      "activeLedgersCount": 3,
+      "snapshotDocCreated": true
+    }
+  },
+  {
+    "runId": "run_payment_reminders_1788512400000_p1a1",
+    "jobId": "payment_reminders",
+    "jobName": "Payment Reminders",
+    "startedAt": "2026-09-04T09:00:00.000Z",
+    "completedAt": "2026-09-04T09:00:02.080Z",
+    "status": "SUCCESS",
+    "durationMs": 2080,
+    "triggerType": "SCHEDULED_CRON",
+    "executionId": "exec_1788512400000_06",
+    "executedBy": "SYSTEM_SCHEDULER",
+    "serverTimestampMs": 1788512400000,
+    "details": {
+      "pendingDebtorsScanned": 14,
+      "remindersSent": 2,
+      "overdueBillsFlagged": 1
+    }
+  },
+  {
+    "runId": "run_system_cleanup_1788062400000_c1a1",
+    "jobId": "system_cleanup_maintenance",
+    "jobName": "System Cleanup & Maintenance",
+    "startedAt": "2026-08-30T04:00:00.000Z",
+    "completedAt": "2026-08-30T04:00:01.650Z",
+    "status": "SUCCESS",
+    "durationMs": 1650,
+    "triggerType": "SCHEDULED_CRON",
+    "executionId": "exec_1788062400000_07",
+    "executedBy": "SYSTEM_SCHEDULER",
+    "serverTimestampMs": 1788062400000,
+    "details": {
+      "staleRateLimitsFlushed": 12,
+      "expiredChallengesRemoved": 2,
+      "tempLogsPurged": 8
+    }
+  }
+]

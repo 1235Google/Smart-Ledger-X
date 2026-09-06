@@ -434,7 +434,7 @@ export default function AdminPending() {
       >
         <form onSubmit={handleAdd} className="space-y-4 pt-2">
           {/* Type Selector */}
-          <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-black/10 dark:bg-white/5 border border-white/5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-1 rounded-2xl bg-black/10 dark:vision-glass-subtle">
             <button
               type="button"
               onClick={() => setFormType('receivable')}

@@ -64,7 +64,7 @@ export default function Help() {
     : faqs.filter(f => f.category === selectedCategory);
 
   return (
-    <div className="w-full space-y-8">
+    <div className="w-full space-y-8 animate-[fade-in-up_0.4s_ease-out_forwards]">
       {/* Header */}
       <header className="mb-6">
         <div className="flex items-center gap-3 mb-2">

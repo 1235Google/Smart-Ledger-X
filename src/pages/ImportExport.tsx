@@ -776,7 +776,7 @@ export default function ImportExport() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
           >
-            <div className="bg-[#121212] border border-white/10 rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl flex flex-col items-center">
+            <div className="vision-glass rounded-[24px] p-8 max-w-sm w-full text-center shadow-2xl flex flex-col items-center">
               <RefreshCcw size={40} className="text-emerald-400 animate-spin mb-6" />
               <h3 className="text-lg font-bold text-white mb-2">{statusMsg || 'Processing Data...'}</h3>
               <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden mt-4">

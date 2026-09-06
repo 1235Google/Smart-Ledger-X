@@ -1,5 +1,66 @@
 [
   {
+    "runId": "run_security_notifications_scan_1788663600007_f5ed7f01",
+    "jobId": "security_notifications_scan",
+    "jobName": "Security Notifications & Audit Scan",
+    "startedAt": "2026-09-06T03:00:00.007Z",
+    "completedAt": "2026-09-06T03:00:00.007Z",
+    "status": "SUCCESS",
+    "durationMs": 0,
+    "triggerType": "SCHEDULED_CRON",
+    "executionId": "exec_1788663600007_19ffaa76",
+    "executedBy": "SYSTEM_SCHEDULER",
+    "serverTimestampMs": 1788663600007,
+    "details": {
+      "telemetryRecordsAudited": 45,
+      "failedLoginsPastHour": 0,
+      "unauthorizedAttemptsPastHour": 0,
+      "anomalousIpDetected": false,
+      "securityHealthStatus": "Optimal"
+    }
+  },
+  {
+    "runId": "run_ledger_integrity_check_1788663600002_e30d12e9",
+    "jobId": "ledger_integrity_check",
+    "jobName": "Ledger Integrity Check",
+    "startedAt": "2026-09-06T03:00:00.002Z",
+    "completedAt": "2026-09-06T03:00:00.003Z",
+    "status": "SUCCESS",
+    "durationMs": 1,
+    "triggerType": "SCHEDULED_CRON",
+    "executionId": "exec_1788663600002_5f2d7dfd",
+    "executedBy": "SYSTEM_SCHEDULER",
+    "serverTimestampMs": 1788663600002,
+    "details": {
+      "transactionsAudited": 194,
+      "doubleEntryBalanced": true,
+      "startingBalanceVerified": true,
+      "hashDiscrepancies": 0,
+      "anomalousNegativeBalances": 0,
+      "integrityScore": "100.0%"
+    }
+  },
+  {
+    "runId": "run_security_notifications_scan_1788661800005_444e23ae",
+    "jobId": "security_notifications_scan",
+    "jobName": "Security Notifications & Audit Scan",
+    "startedAt": "2026-09-06T02:30:00.005Z",
+    "completedAt": "2026-09-06T02:30:00.005Z",
+    "status": "SUCCESS",
+    "durationMs": 0,
+    "triggerType": "SCHEDULED_CRON",
+    "executionId": "exec_1788661800005_60d835b5",
+    "executedBy": "SYSTEM_SCHEDULER",
+    "serverTimestampMs": 1788661800005,
+    "details": {
+      "telemetryRecordsAudited": 45,
+      "failedLoginsPastHour": 0,
+      "unauthorizedAttemptsPastHour": 0,
+      "anomalousIpDetected": false,
+      "securityHealthStatus": "Optimal"
+    }
+  },
+  {
     "runId": "run_ledger_integrity_check_1788620298193_f34464ee",
     "jobId": "ledger_integrity_check",
     "jobName": "Ledger Integrity Check",

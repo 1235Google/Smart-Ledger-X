@@ -159,7 +159,7 @@ function AdminLayoutInner() {
         )}
       >
         {/* Brand Header */}
-        <div className="h-18 px-5 flex items-center justify-between border-b border-transparent">
+        <div className="h-16 px-5 flex items-center justify-between border-b border-transparent">
           <Link to="/admin/dashboard" className="flex items-center gap-3 overflow-hidden">
             <div className={cn(
               'w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-[0_2px_8px_rgba(0,0,0,0.12)]',
@@ -309,7 +309,7 @@ function AdminLayoutInner() {
       )}>
         {/* Sticky Top App Bar (Material 3 Header) */}
         <header className={cn(
-          'sticky top-0 z-20 h-18 px-4 sm:px-8 flex items-center justify-between border-b backdrop-blur-xl transition-colors duration-200',
+          'sticky top-0 z-20 h-16 px-4 sm:px-8 flex items-center justify-between border-b backdrop-blur-xl transition-colors duration-200',
           isDark
             ? 'bg-[#131314]/85 border-[#2d2f31]'
             : 'bg-[#f8fafd]/85 border-[#e1e3e1]'
@@ -558,8 +558,19 @@ function AdminLayoutInner() {
         <SystemModeBanner isAdmin={true} />
 
         {/* Page Content Body */}
-        <main className="flex-1 p-4 sm:p-8 max-w-[1600px] w-full mx-auto">
-          <Outlet />
+        <main className="flex-1 p-4 sm:p-8 max-w-[1600px] w-full mx-auto overflow-x-hidden">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 15, filter: 'blur(8px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, y: -10, filter: 'blur(4px)' }}
+              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+              className="w-full relative"
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
 
@@ -689,20 +700,20 @@ function AdminLayoutInner() {
             <div className="font-bold text-xs uppercase tracking-wider text-slate-400">
               Assigned Permissions
             </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="p-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-white/5 flex items-center gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div className="p-2.5 rounded-xl bg-black/5 dark:vision-glass-subtle flex items-center gap-2">
                 <Check size={14} className="text-emerald-400" />
                 <span>Full Ledger Read / Write</span>
               </div>
-              <div className="p-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-white/5 flex items-center gap-2">
+              <div className="p-2.5 rounded-xl bg-black/5 dark:vision-glass-subtle flex items-center gap-2">
                 <Check size={14} className="text-emerald-400" />
                 <span>Cloud Snapshot Execution</span>
               </div>
-              <div className="p-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-white/5 flex items-center gap-2">
+              <div className="p-2.5 rounded-xl bg-black/5 dark:vision-glass-subtle flex items-center gap-2">
                 <Check size={14} className="text-emerald-400" />
                 <span>Admin User Management</span>
               </div>
-              <div className="p-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-white/5 flex items-center gap-2">
+              <div className="p-2.5 rounded-xl bg-black/5 dark:vision-glass-subtle flex items-center gap-2">
                 <Check size={14} className="text-emerald-400" />
                 <span>Security Audit Log Access</span>
               </div>

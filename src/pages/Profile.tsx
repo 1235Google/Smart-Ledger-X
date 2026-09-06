@@ -431,7 +431,7 @@ export default function Profile() {
       <AnimatePresence>
         {selectedAchievement && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-[#121212] border border-white/10 rounded-3xl p-8 max-w-md w-full shadow-2xl space-y-6">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="vision-glass rounded-[24px] p-8 max-w-md w-full shadow-2xl space-y-6">
               <div className="flex items-center justify-between">
                 <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
                   <selectedAchievement.icon size={24} />
@@ -456,7 +456,7 @@ export default function Profile() {
       <AnimatePresence>
         {selectedDoc && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-[#121212] border border-white/10 rounded-3xl p-8 max-w-md w-full shadow-2xl space-y-6">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="vision-glass rounded-[24px] p-8 max-w-md w-full shadow-2xl space-y-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <FileText className="text-emerald-400" size={24} />
@@ -464,7 +464,7 @@ export default function Profile() {
                 </div>
                 <button onClick={() => setSelectedDoc(null)} className="p-2 text-slate-400 hover:text-white cursor-pointer"><X size={20} /></button>
               </div>
-              <div className="p-6 rounded-2xl bg-black/50 border border-white/10 text-center space-y-3">
+              <div className="p-6 rounded-2xl vision-glass text-center space-y-3">
                 <FileText size={48} className="mx-auto text-emerald-400/60" />
                 <div className="text-sm text-slate-300 font-medium">Verified Compliance Document</div>
                 <div className="text-xs text-slate-500 font-mono">ID: {selectedDoc.id} • {selectedDoc.date}</div>

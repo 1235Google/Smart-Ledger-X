@@ -105,63 +105,69 @@ import { AnimatePresence } from 'motion/react';
 
 import AutomaticBackupRunner from './components/AutomaticBackupRunner';
 
+import { useLocation } from 'react-router-dom';
+
 function AppRoutes() {
+  const location = useLocation();
+  
   return (
     <Suspense fallback={<PageFallback />}>
-      <Routes>
-        <Route path="/admin" element={<AdminLogin />} />
-        <Route path="/admin/*" element={<AdminLayout />}>
-          <Route path="dashboard" element={<AdminDashboard />} />
-          <Route path="users" element={<AdminUsers />} />
-          <Route path="ledger" element={<AdminLedger />} />
-          <Route path="received" element={<MoneyReceived />} />
-          <Route path="pending" element={<AdminPending />} />
-          <Route path="reminders" element={<AdminReminders />} />
-          <Route path="analytics" element={<AdminAnalytics />} />
-          <Route path="reports" element={<AdminReports />} />
-          <Route path="backup" element={<AdminBackup />} />
-          <Route path="jobs" element={<AdminScheduledJobs />} />
-          <Route path="gullak" element={<AdminGullak />} />
-          <Route path="recycle-bin" element={<AdminRecycleBin />} />
-          <Route path="trusted-devices" element={<AdminTrustedDevices />} />
-          <Route path="logs" element={<AdminLogs />} />
-          <Route path="settings" element={<AdminSettings />} />
-        </Route>
-        <Route path="/login" element={
-          <LoginRoute>
-            <Login />
-          </LoginRoute>
-        } />
-        <Route path="/" element={
-          <ProtectedRoute>
-            <Layout />
-          </ProtectedRoute>
-        }>
-          <Route index element={<Dashboard />} />
-          <Route path="balance" element={<CurrentBalance />} />
-          <Route path="received" element={<MoneyReceived />} />
-          <Route path="sent" element={<Navigate to="/received" replace />} />
-          <Route path="pending" element={<PendingPayments />} />
-          <Route path="analytics" element={<Analytics />} />
-          <Route path="search" element={<Search />} />
-          <Route path="vault" element={<Vault />} />
-          <Route path="goals" element={<Goals />} />
-          <Route path="gullak" element={<Gullak />} />
-          <Route path="timeline" element={<TimelineReplay />} />
-          <Route path="calculator" element={<Calculator />} />
-          <Route path="import-export" element={<ImportExport />} />
-          <Route path="reports" element={<MonthlyReports />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="security" element={<SecurityCenter />} />
-          <Route path="profile" element={<Profile />} />
-          <Route path="notifications" element={<Notifications />} />
-          <Route path="backup" element={<BackupDashboard />} />
-          <Route path="backups" element={<BackupDashboard />} />
-          <Route path="help" element={<Help />} />
-          <Route path="about" element={<About />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <AnimatePresence mode="wait">
+        <Routes location={location} key={location.pathname.split('/')[1] || '/'}>
+          <Route path="/admin" element={<AdminLogin />} />
+          <Route path="/admin/*" element={<AdminLayout />}>
+            <Route path="dashboard" element={<AdminDashboard />} />
+            <Route path="users" element={<AdminUsers />} />
+            <Route path="ledger" element={<AdminLedger />} />
+            <Route path="received" element={<MoneyReceived />} />
+            <Route path="pending" element={<AdminPending />} />
+            <Route path="reminders" element={<AdminReminders />} />
+            <Route path="analytics" element={<AdminAnalytics />} />
+            <Route path="reports" element={<AdminReports />} />
+            <Route path="backup" element={<AdminBackup />} />
+            <Route path="jobs" element={<AdminScheduledJobs />} />
+            <Route path="gullak" element={<AdminGullak />} />
+            <Route path="recycle-bin" element={<AdminRecycleBin />} />
+            <Route path="trusted-devices" element={<AdminTrustedDevices />} />
+            <Route path="logs" element={<AdminLogs />} />
+            <Route path="settings" element={<AdminSettings />} />
+          </Route>
+          <Route path="/login" element={
+            <LoginRoute>
+              <Login />
+            </LoginRoute>
+          } />
+          <Route path="/" element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }>
+            <Route index element={<Dashboard />} />
+            <Route path="balance" element={<CurrentBalance />} />
+            <Route path="received" element={<MoneyReceived />} />
+            <Route path="sent" element={<Navigate to="/received" replace />} />
+            <Route path="pending" element={<PendingPayments />} />
+            <Route path="analytics" element={<Analytics />} />
+            <Route path="search" element={<Search />} />
+            <Route path="vault" element={<Vault />} />
+            <Route path="goals" element={<Goals />} />
+            <Route path="gullak" element={<Gullak />} />
+            <Route path="timeline" element={<TimelineReplay />} />
+            <Route path="calculator" element={<Calculator />} />
+            <Route path="import-export" element={<ImportExport />} />
+            <Route path="reports" element={<MonthlyReports />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="security" element={<SecurityCenter />} />
+            <Route path="profile" element={<Profile />} />
+            <Route path="notifications" element={<Notifications />} />
+            <Route path="backup" element={<BackupDashboard />} />
+            <Route path="backups" element={<BackupDashboard />} />
+            <Route path="help" element={<Help />} />
+            <Route path="about" element={<About />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AnimatePresence>
     </Suspense>
   );
 }

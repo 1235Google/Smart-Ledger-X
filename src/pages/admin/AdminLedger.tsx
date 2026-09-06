@@ -489,7 +489,7 @@ export default function AdminLedger() {
       >
         {viewingEntry && (
           <div className="space-y-4 text-xs sm:text-sm">
-            <div className="p-4 rounded-2xl bg-black/10 dark:bg-white/5 border border-white/5 flex items-center justify-between">
+            <div className="p-4 rounded-2xl bg-black/10 dark:vision-glass-subtle flex items-center justify-between">
               <div>
                 <span className="text-slate-400 text-xs">Total Amount</span>
                 <div className="text-2xl font-extrabold font-mono text-white">
@@ -507,26 +507,26 @@ export default function AdminLedger() {
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-white/5">
+              <div className="p-3 rounded-xl bg-black/5 dark:vision-glass-subtle">
                 <div className="text-slate-400">Customer / Party</div>
                 <div className="font-bold text-sm mt-0.5">{viewingEntry.personName}</div>
               </div>
-              <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-white/5">
+              <div className="p-3 rounded-xl bg-black/5 dark:vision-glass-subtle">
                 <div className="text-slate-400">Payment Rail</div>
                 <div className="font-bold text-sm mt-0.5">{(viewingEntry as any).method || (viewingEntry as any).paymentMethod || 'UPI / Cash'}</div>
               </div>
-              <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-white/5">
+              <div className="p-3 rounded-xl bg-black/5 dark:vision-glass-subtle">
                 <div className="text-slate-400">Category / Purpose</div>
                 <div className="font-bold text-sm mt-0.5">{(viewingEntry as any).category || (viewingEntry as any).purpose || (viewingEntry as any).reason || 'General'}</div>
               </div>
-              <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-white/5">
+              <div className="p-3 rounded-xl bg-black/5 dark:vision-glass-subtle">
                 <div className="text-slate-400">Timestamp</div>
                 <div className="font-bold text-sm mt-0.5">{formatDate((viewingEntry as any).date || (viewingEntry as any).dueDate || (viewingEntry as any).createdAt || '')}</div>
               </div>
             </div>
 
             {(viewingEntry as any).note && (
-              <div className="p-3 rounded-xl bg-black/5 dark:bg-white/5 border border-white/5">
+              <div className="p-3 rounded-xl bg-black/5 dark:vision-glass-subtle">
                 <div className="text-slate-400 text-xs">Memo / Description</div>
                 <p className="mt-1 text-slate-200">{(viewingEntry as any).note}</p>
               </div>

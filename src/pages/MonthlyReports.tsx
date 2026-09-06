@@ -264,10 +264,10 @@ export default function MonthlyReports() {
   };
 
   // Instant Client-side PDF Generation & Download
-  const handleDownloadPdfReport = () => {
+  const handleDownloadPdfReport = async () => {
     setIsDownloadingPdf(true);
     try {
-      generateMonthlyPdf({
+      await generateMonthlyPdf({
         month: selectedMonth,
         recipientEmail: reportSettings?.emailAddress || emailInput,
         transactions: filteredTransactions,
@@ -615,11 +615,16 @@ export default function MonthlyReports() {
                 className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-sm flex items-center gap-2 shadow-lg shadow-indigo-600/25 transition-all disabled:opacity-50"
               >
                 {isDownloadingPdf ? (
-                  <RefreshCw size={16} className="animate-spin" />
+                  <>
+                    <RefreshCw size={16} className="animate-spin" />
+                    Generating report...
+                  </>
                 ) : (
-                  <Download size={16} />
+                  <>
+                    <Download size={16} />
+                    Download PDF Report
+                  </>
                 )}
-                Download PDF Report
               </button>
 
               <button
@@ -1078,7 +1083,7 @@ export default function MonthlyReports() {
                     <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
                       Transactions in {selectedMonth} ({filteredTransactions.length} records)
                     </h4>
-                    <div className="max-h-60 overflow-y-auto rounded-xl border border-white/10">
+                    <div className="max-h-60 overflow-auto rounded-xl border border-white/10">
                       <table className="w-full text-left text-xs">
                         <thead className="bg-slate-900/90 text-slate-400 uppercase text-[10px] sticky top-0">
                           <tr>

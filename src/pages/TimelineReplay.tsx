@@ -287,7 +287,7 @@ export default function TimelineReplay() {
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.05 * idx }}
-                    className="group bg-white/5 border border-white/5 p-4 rounded-2xl flex items-center gap-4"
+                    className="group vision-glass-subtle p-4 rounded-2xl flex items-center gap-4"
                   >
                     <div className={cn(
                       "w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0",

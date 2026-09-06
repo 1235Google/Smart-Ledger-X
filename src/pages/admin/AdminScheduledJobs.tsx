@@ -1048,7 +1048,7 @@ export default function AdminScheduledJobs() {
                         <span className="text-neutral-400 block text-[10px]">Initiator</span>
                         <span className="text-white">{historyModal.selectedRun.executedBy || 'SYSTEM_SCHEDULER'}</span>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                         <div>
                           <span className="text-neutral-400 block text-[10px]">Started At</span>
                           <span className="text-white">{formatExactDateTime(historyModal.selectedRun.startedAt)}</span>

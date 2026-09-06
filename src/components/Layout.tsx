@@ -100,6 +100,9 @@ export default function Layout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
   const { transactions } = useStore();
 
   // Count active pending dues for live indicator
@@ -329,7 +332,7 @@ export default function Layout() {
               onClick={openSearch}
               className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] hover:border-white/[0.12] text-xs text-slate-400 hover:text-white transition-all group"
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 sm:gap-2">
                 <Search size={13} className="text-slate-400 group-hover:text-blue-400 transition-colors" />
                 <span className="text-slate-400 group-hover:text-slate-200">Search</span>
               </div>
@@ -451,7 +454,7 @@ export default function Layout() {
             >
               <Menu size={20} />
             </button>
-            <Link to="/" className="flex items-center gap-2">
+            <Link to="/" className="flex items-center gap-1 sm:gap-2">
               <div className="w-8 h-8 bg-gradient-to-tr from-[#0a84ff] to-[#5e5ce6] rounded-xl flex items-center justify-center shadow-md shadow-[#0a84ff]/20 border border-white/15">
                 <Wallet className="text-white" size={15} />
               </div>
@@ -459,7 +462,7 @@ export default function Layout() {
             </Link>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             <button
               onClick={openSearch}
               aria-label="Universal Search (Cmd+K)"
@@ -543,7 +546,7 @@ export default function Layout() {
                                 </div>
                                 <span className="font-medium text-sm">{item.label}</span>
                               </div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1 sm:gap-2">
                                 {(item as any).isDueTab && pendingDuesCount > 0 && (
                                   <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
                                     {pendingDuesCount}
@@ -607,10 +610,10 @@ export default function Layout() {
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={location.pathname}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                initial={{ opacity: 0, y: 15, filter: 'blur(8px)' }}
+                animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                exit={{ opacity: 0, y: -10, filter: 'blur(4px)' }}
+                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
                 className="w-full relative"
               >
                 <Outlet />

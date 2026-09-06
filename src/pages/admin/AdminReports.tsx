@@ -1085,7 +1085,7 @@ export default function AdminReports() {
                 {renderStatusBadge(dataIntegrityReport.mainLedger.isBalanced ? 'healthy' : 'problem')}
               </div>
 
-              <div className="grid grid-cols-2 gap-4 my-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4">
                 <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800">
                   <div className="text-xs text-slate-400">Total Inflows (Received)</div>
                   <div className="text-lg font-bold text-emerald-400 mt-1">
@@ -1133,7 +1133,7 @@ export default function AdminReports() {
                 {renderStatusBadge(dataIntegrityReport.gullak.isBalanced ? 'healthy' : 'problem')}
               </div>
 
-              <div className="grid grid-cols-2 gap-4 my-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4">
                 <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800">
                   <div className="text-xs text-slate-400">Total Vault Credits</div>
                   <div className="text-lg font-bold text-purple-400 mt-1">

@@ -84,7 +84,7 @@ export default function MoneyReceived() {
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
           {/* Apple Style Form Section */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-[#171717] border border-white/[0.08] rounded-[22px] p-6 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] relative overflow-hidden">
+            <div className="vision-glass rounded-[24px] p-6 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] relative overflow-hidden">
               <div className="pointer-events-none absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/15 to-transparent" />
               
               <h2 className="text-base font-bold text-white mb-5 flex items-center gap-2">

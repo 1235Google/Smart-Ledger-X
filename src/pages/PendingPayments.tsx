@@ -131,7 +131,7 @@ function PaymentCard({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.25, delay: 0.03 * idx, ease: [0.16, 1, 0.3, 1] }}
-      className="group bg-[#171717] border border-white/[0.08] hover:border-white/[0.14] p-6 rounded-[22px] flex flex-col gap-5 relative overflow-hidden transition-all duration-200 ease-out shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)]"
+      className="group vision-glass p-6 rounded-[22px] flex flex-col gap-5 relative overflow-hidden transition-all duration-200 ease-out shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)]"
     >
       {/* Header */}
       <div className="flex justify-between items-start gap-4">
@@ -178,7 +178,7 @@ function PaymentCard({
       {!isPaid && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
           {/* Insight */}
-          <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex gap-3 relative overflow-hidden group/ai">
+          <div className="vision-glass-subtle rounded-2xl p-4 flex gap-3 relative overflow-hidden group/ai">
             <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
             <div className="text-purple-400 mt-0.5"><Brain size={18} /></div>
             <div>
@@ -189,7 +189,7 @@ function PaymentCard({
           </div>
           
           {/* Progress */}
-          <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-center">
+          <div className="vision-glass-subtle rounded-2xl p-4 flex flex-col justify-center">
             <div className="flex justify-between items-center mb-2">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Reminder Progress</span>
               <span className="text-xs font-semibold text-white">{remindersSent} / {totalReminders} Sent</span>
@@ -213,7 +213,7 @@ function PaymentCard({
 
       {/* Reminder Message Card */}
       {!isPaid && (
-        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 relative group/cardmsg">
+        <div className="vision-glass-subtle rounded-2xl p-4 relative group/cardmsg">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
               🔔 REMINDER MESSAGE

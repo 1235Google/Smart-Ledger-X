@@ -317,7 +317,7 @@ export default function Gullak() {
       loadingMessage="Loading Gullak savings..."
       skeletonType="cards"
     >
-      <div className="w-full space-y-8">
+      <div className="w-full space-y-8 animate-[fade-in-up_0.4s_ease-out_forwards]">
         {progress >= 100 && <Confetti width={width} height={height} recycle={false} numberOfPieces={500} gravity={0.2} />}
       
       {/* Premium Hero Section */}
@@ -821,7 +821,7 @@ export default function Gullak() {
                   <label className="text-sm font-medium text-slate-300 block mb-1.5">Added By</label>
                   <input type="text" required value={formData.personName} onChange={e => setFormData({...formData, personName: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none" placeholder="e.g. Rahul" />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium text-slate-300 block mb-1.5">Date</label>
                     <input type="date" required value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none" />

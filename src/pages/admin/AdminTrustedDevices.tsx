@@ -222,7 +222,7 @@ export default function AdminTrustedDevices() {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {revokedDevices.map(device => (
-              <div key={device.id} className="bg-[#1e1e1e] border border-white/5 rounded-2xl p-4 opacity-75">
+              <div key={device.id} className="vision-glass-subtle rounded-[20px] p-4 opacity-75">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-xl bg-[#282a2d] text-slate-500 flex items-center justify-center">
                     {getDeviceIcon(device.deviceType)}

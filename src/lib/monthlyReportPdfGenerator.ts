@@ -12,251 +12,190 @@ export interface MonthlyReportData {
   aiSummary?: string;
 }
 
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
 /**
- * Generates an executive-grade VisionOS styled PDF report for SmartLedger
+ * Generates and downloads a clean, structured PDF report
  */
-export function generateMonthlyPdf(data: MonthlyReportData): void {
-  const { month, recipientEmail, transactions, customers, currentBalance, aiSummary } = data;
+export async function generateMonthlyPdf(data: MonthlyReportData): Promise<void> {
+  const { month, recipientEmail, transactions } = data;
+  
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
+  
+  // Fetch fonts for proper Unicode rendering (especially ₹)
+  try {
+    const [regRes, boldRes] = await Promise.all([
+      fetch('https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Regular.ttf'),
+      fetch('https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Medium.ttf')
+    ]);
+    
+    const regBuf = await regRes.arrayBuffer();
+    const boldBuf = await boldRes.arrayBuffer();
+    
+    doc.addFileToVFS('Roboto-Regular.ttf', arrayBufferToBase64(regBuf));
+    doc.addFont('Roboto-Regular.ttf', 'Roboto', 'normal');
+    
+    doc.addFileToVFS('Roboto-Medium.ttf', arrayBufferToBase64(boldBuf));
+    doc.addFont('Roboto-Medium.ttf', 'Roboto', 'bold');
+    
+    doc.setFont('Roboto', 'normal');
+  } catch (err) {
+    console.warn("Failed to load Roboto font, falling back to default.", err);
+  }
 
-  // Financial calculations
+  // Formatting variables
+  const generatedDateStr = format(new Date(), 'dd MMMM yyyy, hh:mm a');
+  const accountName = recipientEmail || 'Primary Account';
+
+  // Calculate totals
   let totalReceived = 0;
   let totalSent = 0;
   let totalPending = 0;
-  let receivedCount = 0;
-  let sentCount = 0;
-  let pendingCount = 0;
-
+  
   transactions.forEach(tx => {
     const amt = Number(tx.amount) || 0;
     if (tx.type === 'received') {
       totalReceived += amt;
-      receivedCount++;
     } else if (tx.type === 'sent') {
       totalSent += amt;
-      sentCount++;
     } else if (tx.type === 'pending' && (tx.status === 'pending' || tx.status === 'overdue' || (tx.status !== 'completed' && tx.status !== 'cancelled' && tx.status !== 'closed'))) {
       totalPending += amt;
-      pendingCount++;
     }
   });
-
-  const netCashflow = totalReceived - totalSent;
-  const generatedDateStr = format(new Date(), 'dd MMMM yyyy, hh:mm a');
-
-  // --- HEADER SECTION ---
-  // Dark Slate Header Banner
-  doc.setFillColor(15, 23, 42); // slate-900
-  doc.rect(0, 0, pageWidth, 42, 'F');
-
-  // Cyan / Blue Accent Stripe
-  doc.setFillColor(59, 130, 246); // blue-500
-  doc.rect(0, 42, pageWidth, 2, 'F');
-
-  // Logo & Brand Name
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(22);
-  doc.setTextColor(255, 255, 255);
-  doc.text('SmartLedger', 14, 18);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(148, 163, 184); // slate-400
-  doc.text('VisionOS Financial Suite • Executive Report', 14, 25);
-
-  // Month & Period Pill on right
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.setTextColor(56, 189, 248); // sky-400
-  doc.text(month.toUpperCase(), pageWidth - 14, 18, { align: 'right' });
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(203, 213, 225);
-  doc.text(`Generated: ${generatedDateStr}`, pageWidth - 14, 25, { align: 'right' });
-  if (recipientEmail) {
-    doc.text(`Recipient: ${recipientEmail}`, pageWidth - 14, 32, { align: 'right' });
-  }
-
-  // --- EXECUTIVE SUMMARY METRICS CARDS (4-Column Layout) ---
-  const cardY = 50;
-  const cardH = 24;
-  const gap = 4;
-  const margin = 14;
-  const totalAvailableWidth = pageWidth - (margin * 2);
-  const cardW = (totalAvailableWidth - (gap * 3)) / 4;
-
-  const metrics = [
-    {
-      title: 'TOTAL INFLOWS',
-      value: `₹${totalReceived.toLocaleString('en-IN')}`,
-      sub: `${receivedCount} Received`,
-      fill: [240, 253, 244], // emerald-50
-      border: [187, 247, 208], // emerald-200
-      text: [22, 101, 52] // emerald-800
-    },
-    {
-      title: 'TOTAL OUTFLOWS',
-      value: `₹${totalSent.toLocaleString('en-IN')}`,
-      sub: `${sentCount} Sent`,
-      fill: [254, 242, 242], // red-50
-      border: [254, 202, 202], // red-200
-      text: [153, 27, 27] // red-800
-    },
-    {
-      title: 'NET CASHFLOW',
-      value: `₹${netCashflow.toLocaleString('en-IN')}`,
-      sub: netCashflow >= 0 ? 'Surplus' : 'Deficit',
-      fill: [239, 246, 255], // blue-50
-      border: [191, 219, 254], // blue-200
-      text: [30, 64, 175] // blue-800
-    },
-    {
-      title: 'OPEN DUES',
-      value: `₹${totalPending.toLocaleString('en-IN')}`,
-      sub: `${pendingCount} Receivables`,
-      fill: [254, 252, 232], // amber-50
-      border: [254, 240, 138], // amber-200
-      text: [133, 77, 14] // amber-800
-    }
-  ];
-
-  metrics.forEach((m, idx) => {
-    const x = margin + idx * (cardW + gap);
-    doc.setFillColor(m.fill[0], m.fill[1], m.fill[2]);
-    doc.setDrawColor(m.border[0], m.border[1], m.border[2]);
-    doc.roundedRect(x, cardY, cardW, cardH, 2, 2, 'FD');
-
-    // Title
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(100, 116, 139);
-    doc.text(m.title, x + 4, cardY + 6);
-
-    // Value
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.setTextColor(m.text[0], m.text[1], m.text[2]);
-    doc.text(m.value, x + 4, cardY + 14);
-
-    // Sub
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(100, 116, 139);
-    doc.text(m.sub, x + 4, cardY + 20);
-  });
-
-  // --- AI EXECUTIVE SUMMARY CALLOUT BOX ---
-  let startTableY = 82;
-  if (aiSummary) {
-    const boxY = 80;
-    doc.setFillColor(248, 250, 252); // slate-50
-    doc.setDrawColor(203, 213, 225); // slate-300
-    doc.roundedRect(14, boxY, pageWidth - 28, 26, 2, 2, 'FD');
-
-    // Left blue accent bar
-    doc.setFillColor(37, 99, 235); // blue-600
-    doc.rect(14, boxY, 3, 26, 'F');
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
-    doc.setTextColor(30, 41, 59);
-    doc.text('EXECUTIVE FINANCIAL INTELLIGENCE', 21, boxY + 6);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(71, 85, 105);
-    const splitSummary = doc.splitTextToSize(aiSummary, pageWidth - 42);
-    doc.text(splitSummary.slice(0, 3), 21, boxY + 12);
-
-    startTableY = 112;
-  }
-
-  // --- TRANSACTIONS BREAKDOWN TABLE ---
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(15, 23, 42);
-  doc.text('Monthly Transactions Ledger', 14, startTableY - 3);
-
-  const tableHead = [['#', 'Date', 'Type', 'Counterparty / Customer', 'Purpose / Category', 'Method', 'Amount (INR)', 'Status']];
   
+  const netCashflow = totalReceived - totalSent;
+
+  // --- HEADER ---
+  doc.setFontSize(16);
+  doc.setFont('Roboto', 'bold');
+  doc.text('SMARTLEDGER', 14, 20);
+  
+  doc.setFontSize(14);
+  doc.setFont('Roboto', 'normal');
+  doc.text('Financial Report', 14, 28);
+  
+  doc.setFontSize(10);
+  doc.text(`Report Period: ${month}`, 14, 40);
+  doc.text(`Generated On: ${generatedDateStr}`, 14, 46);
+  doc.text(`Account: ${accountName}`, 14, 52);
+  
+  doc.setLineWidth(0.5);
+  doc.line(14, 58, pageWidth - 14, 58);
+  
+  // --- SUMMARY ---
+  doc.setFontSize(12);
+  doc.setFont('Roboto', 'bold');
+  doc.text('SUMMARY', 14, 68);
+  
+  doc.setFontSize(10);
+  doc.setFont('Roboto', 'normal');
+  doc.text(`Total Money In: ₹${totalReceived.toLocaleString('en-IN', {minimumFractionDigits: 2})}`, 14, 76);
+  doc.text(`Total Money Out: ₹${totalSent.toLocaleString('en-IN', {minimumFractionDigits: 2})}`, 14, 82);
+  doc.text(`Net Cash Flow: ₹${netCashflow.toLocaleString('en-IN', {minimumFractionDigits: 2})}`, 14, 88);
+  doc.text(`Amount Due: ₹${totalPending.toLocaleString('en-IN', {minimumFractionDigits: 2})}`, 14, 94);
+  
+  doc.line(14, 100, pageWidth - 14, 100);
+  
+  // --- TRANSACTIONS ---
+  doc.setFontSize(12);
+  doc.setFont('Roboto', 'bold');
+  doc.text('TRANSACTIONS', 14, 110);
+  
+  const tableHead = [['No.', 'Date', 'Description', 'Type', 'Amount', 'Status']];
   const tableBody = transactions.map((t, index) => {
     const amt = Number(t.amount) || 0;
-    const formattedAmt = `₹${amt.toLocaleString('en-IN')}`;
+    const formattedAmt = `₹${amt.toLocaleString('en-IN', {minimumFractionDigits: 2})}`;
+    
     let dateStr = t.date || t.createdAt || 'N/A';
     try {
       if (dateStr.includes('T')) {
         dateStr = format(parseISO(dateStr), 'dd MMM yyyy');
       }
     } catch (e) {}
-
+    
+    let typeDisplay = (t.type || 'N/A').toUpperCase();
+    if (t.type === 'received') typeDisplay = 'Money In';
+    if (t.type === 'sent') typeDisplay = 'Money Out';
+    
+    const description = t.purpose || t.category || t.note || t.personName || t.customerName || 'Ledger Entry';
+    const status = (t.status || 'COMPLETED');
+    
     return [
-      index + 1,
+      (index + 1).toString(),
       dateStr,
-      (t.type || 'N/A').toUpperCase(),
-      t.personName || t.customerName || 'General Account',
-      t.purpose || t.category || t.note || 'Ledger Entry',
-      (t.method || t.paymentMethod || 'UPI').toUpperCase(),
+      description,
+      typeDisplay,
       formattedAmt,
-      (t.status || 'COMPLETED').toUpperCase()
+      status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()
     ];
   });
-
+  
   if (tableBody.length === 0) {
-    tableBody.push(['-', '-', 'NO DATA', 'No transactions recorded for this period', '-', '-', '₹0', '-']);
+    tableBody.push(['-', '-', 'No transactions were recorded for this report period.', '-', '-', '-']);
   }
-
+  
   autoTable(doc, {
     head: tableHead,
     body: tableBody,
-    startY: startTableY,
+    startY: 116,
     theme: 'grid',
     styles: {
-      fontSize: 8,
-      cellPadding: 2.5,
-      textColor: [30, 41, 59],
-      lineColor: [226, 232, 240],
-      lineWidth: 0.2
+      font: 'Roboto',
+      fontSize: 9,
+      cellPadding: 3,
+      textColor: [0, 0, 0],
+      lineColor: [200, 200, 200],
+      lineWidth: 0.1
     },
     headStyles: {
-      fillColor: [15, 23, 42],
-      textColor: [255, 255, 255],
-      fontStyle: 'bold',
-      fontSize: 8
-    },
-    alternateRowStyles: {
-      fillColor: [248, 250, 252]
+      fillColor: [240, 240, 240],
+      textColor: [0, 0, 0],
+      fontStyle: 'bold'
     },
     columnStyles: {
-      0: { cellWidth: 8, halign: 'center' },
-      1: { cellWidth: 24 },
-      2: { cellWidth: 20, fontStyle: 'bold' },
-      3: { cellWidth: 42 },
-      4: { cellWidth: 38 },
-      5: { cellWidth: 18 },
-      6: { cellWidth: 24, halign: 'right', fontStyle: 'bold' },
-      7: { cellWidth: 20, halign: 'center' }
-    },
-    didDrawPage: (data) => {
-      // Footer
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(148, 163, 184);
-      doc.text(
-        `SmartLedger VisionOS Suite • Page ${data.pageNumber} • Confidential Business Report`,
-        14,
-        pageHeight - 8
-      );
-      doc.text(
-        `Verified Current Balance: ₹${currentBalance.toLocaleString('en-IN')}`,
-        pageWidth - 14,
-        pageHeight - 8,
-        { align: 'right' }
-      );
+      0: { cellWidth: 12 },
+      1: { cellWidth: 26 },
+      2: { cellWidth: 'auto' },
+      3: { cellWidth: 24 },
+      4: { cellWidth: 28, halign: 'right' },
+      5: { cellWidth: 22 }
     }
   });
+
+  // --- WATERMARK & FOOTER (Every Page) ---
+  const pageCount = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    
+    // Draw Watermark
+    doc.setFont('Roboto', 'bold');
+    doc.setFontSize(60);
+    doc.setTextColor(200, 200, 200);
+    
+    doc.saveGraphicsState();
+    doc.setGState(new (doc as any).GState({opacity: 0.1}));
+    doc.text('SmartLedger', pageWidth / 2, pageHeight / 2, {
+      align: 'center',
+      angle: 45
+    });
+    doc.restoreGraphicsState();
+    
+    // Footer
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.text(`SmartLedger Financial Report • Page ${i} of ${pageCount}`, 14, pageHeight - 10);
+  }
 
   const sanitizedMonth = month.replace(/[^a-zA-Z0-9_-]/g, '_');
   doc.save(`SmartLedger_Report_${sanitizedMonth}.pdf`);
@@ -271,14 +210,13 @@ export function generateMonthlyCsv(data: MonthlyReportData): void {
   let totalReceived = 0;
   let totalSent = 0;
   let totalPending = 0;
-
+  
   transactions.forEach(tx => {
     const amt = Number(tx.amount) || 0;
     if (tx.type === 'received') totalReceived += amt;
     else if (tx.type === 'sent') totalSent += amt;
     else if (tx.type === 'pending' && (tx.status === 'pending' || tx.status === 'overdue' || (tx.status !== 'completed' && tx.status !== 'cancelled' && tx.status !== 'closed'))) totalPending += amt;
   });
-
   const netCashflow = totalReceived - totalSent;
 
   let csv = 'SmartLedger Monthly Business Report\n';

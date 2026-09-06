@@ -127,7 +127,7 @@ export default function AdminRecycleBin() {
       </div>
 
       {/* Tabs and Search */}
-      <div className="bg-[#1e1e1e] border border-white/5 rounded-2xl p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+      <div className="vision-glass-subtle rounded-[20px] p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
         <div className="flex items-center bg-[#131314] rounded-xl p-1 overflow-x-auto no-scrollbar">
           {(['all', 'transaction', 'pending', 'gullak'] as const).map(tab => (
             <button
@@ -167,7 +167,7 @@ export default function AdminRecycleBin() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="bg-[#1e1e1e] border border-white/5 rounded-2xl p-12 flex flex-col items-center justify-center text-center"
+              className="vision-glass-subtle rounded-[20px] p-12 flex flex-col items-center justify-center text-center"
             >
               <div className="w-16 h-16 rounded-full bg-[#282a2d] flex items-center justify-center mb-4">
                 <Trash2 className="text-slate-400" size={24} />
@@ -183,7 +183,7 @@ export default function AdminRecycleBin() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 key={item.id}
-                className="bg-[#1e1e1e] border border-white/5 hover:border-white/10 rounded-2xl p-4 transition-all"
+                className="vision-glass-subtle hover:border-white/20 rounded-[20px] p-4 transition-all"
               >
                 <div className="flex flex-col md:flex-row justify-between gap-4 md:items-center">
                   <div className="flex items-start gap-4">
@@ -251,7 +251,7 @@ export default function AdminRecycleBin() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }} 
               animate={{ opacity: 1, scale: 1, y: 0 }} 
               exit={{ opacity: 0, scale: 0.95, y: 20 }} 
-              className="relative w-full max-w-md bg-[#1e1e1e] border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl overflow-hidden"
+              className="relative w-full max-w-md vision-glass rounded-[24px] p-6 md:p-8 shadow-2xl overflow-hidden"
             >
               <div className={`absolute top-0 left-0 w-full h-2 ${confirmModal.type === 'restore' ? 'bg-[#0b57d0]' : 'bg-red-500'}`} />
               

@@ -73,19 +73,19 @@ export default function About() {
       <div className="bg-neutral-900/40 border border-white/10 rounded-3xl p-6 sm:p-8 space-y-4">
         <h2 className="text-lg font-bold text-white">System Architecture & Tech Stack</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
+          <div className="p-4 rounded-2xl vision-glass-subtle">
             <span className="text-xs text-slate-400 block">Frontend</span>
             <span className="text-sm font-semibold text-white mt-1 block">React 18 + Vite</span>
           </div>
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
+          <div className="p-4 rounded-2xl vision-glass-subtle">
             <span className="text-xs text-slate-400 block">Styling</span>
             <span className="text-sm font-semibold text-white mt-1 block">Tailwind CSS</span>
           </div>
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
+          <div className="p-4 rounded-2xl vision-glass-subtle">
             <span className="text-xs text-slate-400 block">Database</span>
             <span className="text-sm font-semibold text-white mt-1 block">Firebase Firestore</span>
           </div>
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
+          <div className="p-4 rounded-2xl vision-glass-subtle">
             <span className="text-xs text-slate-400 block">Authentication</span>
             <span className="text-sm font-semibold text-white mt-1 block">Firebase Auth</span>
           </div>

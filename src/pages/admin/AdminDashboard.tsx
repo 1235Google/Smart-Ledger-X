@@ -394,7 +394,7 @@ export default function AdminDashboard() {
             </ResponsiveContainer>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
             {methodData.map((m, idx) => (
               <div key={`channel-${m.name}-${idx}`} className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: m.color }} />

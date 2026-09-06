@@ -113,7 +113,7 @@ export default function ExportModal({
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-[#121212] border border-white/10 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative my-8"
+          className="vision-glass rounded-[24px] p-6 sm:p-8 max-w-lg w-full shadow-2xl relative my-8"
         >
           {/* Header */}
           <div className="flex items-center justify-between pb-4 border-b border-white/10">

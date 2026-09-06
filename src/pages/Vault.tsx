@@ -370,7 +370,7 @@ export default function VaultPage() {
         </div>
 
         {/* Bottom Cards */}
-        <div className="absolute bottom-6 left-6 right-6 z-10 grid grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="absolute bottom-6 left-6 right-6 z-10 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
            {/* Income Card */}
            <div className="bg-[#0c0d12]/90 backdrop-blur-xl border border-white/5 rounded-2xl p-5 flex flex-col justify-between overflow-hidden relative shadow-lg">
               <div className="flex items-center gap-2 mb-3 relative z-10">
@@ -506,7 +506,7 @@ export default function VaultPage() {
                   </div>
 
                   {/* Savings Goal Progress */}
-                  <div className="bg-white/5 border border-white/5 rounded-2xl p-6 flex flex-col justify-between">
+                  <div className="vision-glass-subtle rounded-2xl p-6 flex flex-col justify-between">
                     <div>
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-white font-medium flex items-center gap-2">
@@ -569,7 +569,7 @@ export default function VaultPage() {
                   </h3>
                   <div className="space-y-3">
                     {recentTransactions.map(t => (
-                      <div key={t.id} className="bg-white/5 border border-white/5 rounded-xl p-4 flex items-center justify-between hover:bg-white/10 transition-colors">
+                      <div key={t.id} className="vision-glass-subtle rounded-xl p-4 flex items-center justify-between hover:bg-white/10 transition-colors">
                         <div className="flex items-center gap-4">
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                             t.type === 'received' ? 'bg-emerald-500/10 text-emerald-400' :

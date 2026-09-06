@@ -174,9 +174,23 @@ function AdminLayoutInner() {
                 exit={{ opacity: 0, x: -10 }}
                 className="flex flex-col min-w-0"
               >
-                <span className="font-extrabold text-base tracking-tight leading-none truncate">
-                  Smart Ledger
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-extrabold text-base tracking-tight leading-none truncate">
+                    Smart Ledger
+                  </span>
+                  <motion.span 
+                    initial={{ backgroundPosition: '0% 50%' }}
+                    animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                    className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full text-transparent bg-clip-text border border-white/20 shadow-[0_0_10px_rgba(255,255,255,0.2)]"
+                    style={{
+                      backgroundImage: 'linear-gradient(90deg, #ff453a, #ff9f0a, #ffd60a, #30d158, #64d2ff, #0a84ff, #bf5af2, #ff375f)',
+                      backgroundSize: '200% 200%'
+                    }}
+                  >
+                    X
+                  </motion.span>
+                </div>
                 <span className={cn('text-[11px] font-semibold tracking-wider uppercase mt-1', isDark ? 'text-[#a8c7fa]' : 'text-[#0b57d0]')}>
                   Admin Console
                 </span>
@@ -562,10 +576,10 @@ function AdminLayoutInner() {
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={location.pathname}
-              initial={{ opacity: 0, y: 15, filter: 'blur(8px)' }}
-              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, y: -10, filter: 'blur(4px)' }}
-              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+              initial={{ opacity: 0, y: 20, scale: 0.97, filter: 'blur(10px)' }}
+              animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, y: -20, scale: 0.97, filter: 'blur(10px)' }}
+              transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
               className="w-full relative"
             >
               <Outlet />

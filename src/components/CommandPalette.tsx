@@ -200,6 +200,18 @@ export default function CommandPalette() {
       action: () => navigate('/security')
     },
     {
+      id: 'nav-devices',
+      category: 'navigation',
+      title: 'Trusted Devices & Security',
+      subtitle: 'Manage active sessions, revoke access, track logins',
+      badge: 'Security',
+      icon: ShieldCheck,
+      iconBg: 'bg-[#ff375f]/15',
+      iconColor: 'text-[#ff375f]',
+      shortcut: ['G', 'S'],
+      action: () => navigate('/admin/trusted-devices')
+    },
+    {
       id: 'nav-settings',
       category: 'navigation',
       title: 'System Settings',
@@ -479,6 +491,100 @@ export default function CommandPalette() {
       setSelectedIndex(0);
     }
   }, [isOpen]);
+
+  const keySequenceRef = useRef<string[]>([]);
+  const keySequenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    const handleGlobalShortcuts = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input or textarea
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (
+        activeEl?.tagName === 'INPUT' ||
+        activeEl?.tagName === 'TEXTAREA' ||
+        activeEl?.isContentEditable
+      ) {
+        return;
+      }
+
+      // Also ignore if the command palette itself is open (to avoid double-firing or conflicts)
+      if (isOpen) {
+        return;
+      }
+
+      const key = e.key.toUpperCase();
+      const isModifier = e.ctrlKey || e.metaKey;
+
+      if (isModifier) {
+        // Find a matching Ctrl shortcut
+        const matchedItem = allItems.find(item => {
+          if (!item.shortcut) return false;
+          return item.shortcut.length === 2 && item.shortcut[0] === 'Ctrl' && item.shortcut[1].toUpperCase() === key;
+        });
+
+        if (matchedItem) {
+          e.preventDefault();
+          matchedItem.action();
+          return; // Stop processing
+        }
+      } else {
+        // Ignore standalone modifier key presses and basic navigation keys
+        if (['CONTROL', 'META', 'ALT', 'SHIFT', 'ESCAPE', 'ENTER', 'TAB', 'ARROWUP', 'ARROWDOWN', 'ARROWLEFT', 'ARROWRIGHT'].includes(key)) return;
+
+        // Sequence shortcuts
+        keySequenceRef.current.push(key);
+
+        if (keySequenceTimerRef.current) {
+          clearTimeout(keySequenceTimerRef.current);
+        }
+
+        const currentSeq = keySequenceRef.current;
+
+        const matchedItem = allItems.find(item => {
+          if (!item.shortcut) return false;
+          if (item.shortcut[0] === 'Ctrl' || item.shortcut[0] === 'Cmd' || item.shortcut[0] === 'Alt') return false;
+          
+          if (item.shortcut.length === currentSeq.length) {
+            return item.shortcut.every((k, i) => k.toUpperCase() === currentSeq[i]);
+          }
+          return false;
+        });
+
+        if (matchedItem) {
+          e.preventDefault();
+          matchedItem.action();
+          keySequenceRef.current = []; // Reset after matching
+        } else {
+          // Check if it's a partial match to keep waiting
+          const isPartialMatch = allItems.some(item => {
+             if (!item.shortcut) return false;
+             if (item.shortcut[0] === 'Ctrl' || item.shortcut[0] === 'Cmd' || item.shortcut[0] === 'Alt') return false;
+             
+             if (item.shortcut.length > currentSeq.length) {
+               return currentSeq.every((k, i) => k === item.shortcut![i].toUpperCase());
+             }
+             return false;
+          });
+
+          if (!isPartialMatch) {
+             // Reset immediately if there's no possible match
+             keySequenceRef.current = [];
+          } else {
+             // Keep waiting for next key for 750ms
+             keySequenceTimerRef.current = setTimeout(() => {
+               keySequenceRef.current = [];
+             }, 750);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalShortcuts);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalShortcuts);
+      if (keySequenceTimerRef.current) clearTimeout(keySequenceTimerRef.current);
+    };
+  }, [allItems, isOpen]);
 
   useEffect(() => {
     setSelectedIndex(0);

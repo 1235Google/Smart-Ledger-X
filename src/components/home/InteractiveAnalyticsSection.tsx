@@ -182,6 +182,10 @@ export default function InteractiveAnalyticsSection() {
                     <stop offset="5%" stopColor="#ff453a" stopOpacity={0.4} />
                     <stop offset="95%" stopColor="#ff453a" stopOpacity={0} />
                   </linearGradient>
+                  <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur stdDeviation="4" result="blur" />
+                    <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                  </filter>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
                 <XAxis 
@@ -228,6 +232,7 @@ export default function InteractiveAnalyticsSection() {
                   strokeWidth={2.5}
                   fillOpacity={1} 
                   fill="url(#incomeAreaGrad)" 
+                  style={{ filter: "drop-shadow(0 0 8px rgba(48,209,88,0.5))" }}
                 />
                 <Area 
                   type="monotone" 
@@ -237,6 +242,7 @@ export default function InteractiveAnalyticsSection() {
                   strokeWidth={2.5}
                   fillOpacity={1} 
                   fill="url(#expenseAreaGrad)" 
+                  style={{ filter: "drop-shadow(0 0 8px rgba(255,69,58,0.5))" }}
                 />
               </AreaChart>
             ) : (

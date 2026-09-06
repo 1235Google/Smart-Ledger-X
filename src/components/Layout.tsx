@@ -305,9 +305,18 @@ export default function Layout() {
                   <span className="text-sm font-bold tracking-tight text-white whitespace-nowrap">
                     Smart Ledger
                   </span>
-                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-blue-500/20 text-[#64d2ff] border border-blue-500/30 shadow-sm">
-                    PRO
-                  </span>
+                  <motion.span 
+                    initial={{ backgroundPosition: '0% 50%' }}
+                    animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                    className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full text-transparent bg-clip-text border border-white/20 shadow-[0_0_10px_rgba(255,255,255,0.2)]"
+                    style={{
+                      backgroundImage: 'linear-gradient(90deg, #ff453a, #ff9f0a, #ffd60a, #30d158, #64d2ff, #0a84ff, #bf5af2, #ff375f)',
+                      backgroundSize: '200% 200%'
+                    }}
+                  >
+                    X
+                  </motion.span>
                 </div>
                 <span className="text-[11px] text-slate-400 font-medium tracking-tight">Personal & Business</span>
               </div>
@@ -610,10 +619,10 @@ export default function Layout() {
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={location.pathname}
-                initial={{ opacity: 0, y: 15, filter: 'blur(8px)' }}
-                animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                exit={{ opacity: 0, y: -10, filter: 'blur(4px)' }}
-                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                initial={{ opacity: 0, y: 20, scale: 0.97, filter: 'blur(10px)' }}
+                animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                exit={{ opacity: 0, y: -20, scale: 0.97, filter: 'blur(10px)' }}
+                transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
                 className="w-full relative"
               >
                 <Outlet />

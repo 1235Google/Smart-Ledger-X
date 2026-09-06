@@ -79,8 +79,8 @@ export default function PremiumProfileCard() {
         animate={{
           rotateX: rotateX,
           rotateY: isFlipped ? rotateY + 180 : rotateY,
-          z: isHovered ? 30 : 0,
-          scale: isHovered ? 1.02 : 1,
+          z: isHovered ? 40 : 0,
+          scale: isHovered ? 1.05 : 1,
         }}
         transition={{
           rotateX: { type: 'spring', stiffness: 350, damping: 30 },

@@ -1,3 +1,4 @@
+import AnimatedDeviceGraphic from "../components/AnimatedDeviceGraphic";
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useStore } from '../context/StoreContext';
@@ -20,7 +21,8 @@ import {
   User,
   Monitor,
   Wifi,
-  WifiOff
+  WifiOff,
+  MapPin
 } from 'lucide-react';
 import { 
   subscribeToLoginHistory, 
@@ -404,23 +406,27 @@ export default function SecurityCenter() {
                      device.isCurrent ? "bg-blue-600/10 border-blue-500/30" : "bg-black/20 border-white/5"
                    )}>
                      <div className="flex items-center gap-4">
-                        <div className="p-3 bg-white/5 rounded-xl text-neutral-300">
-                          {device.deviceType === 'mobile' ? <Smartphone /> : <Laptop />}
+                        <div className="shrink-0 flex items-center justify-center w-16 h-16">
+                          <AnimatedDeviceGraphic type={device.deviceType} isCurrent={device.isCurrent} />
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <h4 className="text-white font-bold">{device.deviceName || device.browser || 'Unknown Device'}</h4>
+                            <h4 className="text-white font-bold">{device.browser} on {device.os}</h4>
                             {device.isCurrent && (
                               <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase">
                                 Current
                               </span>
                             )}
                           </div>
-                          <div className="text-xs text-neutral-400 mt-1">
-                            Signed in: {format(new Date(device.createdAt), 'MMM d, yyyy h:mm a')}
-                          </div>
-                          <div className="text-xs text-neutral-400">
-                            Last active: {format(new Date(device.lastActive), 'MMM d, yyyy h:mm a')}
+                          {device.location && device.location !== 'Unknown' && (
+                            <div className="text-[13px] text-indigo-300 font-medium mt-1 flex items-center gap-1.5">
+                              <MapPin size={14} className="text-indigo-400" />
+                              {device.location}
+                            </div>
+                          )}
+                          <div className="text-xs text-neutral-400 mt-1.5 flex flex-col gap-0.5">
+                            <span>Signed in: {format(new Date(device.createdAt), 'MMM d, yyyy h:mm a')}</span>
+                            <span>Last active: {format(new Date(device.lastActive), 'MMM d, yyyy h:mm a')}</span>
                           </div>
                         </div>
                      </div>
@@ -456,22 +462,29 @@ export default function SecurityCenter() {
                        <th className="px-4 py-3 rounded-l-xl font-medium">Date & Time</th>
                        <th className="px-4 py-3 font-medium">Status</th>
                        <th className="px-4 py-3 font-medium">Method</th>
-                       <th className="px-4 py-3 rounded-r-xl font-medium">Browser / Device</th>
+                       <th className="px-4 py-3 rounded-r-xl font-medium">Location & Device</th>
                      </tr>
                    </thead>
                    <tbody className="divide-y divide-white/5">
                      {loginLogs.map((log) => (
                        <tr key={log.id} className="hover:bg-white/5">
-                         <td className="px-4 py-3 whitespace-nowrap">{format(new Date(log.timestamp), 'MMM d, yyyy h:mm a')}</td>
-                         <td className="px-4 py-3">
+                         <td className="px-4 py-3 whitespace-nowrap text-xs sm:text-sm">{format(new Date(log.timestamp), 'MMM d, yyyy h:mm a')}</td>
+                         <td className="px-4 py-3 text-xs sm:text-sm">
                            {log.status === 'Success' ? (
                              <span className="text-emerald-400 font-medium">Success</span>
                            ) : (
                              <span className="text-rose-400 font-medium">Failed</span>
                            )}
                          </td>
-                         <td className="px-4 py-3">{log.method || 'Unknown'}</td>
-                         <td className="px-4 py-3">{log.browser} on {log.os}</td>
+                         <td className="px-4 py-3 text-xs sm:text-sm">{log.method || 'Unknown'}</td>
+                         <td className="px-4 py-3">
+                           <div className="font-medium text-white text-xs sm:text-sm">{log.browser} on {log.os}</div>
+                           {log.location && log.location !== 'Unknown' && (
+                             <div className="text-xs text-indigo-300/80 mt-0.5 flex items-center gap-1">
+                               <MapPin size={10} /> {log.location}
+                             </div>
+                           )}
+                         </td>
                        </tr>
                      ))}
                    </tbody>

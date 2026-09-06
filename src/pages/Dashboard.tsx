@@ -167,15 +167,15 @@ export default function Dashboard() {
                   <div className="text-[11px] font-bold text-[#0a84ff] uppercase tracking-wider flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#0a84ff]" /> 01 • Core Financial Position
                   </div>
-                  <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                  <h1 className="text-2xl sm:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-[#0a84ff] tracking-tight drop-shadow-[0_0_15px_rgba(10,132,255,0.3)]">
                     Current Balance & Liquidity
                   </h1>
                 </div>
                 <motion.button 
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
+                  whileHover={{ scale: 1.05, boxShadow: "0 0 20px rgba(10, 132, 255, 0.4)" }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={() => navigate('/balance')}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.1] text-[#0a84ff] hover:text-white flex items-center gap-1 transition-all border border-white/[0.08]"
+                  className="text-xs font-semibold px-4 py-2 rounded-full bg-[#0a84ff]/10 hover:bg-[#0a84ff]/20 text-[#0a84ff] hover:text-white flex items-center gap-1.5 transition-all border border-[#0a84ff]/30"
                 >
                   Manage Vaults <ChevronRight size={14} />
                 </motion.button>
@@ -183,28 +183,28 @@ export default function Dashboard() {
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Primary Apple Titanium Card */}
-                <div onClick={() => navigate('/balance')} className="lg:col-span-2 cursor-pointer">
+                <motion.div whileHover={{ scale: 1.01, y: -2 }} onClick={() => navigate('/balance')} className="lg:col-span-2 cursor-pointer transition-all duration-300">
                   <BalanceCard
                     currentBalance={currentBalance}
                     startingBalance={startingBalance}
                     totalReceived={totalReceived}
                   />
-                </div>
+                </motion.div>
 
                 {/* Secondary Liquidity Caps in VisionOS Liquid Glass */}
                 <div className="lg:col-span-1 flex flex-col gap-4 justify-between">
                   {/* Total Received Capsule */}
                   <motion.div 
-                    whileHover={{ y: -3, scale: 1.01 }}
+                    whileHover={{ y: -5, scale: 1.02, boxShadow: "0 10px 30px -10px rgba(48, 209, 88, 0.3)" }}
                     whileTap={{ scale: 0.985 }}
                     onClick={() => navigate('/received')}
-                    className="flex-1 vision-glass hover:border-[#30d158]/40 rounded-[26px] p-6 cursor-pointer transition-all duration-300 relative overflow-hidden group flex flex-col justify-between"
+                    className="flex-1 vision-glass hover:border-[#30d158]/50 rounded-[26px] p-6 cursor-pointer transition-all duration-300 relative overflow-hidden group flex flex-col justify-between"
                   >
                     {/* Top Specular Line */}
                     <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
                     
                     {/* Ambient Glow */}
-                    <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#30d158]/10 rounded-full blur-2xl pointer-events-none group-hover:bg-[#30d158]/20 transition-all duration-500" />
+                    <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#30d158]/10 rounded-full blur-2xl pointer-events-none group-hover:bg-[#30d158]/30 transition-all duration-500" />
 
                     <div className="flex items-center justify-between mb-3 relative z-10">
                       <div className="flex items-center gap-2 text-xs font-bold text-[#30d158] uppercase tracking-wider">
@@ -215,28 +215,28 @@ export default function Dashboard() {
                       </span>
                     </div>
 
-                    <div className="text-3xl sm:text-4xl font-extrabold text-white font-tabular relative z-10 tracking-tight">
+                    <div className="text-3xl sm:text-4xl font-extrabold text-white font-tabular relative z-10 tracking-tight group-hover:text-[#30d158] transition-colors duration-300">
                       <CountUp value={totalReceived} formatter={(v) => formatCurrency(v)} />
                     </div>
 
                     <div className="text-xs text-[#86868b] mt-3 flex items-center justify-between relative z-10 pt-2 border-t border-white/[0.06]">
                       <span>Inflow Velocity</span>
-                      <span className="text-[#30d158] font-bold">100% Settled</span>
+                      <span className="text-[#30d158] font-bold drop-shadow-[0_0_8px_rgba(48,209,88,0.5)]">100% Settled</span>
                     </div>
                   </motion.div>
 
                   {/* Total Pending Capsule */}
                   <motion.div 
-                    whileHover={{ y: -3, scale: 1.01 }}
+                    whileHover={{ y: -5, scale: 1.02, boxShadow: "0 10px 30px -10px rgba(255, 214, 10, 0.3)" }}
                     whileTap={{ scale: 0.985 }}
                     onClick={() => navigate('/pending')}
-                    className="flex-1 vision-glass hover:border-[#ffd60a]/40 rounded-[26px] p-6 cursor-pointer transition-all duration-300 relative overflow-hidden group flex flex-col justify-between"
+                    className="flex-1 vision-glass hover:border-[#ffd60a]/50 rounded-[26px] p-6 cursor-pointer transition-all duration-300 relative overflow-hidden group flex flex-col justify-between"
                   >
                     {/* Top Specular Line */}
                     <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
-
+                    
                     {/* Ambient Glow */}
-                    <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#ffd60a]/10 rounded-full blur-2xl pointer-events-none group-hover:bg-[#ffd60a]/20 transition-all duration-500" />
+                    <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#ffd60a]/10 rounded-full blur-2xl pointer-events-none group-hover:bg-[#ffd60a]/30 transition-all duration-500" />
 
                     <div className="flex items-center justify-between mb-3 relative z-10">
                       <div className="flex items-center gap-2 text-xs font-bold text-[#ffd60a] uppercase tracking-wider">
@@ -247,13 +247,13 @@ export default function Dashboard() {
                       </span>
                     </div>
 
-                    <div className="text-3xl sm:text-4xl font-extrabold text-[#ffd60a] font-tabular relative z-10 tracking-tight">
+                    <div className="text-3xl sm:text-4xl font-extrabold text-[#ffd60a] font-tabular relative z-10 tracking-tight group-hover:drop-shadow-[0_0_12px_rgba(255,214,10,0.6)] transition-all duration-300">
                       <CountUp value={totalPending} formatter={(v) => formatCurrency(v)} />
                     </div>
 
                     <div className="text-xs text-[#86868b] mt-3 flex items-center justify-between relative z-10 pt-2 border-t border-white/[0.06]">
                       <span>Outstanding Receivables</span>
-                      <span className="text-xs text-[#0a84ff] font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
+                      <span className="text-xs text-[#ffd60a] font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 drop-shadow-[0_0_8px_rgba(255,214,10,0.5)]">
                         View List <ChevronRight size={12} />
                       </span>
                     </div>

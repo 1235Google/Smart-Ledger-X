@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Smartphone, Monitor, ShieldCheck, ShieldAlert, XCircle, LogOut, CheckCircle2, History, AlertCircle, Trash2 } from 'lucide-react';
+import { Smartphone, Monitor, ShieldCheck, ShieldAlert, XCircle, LogOut, CheckCircle2, History, AlertCircle, Trash2, MapPin } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { useToast } from '../../context/ToastContext';
 import { UserDevice } from '../../types';
 import { subscribeToUserDevices, updateUserDevice, removeUserDevice } from '../../lib/securityService';
+import { cn } from '../../lib/utils';
+import AnimatedDeviceGraphic from '../../components/AnimatedDeviceGraphic';
 
 export default function AdminTrustedDevices() {
   const { currentUser, adminUser } = useStore();
@@ -57,11 +59,6 @@ export default function AdminTrustedDevices() {
     } catch (e) {
       showError('Sign Out Failed', 'Failed to sign out of all devices.');
     }
-  };
-
-  const getDeviceIcon = (type?: string) => {
-    if (type === 'mobile') return <Smartphone size={24} />;
-    return <Monitor size={24} />;
   };
 
   if (loading) {
@@ -122,10 +119,8 @@ export default function AdminTrustedDevices() {
                 
                 <div className="flex items-start justify-between gap-4 mb-4">
                   <div className="flex items-start gap-4">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
-                      device.isCurrent ? 'bg-[#0b57d0]/20 text-[#a8c7fa]' : 'bg-[#282a2d] text-slate-400'
-                    }`}>
-                      {getDeviceIcon(device.deviceType)}
+                    <div className="shrink-0 flex items-center justify-center w-16 h-16">
+                      <AnimatedDeviceGraphic type={device.deviceType} isCurrent={device.isCurrent} />
                     </div>
                     <div>
                       <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -139,7 +134,13 @@ export default function AdminTrustedDevices() {
                           <CheckCircle2 size={16} className="text-emerald-400" />
                         )}
                       </h3>
-                      <p className="text-sm font-medium text-slate-400">{device.browser} on {device.os}</p>
+                      <p className="text-sm font-medium text-slate-400 mt-1">{device.browser} on {device.os}</p>
+                      {device.location && device.location !== 'Unknown' && (
+                        <div className="text-xs text-[#a8c7fa] font-medium mt-1 flex items-center gap-1.5">
+                          <MapPin size={12} className="text-[#a8c7fa]" />
+                          {device.location}
+                        </div>
+                      )}
                     </div>
                   </div>
                   
@@ -223,9 +224,9 @@ export default function AdminTrustedDevices() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {revokedDevices.map(device => (
               <div key={device.id} className="vision-glass-subtle rounded-[20px] p-4 opacity-75">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#282a2d] text-slate-500 flex items-center justify-center">
-                    {getDeviceIcon(device.deviceType)}
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="w-16 h-16 shrink-0 flex items-center justify-center">
+                    <AnimatedDeviceGraphic type={device.deviceType} isCurrent={false} />
                   </div>
                   <div>
                     <h3 className="text-white font-medium text-sm">{device.deviceName}</h3>

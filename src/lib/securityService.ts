@@ -498,6 +498,23 @@ export async function registerOrUpdateDevice(
     window.dispatchEvent(new CustomEvent('smartledger:device_updated', { detail: deviceData }));
   }
 
+  // Socket.io Real-Time Backend Hook
+  try {
+    fetch('/api/auth/login-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: deviceData.userId,
+        sessionId: deviceData.id,
+        device: deviceData.deviceType,
+        browser: deviceData.browser,
+        os: deviceData.os,
+        location: deviceData.location,
+        loginTime: Date.now()
+      })
+    }).catch(() => {});
+  } catch(e) {}
+
   // 3. Save to Firestore if user logged in
   if (userId && userId !== 'anonymous' && userId !== 'local_user' && auth.currentUser) {
     try {

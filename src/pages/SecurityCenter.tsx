@@ -2,6 +2,7 @@ import AnimatedDeviceGraphic from "../components/AnimatedDeviceGraphic";
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useStore } from '../context/StoreContext';
+import { io } from 'socket.io-client';
 import { 
   Shield, 
   Smartphone, 
@@ -92,8 +93,19 @@ export default function SecurityCenter() {
     setLoadingDevices(true);
     setLoadingLogs(true);
 
+    // Initial load and backup listener
     const unsubDevices = subscribeToUserDevices(activeUserUid, (data) => {
-      setDevices(data);
+      setDevices(prev => {
+        // Only update if we don't have these already from socket, or just merge
+        // A simple merge favoring newest data
+        const merged = [...prev];
+        data.forEach(d => {
+           if (!merged.find(m => m.id === d.id)) {
+              merged.push(d);
+           }
+        });
+        return merged.sort((a, b) => new Date(b.lastActive || 0).getTime() - new Date(a.lastActive || 0).getTime());
+      });
       setLoadingDevices(false);
     });
 
@@ -102,9 +114,44 @@ export default function SecurityCenter() {
       setLoadingLogs(false);
     });
 
+    // Real-time WebSockets (Socket.IO) for instant session push notifications (100-500ms)
+    const socket = io();
+    socket.emit('join_user_room', activeUserUid);
+
+    socket.on('new_session', (sessionData) => {
+       setDevices(prev => {
+          const exists = prev.find(d => d.id === sessionData.sessionId);
+          if (exists) return prev;
+          
+          const newDevice: UserDevice = {
+             id: sessionData.sessionId,
+             userId: sessionData.userId,
+             deviceId: sessionData.sessionId,
+             deviceName: sessionData.browser + ' on ' + sessionData.os,
+             deviceType: sessionData.device,
+             browser: sessionData.browser,
+             os: sessionData.os,
+             ip: sessionData.ip,
+             location: sessionData.location,
+             lastActive: new Date(sessionData.lastActive).toISOString(),
+             createdAt: new Date(sessionData.loginTime).toISOString(),
+             isCurrent: false,
+             status: sessionData.status
+          };
+          return [newDevice, ...prev];
+       });
+    });
+
+    socket.on('session_activity', ({ sessionId, lastActive }) => {
+       setDevices(prev => prev.map(d => 
+          d.id === sessionId ? { ...d, lastActive: new Date(lastActive).toISOString() } : d
+       ));
+    });
+
     return () => {
       unsubDevices();
       unsubHistory();
+      socket.disconnect();
     };
   }, [activeUserUid]);
 
@@ -410,23 +457,43 @@ export default function SecurityCenter() {
                           <AnimatedDeviceGraphic type={device.deviceType} isCurrent={device.isCurrent} />
                         </div>
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
                             <h4 className="text-white font-bold">{device.browser} on {device.os}</h4>
                             {device.isCurrent && (
                               <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase">
-                                Current
+                                This Device
                               </span>
                             )}
+                            <span className={cn(
+                              "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
+                              device.status === 'Suspicious' ? "bg-amber-500/20 text-amber-400" :
+                              device.status === 'Blocked' ? "bg-rose-500/20 text-rose-400" :
+                              "bg-blue-500/20 text-blue-400"
+                            )}>
+                              {device.status || 'Active'}
+                            </span>
                           </div>
-                          {device.location && device.location !== 'Unknown' && (
-                            <div className="text-[13px] text-indigo-300 font-medium mt-1 flex items-center gap-1.5">
-                              <MapPin size={14} className="text-indigo-400" />
-                              {device.location}
-                            </div>
-                          )}
-                          <div className="text-xs text-neutral-400 mt-1.5 flex flex-col gap-0.5">
-                            <span>Signed in: {format(new Date(device.createdAt), 'MMM d, yyyy h:mm a')}</span>
-                            <span>Last active: {format(new Date(device.lastActive), 'MMM d, yyyy h:mm a')}</span>
+                          <div className="text-xs text-neutral-300 font-mono mb-1">
+                            ID: {device.id}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-indigo-300 font-medium">
+                            {device.location && device.location !== 'Unknown' && (
+                              <div className="flex items-center gap-1.5">
+                                <MapPin size={14} className="text-indigo-400" />
+                                {device.location}
+                              </div>
+                            )}
+                            {device.ip && device.ip !== 'Detecting...' && (
+                              <div className="flex items-center gap-1.5">
+                                <Globe size={14} className="text-indigo-400" />
+                                {device.ip}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-xs text-neutral-400 mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+                            <span><strong className="text-neutral-300">Signed in:</strong> {format(new Date(device.createdAt), 'MMM d, yyyy h:mm:ss.SSS a')}</span>
+                            <span><strong className="text-neutral-300">Last active:</strong> {format(new Date(device.lastActive), 'MMM d, yyyy h:mm:ss a')}</span>
+                            <span><strong className="text-neutral-300">Type:</strong> <span className="capitalize">{device.deviceType || 'Unknown'}</span></span>
                           </div>
                         </div>
                      </div>

@@ -56,6 +56,8 @@
     "react-use": "^17.6.1",
     "recharts": "^3.10.1",
     "resend": "^6.17.2",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
     "tailwind-merge": "^3.6.0",
     "three": "^0.185.1",
     "ua-parser-js": "^2.0.10",

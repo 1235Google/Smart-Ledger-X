@@ -103,10 +103,10 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
       onMouseLeave={() => setIsHovered(false)}
       className={`relative p-6 sm:p-8 md:p-8 rounded-[28px] overflow-hidden backdrop-blur-3xl transition-all duration-300 ease-out group select-none ${
         pulseState === 'increase'
-          ? 'border-[#30d158]/50 bg-gradient-to-b from-[#30d158]/10 via-[#14181f]/80 to-[#0e1017]/90 shadow-[0_20px_60px_rgba(48,209,88,0.25),inset_0_1px_1px_rgba(255,255,255,0.35)]'
+          ? 'border-[#30d158]/50 bg-[#30d158]/[0.05] backdrop-blur-[20px] shadow-lg'
           : pulseState === 'decrease'
-          ? 'border-[#ff453a]/50 bg-gradient-to-b from-[#ff453a]/10 via-[#1a1418]/80 to-[#120e10]/90 shadow-[0_20px_60px_rgba(255,69,58,0.25),inset_0_1px_1px_rgba(255,255,255,0.35)]'
-          : 'border-white/[0.12] hover:border-white/[0.2] bg-gradient-to-b from-white/[0.08] via-[#12131b]/80 to-[#0b0c12]/90 shadow-[0_16px_50px_rgba(0,0,0,0.7),inset_0_1px_2px_0_rgba(255,255,255,0.25),inset_0_0_24px_rgba(255,255,255,0.02)]'
+          ? 'border-[#ff453a]/50 bg-[#ff453a]/[0.05] backdrop-blur-[20px] shadow-lg'
+          : 'border-white/[0.08] bg-white/[0.03] backdrop-blur-[20px] shadow-lg'
       }`}
     >
       {/* Top Specular Rim Reflection Highlight */}

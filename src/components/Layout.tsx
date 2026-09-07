@@ -255,12 +255,12 @@ export default function Layout() {
   const isPrimaryTabActive = mobilePrimaryTabs.some(t => t.path === location.pathname);
 
   return (
-    <div className="min-h-screen bg-[#000000] text-white font-sans flex relative selection:bg-[#0a84ff]/30 selection:text-white">
+    <div className="min-h-screen bg-transparent text-white font-sans flex relative selection:bg-[#0a84ff]/30 selection:text-white">
       {/* VisionOS Dynamic Liquid Spotlight Tracker */}
       <LiquidSpotlight />
 
       {/* Apple-Inspired VisionOS Canvas with Translucent Breathing Orbs */}
-      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden select-none bg-[#000000]">
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden select-none bg-transparent">
         {/* Fine Noise Texture */}
         <div className="absolute inset-0 bg-noise mix-blend-overlay z-[1] opacity-25" />
         
@@ -280,7 +280,7 @@ export default function Layout() {
         transition={{ type: 'spring', stiffness: 420, damping: 35 }}
         onWheel={handleSidebarWheel}
         data-lenis-prevent="true"
-        className="hidden md:flex flex-col h-screen max-h-screen sticky top-0 bg-[#090a12]/85 backdrop-blur-3xl border-r border-white/[0.08] flex-shrink-0 z-20 overflow-hidden select-none shadow-[4px_0_35px_rgba(0,0,0,0.85)] relative"
+        className="hidden md:flex flex-col h-screen max-h-screen sticky top-0 bg-black/40 backdrop-blur-[20px] border-r border-white/[0.08] flex-shrink-0 z-20 overflow-hidden select-none shadow-[4px_0_35px_rgba(0,0,0,0.85)] relative"
         aria-label="Main Navigation"
       >
         {/* Top Rim Specular Highlight Line */}
@@ -453,7 +453,7 @@ export default function Layout() {
       </motion.aside>
 
       {/* Mobile Top Bar (Apple Frosted Header) */}
-      <div className="md:hidden fixed top-0 left-0 right-0 bg-[#000000]/85 backdrop-blur-2xl border-b border-white/[0.08] z-30 pt-[env(safe-area-inset-top)]">
+      <div className="md:hidden fixed top-0 left-0 right-0 bg-black/40 backdrop-blur-[20px] border-b border-white/[0.08] z-30 pt-[env(safe-area-inset-top)]">
         <div className="h-16 flex items-center justify-between px-4">
           <div className="flex items-center gap-2.5">
             <button 
@@ -579,7 +579,7 @@ export default function Layout() {
       {/* Main Content Viewport */}
       <main className="flex-1 flex flex-col min-h-screen z-10 relative w-full min-w-0 pb-28 md:pb-8">
         {/* Desktop Top Header - Floating Apple VisionOS Glass Navigation */}
-        <header className="hidden md:flex h-16 items-center justify-between px-8 border-b border-white/[0.10] bg-[#090a12]/80 backdrop-blur-3xl flex-shrink-0 sticky top-0 z-30 shadow-[0_4px_30px_rgba(0,0,0,0.6)] relative">
+        <header className="hidden md:flex h-16 items-center justify-between px-8 border-b border-white/[0.08] bg-black/40 backdrop-blur-[20px] flex-shrink-0 sticky top-0 z-30 shadow-[0_4px_30px_rgba(0,0,0,0.6)] relative">
           {/* Specular Top Rim */}
           <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
 

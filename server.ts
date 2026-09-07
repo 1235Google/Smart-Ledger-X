@@ -4,6 +4,8 @@ import { createServer as createViteServer } from "vite";
 import * as dotenv from "dotenv";
 import cron from "node-cron";
 import { Resend } from "resend";
+import { Server as SocketIOServer } from "socket.io";
+import http from "http";
 import { generateAndSendReport } from "./src/server/report-generator";
 import { 
   hashPassword, 
@@ -1515,7 +1517,53 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const httpServer = http.createServer(app);
+  const io = new SocketIOServer(httpServer, {
+    cors: { origin: "*", methods: ["GET", "POST"] }
+  });
+
+  io.on('connection', (socket) => {
+    socket.on('join_user_room', (userId) => {
+      if (userId) socket.join(`user_${userId}`);
+    });
+  });
+
+  // Example: On Login Success (Session Registration)
+  app.post('/api/auth/login-session', async (req, res) => {
+    try {
+      const { userId, sessionId, device, browser, os, location, loginTime } = req.body;
+      
+      const sessionData = {
+        userId: userId,
+        sessionId: sessionId || crypto.randomUUID(),
+        ip: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
+        userAgent: req.headers['user-agent'],
+        device: device || 'Desktop',
+        browser: browser || 'Unknown',
+        os: os || 'Unknown',
+        location: location || 'Unknown',
+        loginTime: loginTime || Date.now(), // millisecond precision
+        lastActive: Date.now(),
+        status: 'active',
+        isTrusted: false
+      };
+      
+      // Emit real-time event to ALL user's active sessions (including the new one if joined)
+      io.to(`user_${userId}`).emit('new_session', sessionData);
+      
+      res.json({ success: true, session: sessionData });
+    } catch(e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/sessions/activity', async (req, res) => {
+      const { userId, sessionId } = req.body;
+      io.to(`user_${userId}`).emit('session_activity', { sessionId, lastActive: Date.now() });
+      res.json({ success: true });
+  });
+
+  httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }

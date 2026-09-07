@@ -131,7 +131,7 @@ export interface UserDevice {
   lastActive: string;
   createdAt: string;
   isCurrent?: boolean;
-  status: 'active' | 'revoked';
+  status: 'active' | 'revoked' | 'Suspicious' | 'Blocked';
   trustStatus?: 'trusted' | 'unrecognized' | 'blocked';
   trustedAt?: string;
   trustedBy?: string;

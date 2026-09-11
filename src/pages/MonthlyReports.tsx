@@ -27,7 +27,8 @@ import { cn, formatCurrency } from '../lib/utils';
 import { format, parseISO, subMonths } from 'date-fns';
 import { ReportSchedule } from '../types';
 import DataStateGuard from '../components/ui/DataStateGuard';
-import { generateMonthlyPdf, generateMonthlyCsv } from '../lib/monthlyReportPdfGenerator';
+import { generateMonthlyPdf, generateMonthlyCsv, generateGullakReportPdf, generateGullakReportCsv } from '../lib/monthlyReportPdfGenerator';
+import { generatePendingReport } from '../lib/reportsExportEngine';
 import confetti from 'canvas-confetti';
 
 export default function MonthlyReports() {
@@ -40,6 +41,7 @@ export default function MonthlyReports() {
     transactions,
     customers,
     currentBalance,
+    gullakEntries,
     dataStatus,
     dataError,
     retryFetchData,
@@ -70,6 +72,7 @@ export default function MonthlyReports() {
   const monthOptions = useMemo(() => {
     const now = new Date();
     return [
+      'All Time',
       format(now, 'MMMM yyyy'),
       format(subMonths(now, 1), 'MMMM yyyy'),
       format(subMonths(now, 2), 'MMMM yyyy'),
@@ -139,6 +142,7 @@ export default function MonthlyReports() {
     let pCount = 0;
 
     const matched = (transactions || []).filter(tx => {
+      if (selectedMonth === 'All Time') return true;
       const rawDate = getTxDate(tx);
       if (!rawDate) return false;
       try {
@@ -152,8 +156,7 @@ export default function MonthlyReports() {
       }
     });
 
-    // If no transactions in this specific month, calculate overall stats for display
-    const listToCalculate = matched.length > 0 ? matched : (transactions || []);
+    const listToCalculate = matched;
 
     listToCalculate.forEach(tx => {
       const amt = Number(tx.amount) || 0;
@@ -173,7 +176,7 @@ export default function MonthlyReports() {
     });
 
     return {
-      filteredTransactions: matched.length > 0 ? matched : transactions || [],
+      filteredTransactions: matched,
       monthInflow: inflow,
       monthOutflow: outflow,
       monthNet: inflow - outflow,
@@ -330,6 +333,115 @@ export default function MonthlyReports() {
     }
   };
 
+  
+  const [isDownloadingGullakPdf, setIsDownloadingGullakPdf] = useState(false);
+  const [isDownloadingGullakCsv, setIsDownloadingGullakCsv] = useState(false);
+
+  const [isDownloadingPendingPdf, setIsDownloadingPendingPdf] = useState(false);
+  const [isDownloadingPendingCsv, setIsDownloadingPendingCsv] = useState(false);
+
+  const filteredGullakEntries = useMemo(() => {
+    if (selectedMonth === 'All Time') return gullakEntries || [];
+    return (gullakEntries || []).filter(e => {
+      const dateStr = e.date || e.createdAt;
+      if (!dateStr) return false;
+      try {
+        const monthStr = format(parseISO(dateStr), 'MMMM yyyy');
+        return monthStr === selectedMonth;
+      } catch (err) {
+        return false;
+      }
+    });
+  }, [gullakEntries, selectedMonth]);
+
+  const handleDownloadPendingReportPdf = async () => {
+    setIsDownloadingPendingPdf(true);
+    try {
+      await generatePendingReport({
+        format: 'pdf',
+        filterType: 'selected',
+        title: `Pending Reports - ${selectedMonth}`,
+        records: filteredTransactions.filter(t => t.type === 'pending'),
+        reportType: 'pending'
+      });
+      setEmailStatus({ type: 'success', text: `✓ Pending Report PDF downloaded!` });
+    } catch (error) {
+      console.error(error);
+      setEmailStatus({ type: 'error', text: 'Could not generate PDF. Please try again.' });
+    } finally {
+      setIsDownloadingPendingPdf(false);
+      setTimeout(() => setEmailStatus(null), 4000);
+    }
+  };
+
+  const handleDownloadPendingReportCsv = async () => {
+    setIsDownloadingPendingCsv(true);
+    try {
+      await generatePendingReport({
+        format: 'excel',
+        filterType: 'selected',
+        title: `Pending Reports - ${selectedMonth}`,
+        records: filteredTransactions.filter(t => t.type === 'pending'),
+        reportType: 'pending'
+      });
+      setEmailStatus({ type: 'success', text: `✓ Pending Report CSV downloaded!` });
+    } catch (error) {
+      console.error(error);
+      setEmailStatus({ type: 'error', text: 'Could not generate CSV. Please try again.' });
+    } finally {
+      setIsDownloadingPendingCsv(false);
+      setTimeout(() => setEmailStatus(null), 4000);
+    }
+  };
+
+  const handleDownloadGullakReportPdf = async (type: 'deposit' | 'withdrawal') => {
+    setIsDownloadingGullakPdf(true);
+    try {
+      const direction = type === 'deposit' ? 'credit' : 'debit';
+      const entries = filteredGullakEntries.filter(e => {
+        const eDir = e.direction || (e.operation === 'withdrawal' || e.type === 'withdrawal' ? 'debit' : 'credit');
+        return eDir === direction;
+      });
+      await generateGullakReportPdf({
+        month: selectedMonth,
+        accountName: userProfile?.fullName || 'Primary Account',
+        entries,
+        type
+      });
+      setEmailStatus({ type: 'success', text: `✓ Gullak ${type} PDF downloaded!` });
+    } catch (error) {
+      console.error(error);
+      setEmailStatus({ type: 'error', text: 'Could not generate PDF. Please try again.' });
+    } finally {
+      setIsDownloadingGullakPdf(false);
+      setTimeout(() => setEmailStatus(null), 4000);
+    }
+  };
+
+  const handleDownloadGullakReportCsv = (type: 'deposit' | 'withdrawal') => {
+    setIsDownloadingGullakCsv(true);
+    try {
+      const direction = type === 'deposit' ? 'credit' : 'debit';
+      const entries = filteredGullakEntries.filter(e => {
+        const eDir = e.direction || (e.operation === 'withdrawal' || e.type === 'withdrawal' ? 'debit' : 'credit');
+        return eDir === direction;
+      });
+      generateGullakReportCsv({
+        month: selectedMonth,
+        accountName: userProfile?.fullName || 'Primary Account',
+        entries,
+        type
+      });
+      setEmailStatus({ type: 'success', text: `✓ Gullak ${type} CSV downloaded!` });
+    } catch (error) {
+      console.error(error);
+      setEmailStatus({ type: 'error', text: 'Could not export CSV. Please try again.' });
+    } finally {
+      setIsDownloadingGullakCsv(false);
+      setTimeout(() => setEmailStatus(null), 4000);
+    }
+  };
+
   // API Call to Generate and Email Report
   const callGenerateReportAPI = async (type: 'monthly_report' | 'test_report') => {
     const targetEmail = (reportSettings?.emailAddress || emailInput || '').trim();
@@ -373,6 +485,7 @@ export default function MonthlyReports() {
             : filteredTransactions,
         customers: type === 'test_report' ? [] : customers,
         includePdf: includePdf,
+        gullakEntries: type === 'test_report' ? [] : filteredGullakEntries,
         aiSummary: type === 'test_report'
           ? 'SmartLedger Email Pipeline Verification. Your automated dispatch delivery system is operational.'
           : executiveSummary
@@ -573,7 +686,36 @@ export default function MonthlyReports() {
               {pendingCount} active receivables
             </div>
           </div>
-        </motion.div>
+        
+            {/* Gullak Reports */}
+            <div className="mt-4 pt-4 border-t border-white/5">
+              <h3 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                <Shield size={16} className="text-amber-400" />
+                Gullak (Savings) Reports
+              </h3>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex gap-2 p-1.5 bg-black/20 rounded-xl border border-white/5">
+                  <span className="text-xs font-semibold text-slate-400 self-center px-2">Deposits:</span>
+                  <button
+                    onClick={() => handleDownloadGullakReportPdf('deposit')}
+                    disabled={isDownloadingGullakPdf}
+                    className="px-3 py-1.5 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 text-xs font-medium flex items-center gap-1.5 transition-all"
+                  >
+                    <Download size={14} /> PDF
+                  </button>
+                  <button
+                    onClick={() => handleDownloadGullakReportCsv('deposit')}
+                    disabled={isDownloadingGullakCsv}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center gap-1.5 transition-all"
+                  >
+                    <FileSpreadsheet size={14} /> CSV
+                  </button>
+                </div>
+                
+
+              </div>
+            </div>
+</motion.div>
 
         {/* INSTANT EXPORT ACTIONS BAR (NEW PROMINENT FEATURE) */}
         <motion.div

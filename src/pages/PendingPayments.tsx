@@ -2,8 +2,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../context/StoreContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { Clock, Plus, User, Calendar, FileText, CheckCircle2, Phone, MessageCircle, Trash, AlertTriangle, Loader2, ClipboardList, Coins, Wallet, Brain, MoreVertical, Edit2, Play, Pause, Copy, Share2, Download, Archive, Bell } from 'lucide-react';
-import { formatCurrency, formatDate, formatName, getDaysDiff, calculateReminderDetails, DEFAULT_CARD_REMINDER_TEMPLATE, DEFAULT_REMINDER_TEMPLATE, formatReminderMessage } from '../lib/utils';
+import { formatCurrency, formatDate, formatName, getDaysDiff, calculateReminderDetails, formatReminderMessage } from '../lib/utils';
 import { PendingMoney } from '../types';
+import ReminderMessageEditor, { generateSmartDefaultReminder } from "../components/ReminderMessageEditor";
 import DataStateGuard from '../components/ui/DataStateGuard';
 
 const getInitials = (name: string) => {
@@ -119,8 +120,6 @@ function PaymentCard({
   const progressPercent = Math.round((remindersSent / totalReminders) * 100);
 
   const [showMenu, setShowMenu] = useState(false);
-  const [isEditingCardMsg, setIsEditingCardMsg] = useState(false);
-  const [cardMsgTemplate, setCardMsgTemplate] = useState(() => DEFAULT_CARD_REMINDER_TEMPLATE);
 
   const formattedName = formatName(tx.personName);
 
@@ -213,61 +212,7 @@ function PaymentCard({
 
       {/* Reminder Message Card */}
       {!isPaid && (
-        <div className="vision-glass-subtle rounded-2xl p-4 relative group/cardmsg">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-              🔔 REMINDER MESSAGE
-            </span>
-            <div className="flex items-center gap-2">
-              {isEditingCardMsg ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCardMsgTemplate(DEFAULT_CARD_REMINDER_TEMPLATE);
-                    setIsEditingCardMsg(false);
-                  }}
-                  className="text-[10px] font-semibold text-slate-400 hover:text-white underline transition-colors"
-                >
-                  Reset to Default
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setIsEditingCardMsg(true)}
-                  title="Edit Reminder Message"
-                  aria-label="Edit Reminder Message"
-                  className="text-slate-400 hover:text-amber-400 p-1 rounded-lg hover:bg-white/10 transition-colors"
-                >
-                  <Edit2 size={13} />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {isEditingCardMsg ? (
-            <div className="space-y-3 mt-1">
-              <textarea
-                value={cardMsgTemplate}
-                onChange={(e) => setCardMsgTemplate(e.target.value)}
-                rows={3}
-                className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/50 resize-none font-sans"
-              />
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsEditingCardMsg(false)}
-                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-colors"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans bg-black/25 p-3 rounded-xl border border-white/5">
-              {formatReminderMessage(cardMsgTemplate, tx, generalSettings?.timezone, totalDue)}
-            </p>
-          )}
-        </div>
+        <ReminderMessageEditor tx={tx} totalDue={totalDue} />
       )}
 
       {/* Notes */}
@@ -592,9 +537,10 @@ export default function PendingPayments() {
     const penalty = getPenaltyAmount(tx, daysDiff);
     const totalDue = tx.amount + penalty;
     const reminderDetails = calculateReminderDetails(tx, generalSettings?.timezone);
+    const timezone = generalSettings?.timezone || 'Asia/Kolkata';
 
-    const template = customReminderTemplate || DEFAULT_REMINDER_TEMPLATE;
-    const message = formatReminderMessage(template, tx, generalSettings?.timezone, totalDue);
+    const template = tx.customReminderMessage || generateSmartDefaultReminder(tx, timezone, totalDue);
+    const message = formatReminderMessage(template, tx, timezone, totalDue);
 
     let cleanPhone = tx.phoneNumber.replace(/[^0-9]/g, '');
     if (cleanPhone.length === 10) cleanPhone = `91${cleanPhone}`;

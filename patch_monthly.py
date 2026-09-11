@@ -1,25 +1,32 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { loadPremiumFonts, applyPremiumHeader, applyPremiumFooter, drawSummaryGrid, premiumTableStyles, arrayBufferToBase64 } from './pdfTheme';
+import sys
+import re
 
-import { saveAs } from 'file-saver';
-import { format, parseISO } from 'date-fns';
+file_path = 'src/lib/monthlyReportPdfGenerator.ts'
+with open(file_path, 'r') as f:
+    code = f.read()
 
-export interface MonthlyReportData {
-  month: string;
-  recipientEmail?: string;
-  transactions: any[];
-  customers: any[];
-  currentBalance: number;
-  aiSummary?: string;
-}
+# Add import
+import_line = "import { loadPremiumFonts, applyPremiumHeader, applyPremiumFooter, premiumTableStyles, arrayBufferToBase64 } from './pdfTheme';\n"
+if "pdfTheme" not in code:
+    code = code.replace("import autoTable from 'jspdf-autotable';", "import autoTable from 'jspdf-autotable';\n" + import_line)
 
+# Remove old arrayBufferToBase64 if it exists
+array_buffer_func = """function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}"""
+code = code.replace(array_buffer_func, '')
 
+# --- PATCH generateMonthlyPdf ---
+generate_monthly_pattern = re.compile(r'export async function generateMonthlyPdf.*?doc\.save\(`SmartLedger_Report_\$\{sanitizedMonth\}\.pdf`\);', re.DOTALL)
 
-/**
- * Generates and downloads a clean, structured PDF report
- */
-export async function generateMonthlyPdf(data: MonthlyReportData): Promise<void> {
+def replace_generate_monthly(match):
+    return """export async function generateMonthlyPdf(data: MonthlyReportData): Promise<void> {
   const { month, recipientEmail, transactions } = data;
   
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -126,68 +133,15 @@ export async function generateMonthlyPdf(data: MonthlyReportData): Promise<void>
   applyPremiumFooter(doc, 'Monthly Financial Report');
   
   const sanitizedMonth = month.replace(/[^a-zA-Z0-9_-]/g, '_');
-  doc.save(`SmartLedger_Report_${sanitizedMonth}.pdf`);
-}
+  doc.save(`SmartLedger_Report_${sanitizedMonth}.pdf`);"""
 
-/**
- * Generates and downloads a clean, structured CSV spreadsheet report
- */
-export function generateMonthlyCsv(data: MonthlyReportData): void {
-  const { month, transactions, customers, currentBalance } = data;
+code = generate_monthly_pattern.sub(replace_generate_monthly, code)
 
-  let totalReceived = 0;
-  let totalSent = 0;
-  let totalPending = 0;
-  
-  transactions.forEach(tx => {
-    const amt = Number(tx.amount) || 0;
-    if (tx.type === 'received') totalReceived += amt;
-    else if (tx.type === 'sent') totalSent += amt;
-    else if (tx.type === 'pending' && (tx.status === 'pending' || tx.status === 'overdue' || (tx.status !== 'completed' && tx.status !== 'cancelled' && tx.status !== 'closed'))) totalPending += amt;
-  });
-  const netCashflow = totalReceived - totalSent;
+# --- PATCH generateGullakReportPdf ---
+generate_gullak_pattern = re.compile(r'export async function generateGullakReportPdf.*?doc\.save\(`SmartLedger_\$\{type === \'deposit\' \? \'Deposits\' : \'Withdrawals\'\}_\$\{sanitizedMonth\}\.pdf`\);', re.DOTALL)
 
-  let csv = 'SmartLedger Monthly Business Report\n';
-  csv += `Reporting Month,"${month}"\n`;
-  csv += `Generated Date,"${format(new Date(), 'yyyy-MM-dd HH:mm:ss')}"\n`;
-  csv += `Current Ledger Balance,${currentBalance}\n`;
-  csv += `Total Received (Inflows),${totalReceived}\n`;
-  csv += `Total Sent (Outflows),${totalSent}\n`;
-  csv += `Net Cashflow,${netCashflow}\n`;
-  csv += `Total Open Receivables,${totalPending}\n`;
-  csv += `Total Transactions,${transactions.length}\n`;
-  csv += `Active Customers,${customers.length}\n\n`;
-
-  csv += 'TRANSACTIONS REGISTER\n';
-  csv += 'S.No,Date,Type,Person / Customer Name,Phone Number,Category / Purpose,Payment Method,Amount (INR),Status,Notes\n';
-
-  transactions.forEach((t, idx) => {
-    const dateStr = t.date || t.createdAt || 'N/A';
-    const typeStr = (t.type || 'N/A').toUpperCase();
-    const nameStr = (t.personName || t.customerName || 'N/A').replace(/"/g, '""');
-    const phoneStr = (t.phoneNumber || t.phone || 'N/A').replace(/"/g, '""');
-    const categoryStr = (t.purpose || t.category || 'General').replace(/"/g, '""');
-    const methodStr = (t.method || t.paymentMethod || 'UPI').toUpperCase();
-    const amt = Number(t.amount) || 0;
-    const statusStr = (t.status || 'Completed').toUpperCase();
-    const noteStr = (t.note || t.notes || t.reason || '').replace(/"/g, '""');
-
-    csv += `${idx + 1},"${dateStr}","${typeStr}","${nameStr}","${phoneStr}","${categoryStr}","${methodStr}",${amt},"${statusStr}","${noteStr}"\n`;
-  });
-
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const sanitizedMonth = month.replace(/[^a-zA-Z0-9_-]/g, '_');
-  saveAs(blob, `SmartLedger_Report_${sanitizedMonth}.csv`);
-}
-
-export interface GullakReportData {
-  month: string;
-  accountName?: string;
-  entries: any[];
-  type: 'deposit' | 'withdrawal';
-}
-
-export async function generateGullakReportPdf(data: GullakReportData): Promise<void> {
+def replace_generate_gullak(match):
+    return """export async function generateGullakReportPdf(data: GullakReportData): Promise<void> {
   const { month, accountName, entries, type } = data;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -274,37 +228,12 @@ export async function generateGullakReportPdf(data: GullakReportData): Promise<v
   applyPremiumFooter(doc, title);
   
   const sanitizedMonth = month.replace(/[^a-zA-Z0-9_-]/g, '_');
-  doc.save(`SmartLedger_${type === 'deposit' ? 'Deposits' : 'Withdrawals'}_${sanitizedMonth}.pdf`);
-}
+  doc.save(`SmartLedger_${type === 'deposit' ? 'Deposits' : 'Withdrawals'}_${sanitizedMonth}.pdf`);"""
 
-export function generateGullakReportCsv(data: GullakReportData): void {
-  const { month, entries, type } = data;
-  let totalAmount = 0;
-  
-  entries.forEach(e => totalAmount += (Number(e.amount) || 0));
+code = generate_gullak_pattern.sub(replace_generate_gullak, code)
 
-  let csv = `SmartLedger Gullak ${type === 'deposit' ? 'Deposits' : 'Withdrawals'} Report\n`;
-  csv += `Reporting Month,"${month}"\n`;
-  csv += `Generated Date,"${format(new Date(), 'yyyy-MM-dd HH:mm:ss')}"\n`;
-  csv += `Total ${type === 'deposit' ? 'Deposits' : 'Withdrawals'},${totalAmount}\n`;
-  csv += `Total Transactions,${entries.length}\n\n`;
-  
-  csv += 'TRANSACTIONS REGISTER\n';
-  csv += 'S.No,Date,Name,Category,Payment Method,Amount (INR),Notes\n';
-  
-  entries.forEach((t, idx) => {
-    const dateStr = t.date || t.createdAt || 'N/A';
-    const nameStr = (t.personName || 'N/A').replace(/"/g, '""');
-    const categoryStr = (t.category || 'N/A').replace(/"/g, '""');
-    const methodStr = (t.paymentMethod || 'N/A').toUpperCase();
-    const amt = Number(t.amount) || 0;
-    const noteStr = (t.note || '').replace(/"/g, '""');
-    
-    csv += `${idx + 1},"${dateStr}","${nameStr}","${categoryStr}","${methodStr}",${amt},"${noteStr}"\n`;
-  });
-  
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const sanitizedMonth = month.replace(/[^a-zA-Z0-9_-]/g, '_');
-  saveAs(blob, `SmartLedger_${type === 'deposit' ? 'Deposits' : 'Withdrawals'}_${sanitizedMonth}.csv`);
-}
+# Make sure doc.save didn't get missed due to regex matching limits
+with open(file_path, 'w') as f:
+    f.write(code + '\n}\n')
 
+print("Patched monthly generator")

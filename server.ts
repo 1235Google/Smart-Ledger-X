@@ -1236,7 +1236,7 @@ async function startServer() {
 
   app.post("/api/generate-business-report", async (req, res) => {
     try {
-      const { email, month, transactions, customers, includePdf, aiSummary } = req.body;
+      const { email, month, transactions, customers, includePdf, aiSummary, gullakEntries } = req.body;
       if (!email) {
         return res.status(400).json({ error: "Missing email" });
       }
@@ -1251,7 +1251,7 @@ async function startServer() {
         });
       }
 
-      const result = await generateAndSendReport(email, month, transactions || [], customers || [], includePdf, aiSummary, resendApiKey);
+      const result = await generateAndSendReport(email, month, transactions || [], customers || [], includePdf, aiSummary, resendApiKey, gullakEntries || []);
       
       if (result.success) {
         return res.json({ 

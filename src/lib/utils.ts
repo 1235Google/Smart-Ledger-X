@@ -241,5 +241,7 @@ export function formatReminderMessage(
     .replace(/\{\{dueDate\}\}/gi, formatDate(tx.dueDate, timezone))
     .replace(/\{DueDate\}/gi, formatDate(tx.dueDate, timezone))
     .replace(/\{\{overdueDays\}\}/gi, overdueDays.toString())
+    .replace(/\{\{reason\}\}/gi, tx.reason || "")
+    .replace(/\{Reason\}/gi, tx.reason || "")
     .replace(/\{OverdueDays\}/gi, overdueDays.toString());
 }

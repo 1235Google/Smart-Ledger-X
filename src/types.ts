@@ -46,6 +46,7 @@ export interface PendingMoney {
   penaltyValue?: number;
   gracePeriod?: number; // in days
   aiTone?: 'friendly' | 'professional' | 'strict' | 'formal';
+  customReminderMessage?: string;
   deleted?: boolean;
   deletedAt?: string;
   deletedBy?: string;

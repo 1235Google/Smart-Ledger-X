@@ -1,6 +1,8 @@
 import { saveAs } from 'file-saver';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { loadPremiumFonts, applyPremiumHeader, applyPremiumFooter, drawSummaryGrid, premiumTableStyles } from './pdfTheme';
+
 import { format, parseISO, isSameDay, isSameWeek, isSameMonth, isAfter, isBefore, startOfDay, endOfDay } from 'date-fns';
 import { getGullakEntryDirection, getGullakAbsoluteAmount } from './gullakAccounting';
 
@@ -116,44 +118,15 @@ export async function generateEntriesReport(options: ExportOptions): Promise<voi
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     saveAs(blob, `SmartLedger_Entries_${format(new Date(), 'yyyy-MM-dd')}.csv`);
   } else {
-    // --- PDF EXPORT ---
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    await loadPremiumFonts(doc);
+    applyPremiumHeader(doc, 'Transactions Report');
 
-    // Brand Header Box
-    doc.setFillColor(5, 150, 105); // emerald-600
-    doc.rect(0, 0, doc.internal.pageSize.width, 22, 'F');
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(18);
-    doc.setTextColor(255, 255, 255);
-    doc.text('SmartLedger Entries Report', 14, 14);
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Generated: ${dateStrPretty}`, doc.internal.pageSize.width - 14, 14, { align: 'right' });
-
-    // Summary Cards Section
-    doc.setFillColor(243, 244, 246);
-    doc.roundedRect(14, 26, 80, 16, 2, 2, 'F');
-    doc.roundedRect(102, 26, 80, 16, 2, 2, 'F');
-    doc.roundedRect(190, 26, 92, 16, 2, 2, 'F');
-
-    doc.setTextColor(55, 65, 81);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.text('TOTAL ENTRIES', 18, 32);
-    doc.text('TOTAL RECEIVED', 106, 32);
-    doc.text('TOTAL PENDING', 194, 32);
-
-    doc.setFontSize(12);
-    doc.setTextColor(16, 185, 129); // emerald-600
-    doc.text(`${totalEntries} Records`, 18, 38);
-    doc.text(`Rs ${totalReceived.toLocaleString('en-IN')}`, 106, 38);
-
-    doc.setTextColor(217, 119, 6); // amber-600
-    doc.text(`Rs ${totalPending.toLocaleString('en-IN')}`, 194, 38);
-
-    // Table
+    const nextY = drawSummaryGrid(doc, 44, [
+      { label: 'Total Entries', value: `${totalEntries} Records` },
+      { label: 'Total Received', value: `Rs. ${totalReceived.toLocaleString('en-IN')}`, valueColor: [16, 185, 129] },
+      { label: 'Total Pending', value: `Rs. ${totalPending.toLocaleString('en-IN')}`, valueColor: [217, 119, 6] }
+    ]);
     const tableHead = [["#", "Customer Name", "Phone", "Amount (Rs)", "Status", "Category", "Method", "Date", "Notes"]];
     const tableBody = filteredData.map((item, idx) => [
       idx + 1,
@@ -186,26 +159,9 @@ export async function generateEntriesReport(options: ExportOptions): Promise<voi
         7: { cellWidth: 28 },
         8: { cellWidth: 'auto' },
       },
-      didDrawPage: function (data) {
-        // Footer Page Numbering
-        const totalPages = (doc as any).internal.getNumberOfPages();
-        const currentPage = data.pageNumber;
-        doc.setFontSize(8);
-        doc.setTextColor(156, 163, 175);
-        doc.text(
-          `Page ${currentPage} of ${totalPages}`,
-          doc.internal.pageSize.width - 14,
-          doc.internal.pageSize.height - 8,
-          { align: 'right' }
-        );
-        doc.text(
-          `SmartLedger Official Report • Confidential`,
-          14,
-          doc.internal.pageSize.height - 8
-        );
-      }
-    });
+          } as any);
 
+    applyPremiumFooter(doc, 'Entries Report');
     doc.save(`SmartLedger_Entries_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   }
 }
@@ -254,44 +210,15 @@ export async function generatePendingReport(options: ExportOptions): Promise<voi
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     saveAs(blob, `SmartLedger_Pending_Report_${format(new Date(), 'yyyy-MM-dd')}.csv`);
   } else {
-    // --- PDF EXPORT ---
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    await loadPremiumFonts(doc);
+    applyPremiumHeader(doc, 'Pending Payments Report');
 
-    // Brand Header Box
-    doc.setFillColor(217, 119, 6); // amber-600
-    doc.rect(0, 0, doc.internal.pageSize.width, 22, 'F');
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(16);
-    doc.setTextColor(255, 255, 255);
-    doc.text('SmartLedger Pending Payments Report', 14, 14);
-
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Generated: ${dateStrPretty}`, doc.internal.pageSize.width - 14, 14, { align: 'right' });
-
-    // Stats Cards
-    doc.setFillColor(243, 244, 246);
-    doc.roundedRect(14, 26, 56, 16, 2, 2, 'F');
-    doc.roundedRect(74, 26, 62, 16, 2, 2, 'F');
-    doc.roundedRect(140, 26, 56, 16, 2, 2, 'F');
-
-    doc.setTextColor(55, 65, 81);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.text('TOTAL PENDING', 18, 32);
-    doc.text('TOTAL AMOUNT DUE', 78, 32);
-    doc.text('OVERDUE COUNT', 144, 32);
-
-    doc.setFontSize(11);
-    doc.setTextColor(217, 119, 6);
-    doc.text(`${totalPendingEntries} Customers`, 18, 38);
-    doc.text(`Rs ${totalPendingAmount.toLocaleString('en-IN')}`, 78, 38);
-
-    doc.setTextColor(220, 38, 38); // red-600
-    doc.text(`${overdueCount} Records`, 144, 38);
-
-    // Table
+    const nextY = drawSummaryGrid(doc, 44, [
+      { label: 'Total Pending', value: `${totalPendingEntries} Customers` },
+      { label: 'Amount Due', value: `Rs. ${totalPendingAmount.toLocaleString('en-IN')}`, valueColor: [217, 119, 6] },
+      { label: 'Overdue', value: `${overdueCount} Records`, valueColor: [220, 38, 38] }
+    ]);
     const tableHead = [["#", "Customer Name", "Phone", "Pending Amount", "Due Date", "Status", "Notes"]];
     const tableBody = filteredData.map((item, idx) => {
       let daysRemainingStr = (item.status || 'Pending').toUpperCase();
@@ -323,11 +250,8 @@ export async function generatePendingReport(options: ExportOptions): Promise<voi
     autoTable(doc, {
       head: tableHead,
       body: tableBody,
-      startY: 47,
-      theme: 'grid',
-      styles: { fontSize: 8.5, cellPadding: 2.5, overflow: 'linebreak' },
-      headStyles: { fillColor: [217, 119, 6], textColor: [255, 255, 255], fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [249, 250, 251] },
+      startY: nextY + 4,
+      ...premiumTableStyles,
       columnStyles: {
         0: { cellWidth: 10 },
         1: { cellWidth: 40, fontStyle: 'bold' },
@@ -337,25 +261,9 @@ export async function generatePendingReport(options: ExportOptions): Promise<voi
         5: { cellWidth: 28, halign: 'center' },
         6: { cellWidth: 'auto' },
       },
-      didDrawPage: function (data) {
-        const totalPages = (doc as any).internal.getNumberOfPages();
-        const currentPage = data.pageNumber;
-        doc.setFontSize(8);
-        doc.setTextColor(156, 163, 175);
-        doc.text(
-          `Page ${currentPage} of ${totalPages}`,
-          doc.internal.pageSize.width - 14,
-          doc.internal.pageSize.height - 8,
-          { align: 'right' }
-        );
-        doc.text(
-          `SmartLedger Pending Payments Report • Confidential`,
-          14,
-          doc.internal.pageSize.height - 8
-        );
-      }
-    });
+          } as any);
 
+    applyPremiumFooter(doc, 'Pending Payments Report');
     doc.save(`SmartLedger_Pending_Report_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   }
 }
@@ -374,23 +282,44 @@ export async function generateGullakReport(options: ExportOptions): Promise<void
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     saveAs(blob, `Gullak_Entries_${format(new Date(), 'yyyy-MM-dd')}.csv`);
   } else {
-    const doc = new jsPDF();
-    doc.text('Gullak Entries Report', 14, 14);
-    autoTable(doc, {
-      head: [['Date', 'Type', 'Direction', 'Amount', 'Notes']],
-      body: filteredData.map(item => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    await loadPremiumFonts(doc);
+    applyPremiumHeader(doc, 'Gullak Vault Activity', 'Savings Ledger');
+
+    let totalSavings = 0;
+    filteredData.forEach(item => {
+      const isCredit = getGullakEntryDirection(item) === 'credit';
+      const amt = getGullakAbsoluteAmount(item);
+      if (isCredit) totalSavings += amt;
+      else totalSavings -= amt;
+    });
+
+    const nextY = drawSummaryGrid(doc, 44, [
+      { label: 'Total Records', value: `${filteredData.length}` },
+      { label: 'Net Savings', value: `Rs. ${totalSavings.toLocaleString('en-IN')}`, highlight: true }
+    ]);
+
+    const tableHead = [['Date', 'Type', 'Direction', 'Amount', 'Notes']];
+    const tableBody = filteredData.map(item => {
         const isCredit = getGullakEntryDirection(item) === 'credit';
         const absAmt = getGullakAbsoluteAmount(item);
         return [
-          item.date, 
-          item.category, 
+          item.date || 'N/A', 
+          item.category || 'N/A', 
           isCredit ? 'Credit' : 'Debit',
-          `${isCredit ? '+' : '-'}Rs ${absAmt.toLocaleString('en-IN')}`, 
+          `${isCredit ? '+' : '-'} Rs. ${absAmt.toLocaleString('en-IN')}`, 
           item.note || '-'
         ];
-      }),
-      startY: 20
     });
+
+    autoTable(doc, {
+      head: tableHead,
+      body: tableBody,
+      startY: nextY + 4,
+      ...premiumTableStyles,
+    } as any);
+
+    applyPremiumFooter(doc, 'Gullak Entries Report');
     doc.save(`Gullak_Entries_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   }
 }

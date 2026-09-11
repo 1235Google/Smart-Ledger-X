@@ -275,7 +275,7 @@ export function computeSystemHealthReport(params: {
     criticalIssuesCount++;
     integrityDiscrepancies++;
     breakdown.push({
-      reason: `Main ledger balance mismatch (₹${Math.abs(integrityReport.mainLedger.discrepancyAmount).toLocaleString()} variance)`,
+      reason: `Main ledger balance mismatch (Rs. ${Math.abs(integrityReport.mainLedger.discrepancyAmount).toLocaleString()} variance)`,
       deduction: 15,
       severity: 'problem',
       category: 'Data Integrity'
@@ -288,7 +288,7 @@ export function computeSystemHealthReport(params: {
     criticalIssuesCount++;
     integrityDiscrepancies++;
     breakdown.push({
-      reason: `Gullak vault balance mismatch (₹${Math.abs(integrityReport.gullak.discrepancyAmount).toLocaleString()} variance)`,
+      reason: `Gullak vault balance mismatch (Rs. ${Math.abs(integrityReport.gullak.discrepancyAmount).toLocaleString()} variance)`,
       deduction: 15,
       severity: 'problem',
       category: 'Data Integrity'
@@ -660,7 +660,7 @@ export function computeDataIntegrityReport(params: {
         date: dateStr,
         personName: tx.personName || 'Unspecified',
         type: tx.type || 'transaction',
-        reason: `Identical amount (₹${amt}) & person on ${dateStr} matches transaction #${match.id.slice(-6)}`
+        reason: `Identical amount (Rs. ${amt}) & person on ${dateStr} matches transaction #${match.id.slice(-6)}`
       });
     } else {
       seenMap.set(signatureKey, tx);
@@ -706,7 +706,7 @@ export function computeDataIntegrityReport(params: {
         amount: raw,
         date: dateStr,
         personName: tx.personName || 'N/A',
-        issue: `Negative transaction amount (-₹${Math.abs(num)})`
+        issue: `Negative transaction amount (-Rs. ${Math.abs(num)})`
       });
     } else if (num === 0) {
       invalidAmounts.push({

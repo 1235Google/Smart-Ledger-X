@@ -1,18 +1,25 @@
-import { Resend } from 'resend';
+import sys
+import re
+
+file_path = 'src/server/report-generator.ts'
+with open(file_path, 'r') as f:
+    code = f.read()
+
+replacement = """import { Resend } from 'resend';
 
 function createPendingCsv(month: string, pendingTx: any[]) {
-  let csv = `SmartLedger Pending Dues Report - ${month}\n`;
-  csv += `Generated At,"${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}"\n\n`;
+  let csv = `SmartLedger Pending Dues Report - ${month}\\n`;
+  csv += `Generated At,"${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}"\\n\\n`;
   
   let totalPending = 0;
   pendingTx.forEach(tx => totalPending += (Number(tx.amount) || 0));
 
-  csv += 'EXECUTIVE SUMMARY\n';
-  csv += `Total Pending (Receivables),${totalPending}\n`;
-  csv += `Total Records,${pendingTx.length}\n\n`;
+  csv += 'EXECUTIVE SUMMARY\\n';
+  csv += `Total Pending (Receivables),${totalPending}\\n`;
+  csv += `Total Records,${pendingTx.length}\\n\\n`;
 
-  csv += 'PENDING TRANSACTIONS\n';
-  csv += 'S.No,Date,Name,Amount (INR),Due Date,Status,Notes\n';
+  csv += 'PENDING TRANSACTIONS\\n';
+  csv += 'S.No,Date,Name,Amount (INR),Due Date,Status,Notes\\n';
 
   pendingTx.forEach((tx, idx) => {
     const dateStr = tx.date || tx.createdAt || 'N/A';
@@ -22,15 +29,15 @@ function createPendingCsv(month: string, pendingTx: any[]) {
     const statusStr = (tx.status || 'Pending').toUpperCase();
     const noteStr = (tx.note || tx.notes || tx.reason || '').replace(/"/g, '""');
 
-    csv += `${idx + 1},"${dateStr}","${nameStr}",${amt},"${dueDateStr}","${statusStr}","${noteStr}"\n`;
+    csv += `${idx + 1},"${dateStr}","${nameStr}",${amt},"${dueDateStr}","${statusStr}","${noteStr}"\\n`;
   });
 
   return Buffer.from(csv, 'utf-8');
 }
 
 function createGullakCsv(month: string, gullakEntries: any[]) {
-  let csv = `SmartLedger Gullak Savings Report - ${month}\n`;
-  csv += `Generated At,"${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}"\n\n`;
+  let csv = `SmartLedger Gullak Savings Report - ${month}\\n`;
+  csv += `Generated At,"${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}"\\n\\n`;
   
   let totalSavings = 0;
   gullakEntries.forEach(tx => {
@@ -39,12 +46,12 @@ function createGullakCsv(month: string, gullakEntries: any[]) {
      totalSavings += isCredit ? amt : -amt;
   });
 
-  csv += 'EXECUTIVE SUMMARY\n';
-  csv += `Net Savings Balance,${totalSavings}\n`;
-  csv += `Total Records,${gullakEntries.length}\n\n`;
+  csv += 'EXECUTIVE SUMMARY\\n';
+  csv += `Net Savings Balance,${totalSavings}\\n`;
+  csv += `Total Records,${gullakEntries.length}\\n\\n`;
 
-  csv += 'GULLAK TRANSACTIONS\n';
-  csv += 'S.No,Date,Name,Category,Amount (INR),Type,Notes\n';
+  csv += 'GULLAK TRANSACTIONS\\n';
+  csv += 'S.No,Date,Name,Category,Amount (INR),Type,Notes\\n';
 
   gullakEntries.forEach((tx, idx) => {
     const dateStr = tx.date || tx.createdAt || 'N/A';
@@ -55,7 +62,7 @@ function createGullakCsv(month: string, gullakEntries: any[]) {
     const typeStr = isCredit ? 'CREDIT' : 'DEBIT';
     const noteStr = (tx.note || '').replace(/"/g, '""');
 
-    csv += `${idx + 1},"${dateStr}","${nameStr}","${catStr}",${amt},"${typeStr}","${noteStr}"\n`;
+    csv += `${idx + 1},"${dateStr}","${nameStr}","${catStr}",${amt},"${typeStr}","${noteStr}"\\n`;
   });
 
   return Buffer.from(csv, 'utf-8');
@@ -89,50 +96,35 @@ export async function generateAndSendReport(
 
   let summaryBuffer: Buffer | null = null;
   if (includePdf) {
-    let summaryText = `=================================================
-`;
-    summaryText += `SMARTLEDGER MONTHLY REPORT: ${month}
-`;
-    summaryText += `=================================================
-
-`;
-    summaryText += `Generated: ${new Date().toLocaleString()}
-`;
-    summaryText += `Recipient: ${email}
-
-`;
-    summaryText += `SUMMARY
-`;
-    summaryText += `-------------------------------------------------
-`;
-    summaryText += `Gullak Savings Balance: INR ${totalSavings.toLocaleString('en-IN')}
-`;
-    summaryText += `Pending Receivables:    INR ${totalPending.toLocaleString('en-IN')}
-`;
-    summaryText += `Pending Records:        ${pendingTx.length}
-`;
-    summaryText += `Savings Records:        ${(gullakEntries || []).length}
-
-`;
-    summaryText += `=================================================
-`;
+    let summaryText = `=================================================\n`;
+    summaryText += `SMARTLEDGER MONTHLY REPORT: ${month}\n`;
+    summaryText += `=================================================\n\n`;
+    summaryText += `Generated: ${new Date().toLocaleString()}\n`;
+    summaryText += `Recipient: ${email}\n\n`;
+    summaryText += `SUMMARY\n`;
+    summaryText += `-------------------------------------------------\n`;
+    summaryText += `Gullak Savings Balance: INR ${totalSavings.toLocaleString('en-IN')}\n`;
+    summaryText += `Pending Receivables:    INR ${totalPending.toLocaleString('en-IN')}\n`;
+    summaryText += `Pending Records:        ${pendingTx.length}\n`;
+    summaryText += `Savings Records:        ${(gullakEntries || []).length}\n\n`;
+    summaryText += `=================================================\n`;
     summaryBuffer = Buffer.from(summaryText, 'utf-8');
   }
 
   const attachments: any[] = [
     {
-      filename: `SmartLedger_Pending_Report_${month.replace(/\s+/g, '_')}.csv`,
+      filename: `SmartLedger_Pending_Report_${month.replace(/\\s+/g, '_')}.csv`,
       content: pendingCsvBuffer,
     },
     {
-      filename: `SmartLedger_Gullak_Savings_${month.replace(/\s+/g, '_')}.csv`,
+      filename: `SmartLedger_Gullak_Savings_${month.replace(/\\s+/g, '_')}.csv`,
       content: gullakCsvBuffer,
     }
   ];
 
   if (summaryBuffer) {
     attachments.push({
-      filename: `SmartLedger_Summary_${month.replace(/\s+/g, '_')}.txt`,
+      filename: `SmartLedger_Summary_${month.replace(/\\s+/g, '_')}.txt`,
       content: summaryBuffer,
     });
   }
@@ -242,3 +234,9 @@ export async function generateAndSendReport(
     fileSizePdf: summaryBuffer ? summaryBuffer.length : 0
   };
 }
+"""
+
+with open(file_path, 'w') as f:
+    f.write(replacement)
+
+print("Report generator patched")

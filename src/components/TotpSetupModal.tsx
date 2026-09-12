@@ -32,10 +32,23 @@ export default function TotpSetupModal({ onClose, onComplete }: TotpSetupModalPr
     setError(null);
     try {
       const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/security/2fa/setup', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      let res;
+      let retries = 3;
+      while (retries > 0) {
+        res = await fetch('/api/security/2fa/setup', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 502 || res.status === 504 || res.status === 503) {
+          retries--;
+          if (retries === 0) throw new Error('Server is currently restarting or unavailable. Please try again in a few seconds.');
+          await new Promise(r => setTimeout(r, 2000));
+        } else {
+          break;
+        }
+      }
+      
+      if (!res) throw new Error('Failed to connect to server.');
       
       const text = await res.text();
       if (!text) {
@@ -46,7 +59,10 @@ export default function TotpSetupModal({ onClose, onComplete }: TotpSetupModalPr
       try {
         data = JSON.parse(text);
       } catch (e) {
-        throw new Error('Server returned an invalid response from the 2FA setup endpoint.');
+        if (text.includes('<!DOCTYPE html>') || text.includes('<html>')) {
+          throw new Error('Server returned an HTML page (likely starting up). Please wait a moment and try again.');
+        }
+        throw new Error('Server returned an invalid response: ' + text.substring(0, 100));
       }
       
       if (!res.ok) {

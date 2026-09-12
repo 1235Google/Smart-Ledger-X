@@ -120,13 +120,13 @@ export default function PremiumProfileCard() {
           {/* Holographic overlay */}
           <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent opacity-60 pointer-events-none" />
           
-          <div className="p-6 sm:p-8 h-full flex flex-col justify-between relative z-10">
+          <div className="p-4 sm:p-8 h-full flex flex-col justify-between relative z-10">
             {/* Header */}
             <div className="flex justify-between items-start">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-900 to-black p-[1px] shadow-lg">
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-indigo-900 to-black p-[1px] shadow-lg flex-shrink-0">
                   <div className="w-full h-full bg-slate-950 rounded-[11px] flex items-center justify-center">
-                    <Sparkles className="w-5 h-5 text-cyan-400" />
+                    <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
                   </div>
                 </div>
                 <div>
@@ -136,33 +136,33 @@ export default function PremiumProfileCard() {
               </div>
               
               {userProfile?.verifiedEmail && (
-                <div className="px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[9px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
+                <div className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[9px] font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.15)] flex-shrink-0">
                   <BadgeCheck size={12} className="text-emerald-400" /> Verified
                 </div>
               )}
             </div>
 
             {/* Profile Info */}
-            <div className="flex items-center gap-5 sm:gap-6 mt-4">
+            <div className="flex items-center gap-3.5 sm:gap-6 mt-3 sm:mt-4">
               <div className="relative shrink-0">
                 <div className="absolute -inset-1 bg-gradient-to-tr from-indigo-500 via-purple-500 to-cyan-500 rounded-2xl blur-md opacity-60 transition duration-300 group-hover:opacity-100" />
-                <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-[18px] overflow-hidden border border-white/20 bg-slate-900 shadow-inner flex items-center justify-center">
+                <div className="relative w-16 h-16 sm:w-24 sm:h-24 rounded-[16px] sm:rounded-[18px] overflow-hidden border border-white/20 bg-slate-900 shadow-inner flex items-center justify-center">
                   {userProfile?.profilePhoto ? (
                     <img src={userProfile.profilePhoto} alt={userProfile.fullName || 'User'} className="w-full h-full object-cover" />
                   ) : (
-                    <User className="w-8 h-8 sm:w-10 sm:h-10 text-slate-500" />
+                    <User className="w-7 h-7 sm:w-10 sm:h-10 text-slate-500" />
                   )}
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-white truncate tracking-tight mb-1">
+                <h1 className="text-xl sm:text-3xl font-extrabold text-white truncate tracking-tight mb-0.5 sm:mb-1">
                   {userProfile?.fullName || 'Anonymous User'}
                 </h1>
                 {userProfile?.email && (
-                  <p className="text-slate-400 text-[11px] sm:text-xs font-mono truncate">{userProfile.email}</p>
+                  <p className="text-slate-400 text-[10px] sm:text-xs font-mono truncate">{userProfile.email}</p>
                 )}
                 {userProfile?.mobile && (
-                  <p className="text-slate-500 text-[10px] font-mono mt-1.5 truncate">{userProfile.mobile}</p>
+                  <p className="text-slate-500 text-[10px] font-mono mt-1 truncate">{userProfile.mobile}</p>
                 )}
               </div>
             </div>

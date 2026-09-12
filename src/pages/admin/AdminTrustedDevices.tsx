@@ -162,7 +162,7 @@ export default function AdminTrustedDevices() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 bg-[#131314] rounded-xl p-3 text-xs text-slate-400 mb-4">
+                <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-2.5 sm:gap-4 bg-[#131314] rounded-xl p-3 text-xs text-slate-400 mb-4">
                   <div>
                     <strong className="text-slate-300 block mb-0.5">IP Address</strong>
                     {device.ip}

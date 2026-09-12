@@ -9,7 +9,7 @@ import {
   Sparkles, Calendar, Zap, PieChart, Activity, Inbox
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
-import { formatCurrency } from '../../lib/utils';
+import { formatCurrency, cn } from '../../lib/utils';
 
 export default function InteractiveAnalyticsSection() {
   const shouldReduceMotion = useReducedMotion();
@@ -105,32 +105,30 @@ export default function InteractiveAnalyticsSection() {
   }, [transactions, hasData, timeRange]);
 
   return (
-    <div className="relative rounded-[32px] vision-glass-elevated p-6 sm:p-8 md:p-10 backdrop-blur-3xl overflow-hidden z-10 select-none">
+    <div className="relative rounded-[22px] sm:rounded-[32px] vision-glass-elevated p-3.5 sm:p-8 md:p-10 backdrop-blur-3xl overflow-hidden z-10 select-none">
       {/* Top Specular Rim */}
       <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
 
       {/* Controls Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-6 border-b border-white/[0.08] mb-8">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1.5 text-xs font-bold text-[#30d158] bg-[#30d158]/10 border border-[#30d158]/25 px-2.5 py-1 rounded-full">
-              <span className="w-2 h-2 rounded-full bg-[#30d158] shadow-[0_0_8px_#30d158]" /> Inflow
-            </span>
-            <span className="flex items-center gap-1.5 text-xs font-bold text-[#ff453a] bg-[#ff453a]/10 border border-[#ff453a]/25 px-2.5 py-1 rounded-full">
-              <span className="w-2 h-2 rounded-full bg-[#ff453a] shadow-[0_0_8px_#ff453a]" /> Outflow
-            </span>
-          </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 pb-3.5 sm:pb-5 border-b border-white/[0.08] mb-4 sm:mb-8">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-bold text-[#30d158] bg-[#30d158]/10 border border-[#30d158]/25 px-2.5 py-1 rounded-full">
+            <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-[#30d158] shadow-[0_0_8px_#30d158]" /> Inflow
+          </span>
+          <span className="flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs font-bold text-[#ff453a] bg-[#ff453a]/10 border border-[#ff453a]/25 px-2.5 py-1 rounded-full">
+            <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-[#ff453a] shadow-[0_0_8px_#ff453a]" /> Outflow
+          </span>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 sm:gap-2.5 self-start sm:self-auto">
           {/* Time range buttons */}
-          <div className="flex items-center bg-white/[0.05] p-1 rounded-2xl border border-white/10 backdrop-blur-md">
+          <div className="flex items-center bg-white/[0.05] p-0.5 sm:p-1 rounded-xl sm:rounded-2xl border border-white/10 backdrop-blur-md">
             {(['7D', '1M', '1Y'] as const).map((r) => (
               <motion.button
                 key={r}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setTimeRange(r)}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                className={`px-2.5 sm:px-3 py-1 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all ${
                   timeRange === r
                     ? 'bg-gradient-to-r from-[#0a84ff] to-[#5e5ce6] text-white shadow-md shadow-[#0a84ff]/30'
                     : 'text-[#86868b] hover:text-white'
@@ -142,11 +140,11 @@ export default function InteractiveAnalyticsSection() {
           </div>
 
           {/* Chart Type toggle */}
-          <div className="flex items-center bg-white/[0.05] p-1 rounded-2xl border border-white/10 backdrop-blur-md">
+          <div className="flex items-center bg-white/[0.05] p-0.5 sm:p-1 rounded-xl sm:rounded-2xl border border-white/10 backdrop-blur-md">
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={() => setChartType('area')}
-              className={`p-1.5 rounded-xl text-xs transition-all ${
+              className={`p-1 sm:p-1.5 rounded-lg sm:rounded-xl text-xs transition-all ${
                 chartType === 'area' ? 'bg-white/15 text-[#64d2ff] shadow-sm' : 'text-[#86868b] hover:text-white'
               }`}
               title="Smooth Curve"
@@ -156,7 +154,7 @@ export default function InteractiveAnalyticsSection() {
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={() => setChartType('bar')}
-              className={`p-1.5 rounded-xl text-xs transition-all ${
+              className={`p-1 sm:p-1.5 rounded-lg sm:rounded-xl text-xs transition-all ${
                 chartType === 'bar' ? 'bg-white/15 text-[#64d2ff] shadow-sm' : 'text-[#86868b] hover:text-white'
               }`}
               title="Bar Chart"
@@ -168,7 +166,7 @@ export default function InteractiveAnalyticsSection() {
       </div>
 
       {/* Chart Canvas */}
-      <div className="h-72 sm:h-80 w-full relative">
+      <div className={cn("w-full relative", hasData ? "h-60 sm:h-80" : "h-36 sm:h-52")}>
         {hasData ? (
           <ResponsiveContainer width="100%" height="100%">
             {chartType === 'area' ? (
@@ -290,39 +288,39 @@ export default function InteractiveAnalyticsSection() {
             )}
           </ResponsiveContainer>
         ) : (
-          <div className="h-full w-full flex flex-col items-center justify-center text-center p-6 rounded-2xl bg-white/[0.02] border border-white/[0.06]">
-            <Inbox size={40} className="text-[#86868b] mb-3 opacity-60" />
-            <h4 className="text-sm font-bold text-white">No financial data available yet</h4>
-            <p className="text-xs text-[#86868b] max-w-sm mt-1">
-              Visual cashflow charts, income trends, and expense breakdowns will render as you record transactions.
+          <div className="h-full w-full flex flex-col items-center justify-center text-center p-3 sm:p-6 rounded-2xl bg-white/[0.02] border border-white/[0.06]">
+            <Inbox size={24} className="text-[#86868b] mb-1.5 opacity-60 sm:size-8" />
+            <h4 className="text-xs sm:text-sm font-bold text-white">No financial data available yet</h4>
+            <p className="text-[11px] sm:text-xs text-[#86868b] max-w-xs sm:max-w-sm mt-0.5 leading-relaxed">
+              Visual cashflow charts and income trends will render as you record transactions.
             </p>
           </div>
         )}
       </div>
 
       {/* Dynamic Analytics Summary Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-8 pt-6 border-t border-white/[0.08]">
-        <motion.div whileHover={{ y: -2 }} className="p-4 rounded-2xl vision-glass border-white/[0.08]">
-          <div className="text-[11px] text-[#86868b] font-bold uppercase tracking-wider">Total Inflow</div>
-          <div className="text-xl font-extrabold text-[#30d158] mt-1 font-mono tracking-tight">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mt-4 sm:mt-8 pt-4 sm:pt-6 border-t border-white/[0.08]">
+        <motion.div whileHover={{ y: -2 }} className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl vision-glass border-white/[0.08]">
+          <div className="text-[10px] sm:text-[11px] text-[#86868b] font-bold uppercase tracking-wider truncate">Total Inflow</div>
+          <div className="text-sm sm:text-xl font-extrabold text-[#30d158] mt-0.5 sm:mt-1 font-mono tracking-tight truncate">
             {hasData ? formatCurrency(totalReceived) : '₹0'}
           </div>
         </motion.div>
-        <motion.div whileHover={{ y: -2 }} className="p-4 rounded-2xl vision-glass border-white/[0.08]">
-          <div className="text-[11px] text-[#86868b] font-bold uppercase tracking-wider">Total Outflow</div>
-          <div className="text-xl font-extrabold text-[#ff453a] mt-1 font-mono tracking-tight">
+        <motion.div whileHover={{ y: -2 }} className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl vision-glass border-white/[0.08]">
+          <div className="text-[10px] sm:text-[11px] text-[#86868b] font-bold uppercase tracking-wider truncate">Total Outflow</div>
+          <div className="text-sm sm:text-xl font-extrabold text-[#ff453a] mt-0.5 sm:mt-1 font-mono tracking-tight truncate">
             {hasData ? formatCurrency(totalSent) : '₹0'}
           </div>
         </motion.div>
-        <motion.div whileHover={{ y: -2 }} className="p-4 rounded-2xl vision-glass border-white/[0.08]">
-          <div className="text-[11px] text-[#86868b] font-bold uppercase tracking-wider">Net Balance</div>
-          <div className="text-xl font-extrabold text-[#64d2ff] mt-1 font-mono tracking-tight">
+        <motion.div whileHover={{ y: -2 }} className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl vision-glass border-white/[0.08]">
+          <div className="text-[10px] sm:text-[11px] text-[#86868b] font-bold uppercase tracking-wider truncate">Net Balance</div>
+          <div className="text-sm sm:text-xl font-extrabold text-[#64d2ff] mt-0.5 sm:mt-1 font-mono tracking-tight truncate">
             {hasData ? formatCurrency(currentBalance) : '₹0'}
           </div>
         </motion.div>
-        <motion.div whileHover={{ y: -2 }} className="p-4 rounded-2xl vision-glass border-white/[0.08]">
-          <div className="text-[11px] text-[#86868b] font-bold uppercase tracking-wider">Ledger Status</div>
-          <div className="text-xl font-extrabold text-[#bf5af2] mt-1 tracking-tight">
+        <motion.div whileHover={{ y: -2 }} className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl vision-glass border-white/[0.08]">
+          <div className="text-[10px] sm:text-[11px] text-[#86868b] font-bold uppercase tracking-wider truncate">Ledger Status</div>
+          <div className="text-sm sm:text-xl font-extrabold text-[#bf5af2] mt-0.5 sm:mt-1 tracking-tight truncate">
             {hasData ? `${transactions.length} Logged` : 'Active'}
           </div>
         </motion.div>

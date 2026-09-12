@@ -151,7 +151,7 @@ const NotificationDropdown = forwardRef<NotificationDropdownRef, {}>((props, ref
             transition={{ duration: 0.18, ease: 'easeOut' }}
             role="region"
             aria-label="Notification list"
-            className="absolute right-0 top-full mt-2 w-[340px] sm:w-[400px] bg-neutral-900/95 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden z-50 flex flex-col max-h-[82vh] max-w-[calc(100vw-2rem)]"
+            className="fixed inset-x-3 top-[calc(4rem+env(safe-area-inset-top,0px))] sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 w-auto sm:w-[400px] bg-neutral-900/95 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden z-50 flex flex-col max-h-[75vh] sm:max-h-[82vh]"
           >
             {/* Panel Header */}
             <div className="p-4 px-5 border-b border-white/10 flex items-center justify-between bg-white/[0.02]">

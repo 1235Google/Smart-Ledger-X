@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bell, Edit2, Save, Copy, Eye, RotateCcw, Loader2, CheckCircle2 } from 'lucide-react';
+import { Bell, Edit2, Save, Copy, Eye, RotateCcw, Loader2, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { PendingMoney } from '../types';
-import { formatReminderMessage } from '../lib/utils';
+import { formatReminderMessage, cn } from '../lib/utils';
 import { useStore } from '../context/StoreContext';
 
 interface Props {
@@ -53,6 +53,7 @@ export default function ReminderMessageEditor({ tx, totalDue }: Props) {
   const [isSaving, setIsSaving] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const [showConfirmReset, setShowConfirmReset] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const hasUnsavedChanges = draftMessage !== currentMessage;
 
@@ -266,22 +267,58 @@ export default function ReminderMessageEditor({ tx, totalDue }: Props) {
                      <button onClick={() => setShowConfirmReset(false)} className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-lg transition-colors">Cancel</button>
                   </div>
                </div>
-            ) : (
-              <div className="bg-black/25 border border-white/5 p-4 rounded-xl relative group">
-                <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap font-sans">
-                  {formatReminderMessage(currentMessage, tx, timezone, totalDue)}
-                </p>
-                {tx.customReminderMessage && tx.customReminderMessage !== defaultTemplate && (
-                  <button 
-                    onClick={handleReset}
-                    title="Reset to default message"
-                    className="absolute top-2 right-2 p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-400/10 transition-colors opacity-0 group-hover:opacity-100"
-                  >
-                    <RotateCcw size={14} />
-                  </button>
-                )}
-              </div>
-            )}
+            ) : (() => {
+                const formatted = formatReminderMessage(currentMessage, tx, timezone, totalDue);
+                const isLong = formatted.length > 160 || formatted.split('\n').length > 4;
+
+                return (
+                  <div>
+                    <div className="bg-black/25 border border-white/5 p-4 rounded-xl relative group">
+                      <div className={cn(
+                        "transition-all duration-300 relative",
+                        isLong && !isExpanded && "max-h-28 overflow-hidden"
+                      )}>
+                        <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap font-sans">
+                          {formatted}
+                        </p>
+                        {isLong && !isExpanded && (
+                          <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-[#0d0e17] via-[#0d0e17]/80 to-transparent pointer-events-none" />
+                        )}
+                      </div>
+
+                      {tx.customReminderMessage && tx.customReminderMessage !== defaultTemplate && (
+                        <button 
+                          onClick={handleReset}
+                          title="Reset to default message"
+                          className="absolute top-2 right-2 p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-400/10 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <RotateCcw size={14} />
+                        </button>
+                      )}
+                    </div>
+
+                    {isLong && (
+                      <button
+                        type="button"
+                        onClick={() => setIsExpanded(!isExpanded)}
+                        className="mt-2 text-xs font-semibold text-[#0a84ff] hover:text-[#0071e3] flex items-center gap-1 transition-colors select-none py-1 px-1"
+                      >
+                        {isExpanded ? (
+                          <>
+                            <ChevronUp size={14} />
+                            <span>Show less</span>
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown size={14} />
+                            <span>Show full message</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
           </motion.div>
         )}
       </AnimatePresence>

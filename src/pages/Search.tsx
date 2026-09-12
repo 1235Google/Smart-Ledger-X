@@ -32,12 +32,12 @@ export default function Search() {
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
       className="w-full space-y-8"
     >
-      <header className="mb-8">
-        <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
-          <SearchIcon className="text-blue-400" size={32} />
+      <header className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
+          <SearchIcon className="text-blue-400" size={28} />
           Search Ledger
         </h1>
-        <p className="text-slate-400 mt-1 text-sm font-medium">Instantly search transactions by name, amount, category, or note.</p>
+        <p className="text-slate-400 mt-1 text-xs sm:text-sm font-medium">Instantly search transactions by name, amount, category, or note.</p>
       </header>
 
       <div className="relative group max-w-3xl">
@@ -88,23 +88,23 @@ export default function Search() {
                 delay: idx * 0.03,
               }}
               whileHover={{ scale: 1.01, x: 3 }}
-              className="group bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 p-4 rounded-2xl flex items-center gap-4 transition-all shadow-lg max-w-3xl cursor-pointer"
+              className="group bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 p-3 sm:p-4 rounded-2xl flex items-center gap-3 sm:gap-4 transition-all shadow-lg max-w-3xl cursor-pointer"
             >
               <div className={cn(
-                "w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-inner",
+                "w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0 shadow-inner",
                 tx.type === 'received' ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : 
                 tx.type === 'sent' ? "bg-rose-500/20 text-rose-400 border border-rose-500/30" : 
                 "bg-amber-500/20 text-amber-400 border border-amber-500/30"
               )}>
-                {tx.type === 'received' ? <ArrowDownLeft size={22} /> : 
-                 tx.type === 'sent' ? <ArrowUpRight size={22} /> : 
-                 <Clock size={22} />}
+                {tx.type === 'received' ? <ArrowDownLeft size={18} className="sm:w-[22px] sm:h-[22px]" /> : 
+                 tx.type === 'sent' ? <ArrowUpRight size={18} className="sm:w-[22px] sm:h-[22px]" /> : 
+                 <Clock size={18} className="sm:w-[22px] sm:h-[22px]" />}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-white text-sm truncate">{tx.personName}</span>
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <span className="font-bold text-white text-xs sm:text-sm truncate">{tx.personName}</span>
                   <span className={cn(
-                    "text-[10px] uppercase font-extrabold tracking-wider px-2.5 py-0.5 rounded-full border",
+                    "text-[9px] sm:text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full border shrink-0",
                     tx.type === 'received' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : 
                     tx.type === 'sent' ? "bg-rose-500/10 text-rose-400 border-rose-500/20" : 
                     "bg-amber-500/10 text-amber-400 border-amber-500/20"
@@ -112,20 +112,20 @@ export default function Search() {
                     {tx.type}
                   </span>
                 </div>
-                <div className="text-xs text-slate-400 mt-0.5">
+                <div className="text-[11px] sm:text-xs text-slate-400 mt-0.5 truncate">
                   {tx.type === 'received' || tx.type === 'sent' ? tx.purpose : (tx as any).reason} • {formatDate(tx.type === 'received' || tx.type === 'sent' ? tx.date : (tx as any).dueDate, generalSettings?.timezone)}
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-right shrink-0">
                 <p className={cn(
-                  "text-sm font-extrabold tracking-tight",
+                  "text-xs sm:text-sm font-extrabold tracking-tight font-tabular",
                   tx.type === 'received' ? "text-emerald-400" : 
                   tx.type === 'sent' ? "text-rose-400" : 
                   "text-amber-400"
                 )}>
                   {tx.type === 'received' ? '+' : tx.type === 'sent' ? '-' : '⏳'} {formatCurrency(tx.amount)}
                 </p>
-                <p className="text-[10px] text-slate-500 uppercase font-semibold">{tx.type}</p>
+                <p className="text-[9px] sm:text-[10px] text-slate-500 uppercase font-semibold">{tx.type}</p>
               </div>
             </motion.div>
           ))}

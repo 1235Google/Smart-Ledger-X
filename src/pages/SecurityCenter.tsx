@@ -1,79 +1,109 @@
-
+import AnimatedDeviceGraphic from "../components/AnimatedDeviceGraphic";
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useStore } from '../context/StoreContext';
-import { auth } from '../lib/firebase';
-import TotpSetupModal from '../components/TotpSetupModal';
-
 import { io } from 'socket.io-client';
 import { 
-  Shield, Smartphone, Lock, KeyRound, Clock, LogOut, History, MapPin, 
-  Laptop, Globe, CheckCircle2, XCircle, Trash2, ShieldAlert,
-  AlertTriangle, Fingerprint, Activity, Terminal
+  Shield, 
+  Smartphone, 
+  Lock, 
+  KeyRound, 
+  Clock, 
+  LogOut, 
+  History, 
+  Laptop, 
+  Globe, 
+  CheckCircle2, 
+  XCircle, 
+  Trash2, 
+  Eye, 
+  EyeOff, 
+  Check, 
+  User,
+  Monitor,
+  Wifi,
+  WifiOff,
+  MapPin
 } from 'lucide-react';
 import { 
-  subscribeToLoginHistory, subscribeToUserDevices, revokeUserDevice, revokeAllOtherDevices,
-  emergencyLockdown, fetchAuditLogs, revokeAllSessionsBackend, revokeDeviceBackend,
-  calculateSecurityScore
+  subscribeToLoginHistory, 
+  subscribeToUserDevices, 
+  revokeUserDevice, 
+  revokeAllOtherDevices,
+  hashPin,
+  verifyPin,
+  updateActiveSessionLocation,
+  DeviceInfo
 } from '../lib/securityService';
 import { LoginHistoryEntry, UserDevice } from '../types';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
-import { createNotification } from '../lib/notificationService';
-import { startRegistration } from '@simplewebauthn/browser';
 
-type TabType = 'overview' | 'session' | 'devices' | 'history' | 'audit' | 'passkeys';
+type TabType = 'overview' | 'session' | 'devices' | 'history' | 'autologout' | 'pin';
 
 export default function SecurityCenter() {
-  const { currentUser, securitySettings, updateSecuritySettings, logout } = useStore();
+  const { 
+    securitySettings, 
+    updateSecuritySettings, 
+    lockApp, 
+    currentUser, 
+    userProfile,
+    logout
+  } = useStore();
+
   const [activeTab, setActiveTab] = useState<TabType>('overview');
 
   // Real-time Firestore & local state
   const [devices, setDevices] = useState<UserDevice[]>([]);
   const [loginLogs, setLoginLogs] = useState<LoginHistoryEntry[]>([]);
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loadingDevices, setLoadingDevices] = useState(true);
-  
+  const [loadingLogs, setLoadingLogs] = useState(true);
+
   // Modals state
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinLengthChoice, setPinLengthChoice] = useState<4 | 6>(securitySettings.pinLength || 4);
+  const [currentPinInput, setCurrentPinInput] = useState('');
+  const [newPinInput, setNewPinInput] = useState('');
+  const [confirmPinInput, setConfirmPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [pinSuccess, setPinSuccess] = useState('');
+
+  // Device revoking state
+  const [deviceToRemove, setDeviceToRemove] = useState<UserDevice | null>(null);
   const [showRevokeAllModal, setShowRevokeAllModal] = useState(false);
-  const [showLockdownModal, setShowLockdownModal] = useState(false);
-  
 
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isMfaEnabled, setIsMfaEnabled] = useState(false);
-  const [showTotpModal, setShowTotpModal] = useState(false);
+  // Browser Data State
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [geoLoc, setGeoLoc] = useState<{lat: number, lon: number} | null>(null);
+  const [geoError, setGeoError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchMfaStatus = async () => {
-      try {
-        const token = await auth.currentUser?.getIdToken();
-        const res = await fetch('/api/security/2fa/status', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const data = await res.json();
-        if (data && typeof data.enabled === 'boolean') {
-          setIsMfaEnabled(data.enabled);
-        }
-      } catch (err) {
-        console.error("Failed to fetch MFA status:", err);
-      }
-    };
-    fetchMfaStatus();
-  }, [showTotpModal]);
+  const currentTimeout = securitySettings.inactivityTimeout ?? 30;
+  const isAutoLogout = securitySettings.autoLogoutEnabled !== false;
 
-
-  const activeUserEmail = currentUser?.email || 'Authorized Local User';
+  // Active user identity details
+  const activeUserEmail = currentUser?.email || userProfile?.email || 'Authorized Local User';
   const activeUserUid = currentUser?.uid || 'local_session_user';
+  const authProvider = currentUser?.providerData?.[0]?.providerId === 'google.com' 
+    ? 'Google' 
+    : currentUser?.email 
+      ? 'Email & Password' 
+      : 'Local Session';
 
-  // Subscriptions
+  // Subscriptions to Firestore and local telemetry
   useEffect(() => {
     setLoadingDevices(true);
+    setLoadingLogs(true);
 
+    // Initial load and backup listener
     const unsubDevices = subscribeToUserDevices(activeUserUid, (data) => {
       setDevices(prev => {
+        // Only update if we don't have these already from socket, or just merge
+        // A simple merge favoring newest data
         const merged = [...prev];
-        data.forEach(d => { 
-           if (!merged.find(m => m.id === d.id)) merged.push(d); 
+        data.forEach(d => {
+           if (!merged.find(m => m.id === d.id)) {
+              merged.push(d);
+           }
         });
         return merged.sort((a, b) => new Date(b.lastActive || 0).getTime() - new Date(a.lastActive || 0).getTime());
       });
@@ -82,42 +112,74 @@ export default function SecurityCenter() {
 
     const unsubHistory = subscribeToLoginHistory(activeUserUid, (data) => {
       setLoginLogs(data);
+      setLoadingLogs(false);
     });
 
-    const loadAudit = async () => {
-      const logs = await fetchAuditLogs();
-      setAuditLogs(logs);
-    };
-    loadAudit();
-
-    // Socket.io real-time
+    // Real-time WebSockets (Socket.IO) for instant session push notifications (100-500ms)
     const socket = io();
     socket.emit('join_user_room', activeUserUid);
-    
+
     socket.on('new_session', (sessionData) => {
        setDevices(prev => {
           const exists = prev.find(d => d.id === sessionData.sessionId);
-          if (exists) return prev;
+          if (exists) {
+            return prev.map(d => d.id === sessionData.sessionId ? {
+              ...d,
+              ...sessionData,
+              deviceType: sessionData.deviceType || sessionData.device || d.deviceType,
+              model: sessionData.model || d.model,
+              manufacturer: sessionData.manufacturer || d.manufacturer,
+              location: sessionData.location || d.location,
+              ip: sessionData.ip || d.ip,
+              browser: sessionData.browser || d.browser,
+              os: sessionData.os || d.os,
+              lastActive: new Date(sessionData.lastActive || Date.now()).toISOString()
+            } : d);
+          }
+          
           const newDevice: UserDevice = {
-             id: sessionData.sessionId, userId: sessionData.userId, deviceId: sessionData.sessionId,
-             deviceName: sessionData.browser + ' on ' + sessionData.os, deviceType: sessionData.device,
-             browser: sessionData.browser, os: sessionData.os, ip: sessionData.ip, location: sessionData.location,
-             lastActive: new Date(sessionData.lastActive).toISOString(), createdAt: new Date(sessionData.loginTime).toISOString(),
-             isCurrent: false, status: sessionData.status
+             id: sessionData.sessionId,
+             userId: sessionData.userId,
+             deviceId: sessionData.sessionId,
+             deviceName: sessionData.browser + ' on ' + sessionData.os,
+             deviceType: sessionData.deviceType || sessionData.device || 'desktop',
+             model: sessionData.model,
+             manufacturer: sessionData.manufacturer,
+             browser: sessionData.browser,
+             os: sessionData.os,
+             ip: sessionData.ip,
+             location: sessionData.location,
+             city: sessionData.city,
+             region: sessionData.region,
+             country: sessionData.country,
+             countryCode: sessionData.countryCode,
+             latitude: sessionData.latitude,
+             longitude: sessionData.longitude,
+             accuracy: sessionData.accuracy,
+             locationSource: sessionData.locationSource,
+             lastActive: new Date(sessionData.lastActive || Date.now()).toISOString(),
+             createdAt: new Date(sessionData.loginTime || Date.now()).toISOString(),
+             isCurrent: false,
+             status: sessionData.status
           };
           return [newDevice, ...prev];
        });
     });
 
-    socket.on('force_logout', () => {
-       logout();
+    socket.on('session_updated', (updateData) => {
+       setDevices(prev => prev.map(d => 
+          d.id === updateData.sessionId ? { 
+            ...d, 
+            ...updateData,
+            lastActive: new Date(updateData.lastActive || Date.now()).toISOString() 
+          } : d
+       ));
     });
-    
-    socket.on('revoke_device', ({ sessionId }) => {
-       const localSessionId = localStorage.getItem('smartledger_session_id');
-       if (localSessionId === sessionId) {
-          logout();
-       }
+
+    socket.on('session_activity', ({ sessionId, lastActive }) => {
+       setDevices(prev => prev.map(d => 
+          d.id === sessionId ? { ...d, lastActive: new Date(lastActive).toISOString() } : d
+       ));
     });
 
     return () => {
@@ -125,492 +187,630 @@ export default function SecurityCenter() {
       unsubHistory();
       socket.disconnect();
     };
-  }, [activeUserUid, logout]);
+  }, [activeUserUid]);
 
-  // Actions
-  const handleRevokeAll = async () => {
-    setIsProcessing(true);
-    await revokeAllSessionsBackend(); // Real backend token revocation
-    await revokeAllOtherDevices(activeUserUid); // Cleans up firestore
-    setIsProcessing(false);
-    setShowRevokeAllModal(false);
-    createNotification({
-      title: 'Sessions Revoked',
-      message: 'All other devices have been signed out securely.',
-      type: 'success'
-    });
-  };
-
-  const handleRevokeDevice = async (deviceId: string) => {
-    await revokeDeviceBackend(deviceId); // Backend socket kick
-    await revokeUserDevice(activeUserUid, deviceId); // Firestore cleanup
-    setDevices(prev => prev.filter(d => d.id !== deviceId));
-    createNotification({
-      title: 'Device Removed',
-      message: 'The device has been successfully signed out.',
-      type: 'success'
-    });
-  };
-
-  const handleEmergencyLockdown = async () => {
-    setIsProcessing(true);
-    const success = await emergencyLockdown();
-    if (success) {
-      logout();
-    } else {
-      setIsProcessing(false);
-      createNotification({
-        title: 'Lockdown Failed',
-        message: 'Could not communicate with the server.',
-        type: 'error'
-      });
-    }
-  };
-
-  const handleRegisterPasskey = async () => {
-    setIsProcessing(true);
-    try {
-      const resp = await fetch('/api/webauthn/generate-registration-options', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: activeUserUid, userName: activeUserEmail })
-      });
-      const options = await resp.json();
-      
-      const attResp = await startRegistration({ optionsJSON: options });
-      
-      const verifyResp = await fetch('/api/webauthn/verify-registration', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: activeUserUid, response: attResp })
-      });
-      const verification = await verifyResp.json();
-      
-      if (verification.verified) {
-        updateSecuritySettings({ hasPasskey: true });
-        createNotification({
-          title: 'Passkey Registered',
-          message: 'Your account is now secured with a passkey.',
-          type: 'success'
-        });
+  useEffect(() => {
+    const handleDeviceUpdate = (e: any) => {
+      if (e.detail && e.detail.id) {
+        setDevices(prev => prev.map(d => (d.id === e.detail.id || d.deviceId === e.detail.deviceId) ? { ...d, ...e.detail } : d));
       }
-    } catch (e: any) {
-      console.error(e);
-      createNotification({
-        title: 'Passkey Failed',
-        message: e.message || 'Could not register passkey.',
-        type: 'error'
-      });
+    };
+    window.addEventListener('smartledger:device_updated', handleDeviceUpdate);
+    return () => window.removeEventListener('smartledger:device_updated', handleDeviceUpdate);
+  }, []);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const requestLocation = () => {
+    if (!navigator.geolocation) {
+      setGeoError("Geolocation is not supported by your browser");
+      return;
     }
-    setIsProcessing(false);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        const accuracy = position.coords.accuracy;
+        setGeoLoc({ lat, lon });
+        setGeoError(null);
+
+        try {
+          const updated = await updateActiveSessionLocation({
+            latitude: lat,
+            longitude: lon,
+            accuracy
+          });
+          if (updated) {
+            setDevices(prev => prev.map(d => (d.isCurrent || d.id === updated.id) ? { ...d, ...updated } : d));
+          }
+        } catch (e) {}
+      },
+      () => {
+        setGeoError("Location not shared.");
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
   };
 
-
-  // Local more robust score calculation aligned with actual security posture
-  const calculateRealScore = () => {
-    let score = 30; // base score
-    const recommendations = [];
-    if (securitySettings.hasPasskey) score += 40;
-    else recommendations.push("Add a Passkey for phishing-resistant passwordless login.");
-    
-    if (securitySettings.pinEnabled) score += 10;
-    
-    if (devices.length > 3) {
-      score -= 10;
-      recommendations.push("You have many active devices. Consider reviewing and signing out old ones.");
-    } else {
-      score += 10;
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && 'permissions' in navigator) {
+      navigator.permissions?.query({ name: 'geolocation' as PermissionName }).then((status) => {
+        if (status.state === 'granted') {
+          requestLocation();
+        }
+      }).catch(() => {});
     }
-    
-    if (window.location.protocol === 'https:') score += 10;
-    
-    score = Math.max(0, Math.min(100, score));
-    const level = score >= 80 ? 'Excellent' : score >= 50 ? 'Good' : 'Needs Attention';
-    const color = score >= 80 ? '#34d399' : score >= 50 ? '#fbbf24' : '#ef4444';
-    return { score, level, color, recommendations };
-  };
-  const scoreResult = calculateRealScore();
+  }, []);
 
-
-  // Helper to render icon for device
-  const getDeviceIcon = (type: string) => {
-    if (type?.toLowerCase().includes('mobile')) return <Smartphone size={20} className="text-blue-400" />;
-    return <Laptop size={20} className="text-emerald-400" />;
+  // Handle Timeout Change
+  const handleTimeoutChange = (minutes: number) => {
+    updateSecuritySettings({
+      inactivityTimeout: minutes,
+      autoLogoutEnabled: minutes > 0
+    });
   };
+
+  // Handle PIN Setup/Change Form
+  const handleSavePin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPinError('');
+    setPinSuccess('');
+
+    if (securitySettings.pinEnabled && securitySettings.pin) {
+      const isMatch = verifyPin(currentPinInput, securitySettings.pin);
+      if (!isMatch) {
+        setPinError('Current PIN is incorrect.');
+        return;
+      }
+    }
+
+    if (newPinInput.length !== pinLengthChoice) {
+      setPinError(`New PIN must be exactly ${pinLengthChoice} digits.`);
+      return;
+    }
+
+    if (newPinInput !== confirmPinInput) {
+      setPinError('New PINs do not match.');
+      return;
+    }
+
+    const hashed = hashPin(newPinInput);
+    updateSecuritySettings({
+      pin: hashed,
+      pinLength: pinLengthChoice,
+      pinEnabled: true
+    });
+
+    setPinSuccess('PIN updated successfully!');
+    setTimeout(() => {
+      setShowPinModal(false);
+      setCurrentPinInput('');
+      setNewPinInput('');
+      setConfirmPinInput('');
+      setPinSuccess('');
+      setPinError('');
+    }, 1200);
+  };
+  
+  const handleRemovePin = () => {
+    if (securitySettings.pinEnabled && securitySettings.pin) {
+        const isMatch = verifyPin(currentPinInput, securitySettings.pin);
+        if (!isMatch) {
+            setPinError('Current PIN is incorrect.');
+            return;
+        }
+    }
+    updateSecuritySettings({
+        pin: undefined,
+        pinEnabled: false
+    });
+    setPinSuccess('PIN removed successfully!');
+    setTimeout(() => {
+      setShowPinModal(false);
+      setCurrentPinInput('');
+      setNewPinInput('');
+      setConfirmPinInput('');
+      setPinSuccess('');
+      setPinError('');
+    }, 1200);
+  };
+
+  const handleConfirmRevokeDevice = async () => {
+    if (!deviceToRemove) return;
+    
+    await revokeUserDevice(activeUserUid, deviceToRemove.id);
+    if (deviceToRemove.isCurrent) {
+        logout();
+    }
+    setDeviceToRemove(null);
+  };
+
+  const handleRevokeAllOther = async () => {
+    await revokeAllOtherDevices(activeUserUid);
+    setShowRevokeAllModal(false);
+  };
+
+  const activeDevices = devices.filter(d => d.status === 'active');
+  const activeDeviceCount = activeDevices.length;
+  const lastSignIn = loginLogs.length > 0 ? loginLogs[0].timestamp : null;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-24">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-white tracking-tight flex items-center gap-3">
-            <Shield className="text-emerald-400" size={32} />
+          <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-3">
+            <Shield className="text-emerald-400" size={28} />
             Security Center
           </h1>
-          <p className="text-slate-400 mt-2 font-medium">Production security telemetry and real-time session management.</p>
+          <p className="text-neutral-400 mt-1">
+            Manage your account security, active sessions, and privacy settings.
+          </p>
         </div>
-        <button 
-          onClick={() => setShowLockdownModal(true)}
-          className="bg-red-500/10 hover:bg-red-500/20 text-red-500 font-bold px-4 py-2 rounded-xl border border-red-500/20 transition-all flex items-center gap-2"
-        >
-          <AlertTriangle size={18} />
-          Emergency Lockdown
-        </button>
       </div>
 
-      <div className="flex overflow-x-auto hide-scrollbar gap-2 pb-2">
+      <div className="flex flex-wrap items-center gap-2 bg-white/5 p-2 rounded-2xl border border-white/10">
         {[
-          { id: 'overview', icon: Shield, label: 'Overview' },
-          { id: 'devices', icon: Smartphone, label: 'Active Devices' },
-          { id: 'passkeys', icon: Fingerprint, label: 'Passkeys & 2FA' },
-          { id: 'audit', icon: Terminal, label: 'Audit Log' },
-          { id: 'history', icon: History, MapPin, label: 'Sign-in History' },
-        ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as TabType)}
-            className={cn(
-              "flex items-center gap-2 px-5 py-2.5 rounded-full font-semibold transition-all whitespace-nowrap",
-              activeTab === tab.id 
-                ? "bg-white text-black shadow-lg" 
-                : "bg-[#1a1b23] text-slate-400 hover:text-white hover:bg-[#23242d] border border-white/5"
-            )}
-          >
-            <tab.icon size={16} />
-            {tab.label}
-          </button>
-        ))}
+          { id: 'overview', label: 'Overview', icon: Shield },
+          { id: 'session', label: 'Current Session', icon: Globe },
+          { id: 'devices', label: 'Active Sessions', icon: Laptop },
+          { id: 'history', label: 'Login History', icon: History },
+          { id: 'autologout', label: 'Auto Logout', icon: Clock },
+          { id: 'pin', label: 'App Lock', icon: KeyRound }
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as TabType)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all whitespace-nowrap",
+                isActive 
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" 
+                  : "text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent"
+              )}
+            >
+              <Icon className="w-4 h-4" />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
-      <AnimatePresence mode="wait">
-        {activeTab === 'overview' && (
-          <motion.div key="overview" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="md:col-span-1 bg-[#1a1b23] border border-white/10 rounded-3xl p-6 flex flex-col items-center justify-center text-center relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-                  <Shield size={120} />
+      {activeTab === 'overview' && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+              <h3 className="text-lg font-bold text-white mb-4">Account Information</h3>
+              <div className="space-y-4">
+                <div className="flex justify-between border-b border-white/5 pb-3">
+                  <span className="text-neutral-400">Signed-in account</span>
+                  <span className="text-white font-medium">{activeUserEmail}</span>
                 </div>
-                <div className="relative z-10">
-                  <div className="w-24 h-24 rounded-full border-4 flex items-center justify-center mb-4 mx-auto"
-                       style={{ borderColor: scoreResult.color }}>
-                    <span className="text-3xl font-black text-white">{scoreResult.score}</span>
-                  </div>
-                  <h3 className="text-xl font-bold text-white">{scoreResult.level} Security</h3>
-                  <p className="text-slate-400 text-sm mt-2">{scoreResult.score}/100 Score</p>
+                <div className="flex justify-between border-b border-white/5 pb-3">
+                  <span className="text-neutral-400">Sign-in method</span>
+                  <span className="text-white font-medium">{authProvider}</span>
                 </div>
-              </div>
-
-              <div className="md:col-span-2 bg-[#1a1b23] border border-white/10 rounded-3xl p-6">
-                <h3 className="text-lg font-bold text-white mb-4">Security Recommendations</h3>
-                <div className="space-y-3">
-                  {scoreResult.recommendations.map((rec, i) => (
-                    <div key={i} className="flex items-start gap-3 p-3 bg-black/20 rounded-xl">
-                      <div className="p-1.5 bg-amber-500/10 text-amber-500 rounded-lg shrink-0">
-                        <AlertTriangle size={16} />
-                      </div>
-                      <span className="text-slate-300 font-medium text-sm leading-relaxed">{rec}</span>
-                    </div>
-                  ))}
-                  {scoreResult.recommendations.length === 0 && (
-                    <div className="flex items-center gap-3 p-4 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
-                      <CheckCircle2 className="text-emerald-400" size={24} />
-                      <span className="text-emerald-100 font-medium">Your account is fully secured. Great job!</span>
-                    </div>
-                  )}
+                <div className="flex justify-between border-b border-white/5 pb-3">
+                  <span className="text-neutral-400">Current session status</span>
+                  <span className="text-emerald-400 font-medium">Active</span>
+                </div>
+                <div className="flex justify-between border-b border-white/5 pb-3">
+                  <span className="text-neutral-400">Last sign-in time</span>
+                  <span className="text-white font-medium">{lastSignIn ? format(new Date(lastSignIn), 'PP p') : 'Not available'}</span>
+                </div>
+                <div className="flex justify-between pb-3">
+                  <span className="text-neutral-400">Active sessions</span>
+                  <span className="text-white font-medium">{activeDeviceCount || 'Not available'}</span>
                 </div>
               </div>
             </div>
-            
-            <div className="bg-[#1a1b23] border border-white/10 rounded-3xl p-6">
-                <h3 className="text-lg font-bold text-white mb-4">Account Connection</h3>
-                <div className="flex items-center justify-between p-4 bg-black/20 rounded-2xl border border-white/5">
-                   <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center text-white font-bold">
-                         {currentUser?.email ? currentUser.email.charAt(0).toUpperCase() : 'G'}
-                      </div>
-                      <div>
-                         <p className="font-bold text-white">{currentUser?.email || 'Connected'}</p>
-                         <p className="text-sm text-slate-400">Authenticated via {currentUser?.providerData?.[0]?.providerId === 'google.com' ? 'Google OAuth' : 'Identity Provider'}</p>
-                      </div>
-                   </div>
-                   <div className="px-3 py-1 bg-emerald-500/20 text-emerald-400 text-xs font-bold rounded-lg uppercase tracking-wider">
-                      Verified
-                   </div>
-                </div>
-            </div>
-          </motion.div>
-        )}
 
-        {activeTab === 'devices' && (
-          <motion.div key="devices" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
-            <div className="flex justify-between items-end mb-4">
-              <h3 className="text-xl font-bold text-white">Active Sessions</h3>
-              <button 
-                onClick={() => setShowRevokeAllModal(true)}
-                disabled={devices.length <= 1}
-                className="text-sm font-semibold text-red-400 hover:text-red-300 transition-colors disabled:opacity-50"
-              >
-                Sign out all other devices
-              </button>
-            </div>
-            {devices.map(device => (
-              <div key={device.id} className="bg-[#1a1b23] border border-white/10 p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-start gap-4">
-                  <div className="p-3 bg-white/5 rounded-xl text-white">
-                    {getDeviceIcon(device.deviceType || '')}
+            <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+              <h3 className="text-lg font-bold text-white mb-4">Security Recommendations</h3>
+              <div className="space-y-4">
+                 <div className="flex items-center justify-between p-3 rounded-xl bg-black/20 border border-white/5">
+                  <div className="flex items-center gap-3">
+                    <KeyRound className={securitySettings.pinEnabled ? "text-emerald-400" : "text-neutral-500"} />
+                    <span className="text-white font-medium">PIN Lock</span>
                   </div>
+                  <span className={securitySettings.pinEnabled ? "text-emerald-400 text-sm" : "text-neutral-400 text-sm"}>
+                    {securitySettings.pinEnabled ? 'On' : 'Off'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-xl bg-black/20 border border-white/5">
+                  <div className="flex items-center gap-3">
+                    <Clock className={isAutoLogout ? "text-emerald-400" : "text-neutral-500"} />
+                    <span className="text-white font-medium">Auto Logout</span>
+                  </div>
+                  <span className={isAutoLogout ? "text-emerald-400 text-sm" : "text-neutral-400 text-sm"}>
+                    {isAutoLogout ? `${currentTimeout} min` : 'Off'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {activeTab === 'session' && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+          <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+             <h3 className="text-lg font-bold text-white mb-4">Browser Information</h3>
+             <p className="text-sm text-neutral-400 mb-6">This information is reported by your browser.</p>
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl bg-black/20 border border-white/5">
+                  <span className="text-xs text-neutral-500 uppercase tracking-wider block mb-1">Browser / User Agent</span>
+                  <span className="text-sm text-white">{navigator.userAgent}</span>
+                </div>
+                <div className="p-4 rounded-xl bg-black/20 border border-white/5">
+                  <span className="text-xs text-neutral-500 uppercase tracking-wider block mb-1">Language</span>
+                  <span className="text-sm text-white">{navigator.language || 'Not available'}</span>
+                </div>
+                <div className="p-4 rounded-xl bg-black/20 border border-white/5">
+                  <span className="text-xs text-neutral-500 uppercase tracking-wider block mb-1">Time Zone</span>
+                  <span className="text-sm text-white">{Intl.DateTimeFormat().resolvedOptions().timeZone || 'Not available'}</span>
+                </div>
+                <div className="p-4 rounded-xl bg-black/20 border border-white/5">
+                  <span className="text-xs text-neutral-500 uppercase tracking-wider block mb-1">Screen Size</span>
+                  <span className="text-sm text-white">{window.screen.width}x{window.screen.height}</span>
+                </div>
+                <div className="p-4 rounded-xl bg-black/20 border border-white/5 flex items-center justify-between">
                   <div>
-                    <h4 className="font-bold text-white flex items-center gap-2">
-                      {device.deviceName}
-                      {device.isCurrent && <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-xs rounded-full uppercase font-bold tracking-wider">This Device</span>}
-                    </h4>
-                    <p className="text-sm text-slate-400 mt-1 flex items-center gap-4">
-                      <span className="flex items-center gap-1"><MapPin size={14}/> {device.city || 'Unknown Location'}</span>
-                      <span className="flex items-center gap-1"><Globe size={14}/> IP: {device.ip || 'Unknown'}</span>
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Last active: {device.lastActive ? format(new Date(device.lastActive), 'MMM d, h:mm a') : 'Recently'}
-                    </p>
+                    <span className="text-xs text-neutral-500 uppercase tracking-wider block mb-1">Status</span>
+                    <span className="text-sm text-white">{isOnline ? 'Online' : 'Offline'}</span>
                   </div>
+                  {isOnline ? <Wifi className="text-emerald-400" /> : <WifiOff className="text-rose-400" />}
                 </div>
-                {!device.isCurrent && (
-                  <button 
-                    onClick={() => handleRevokeDevice(device.id)}
-                    className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 font-bold rounded-xl transition-colors text-sm whitespace-nowrap"
-                  >
-                    Sign Out
-                  </button>
-                )}
-              </div>
-            ))}
-          </motion.div>
-        )}
+             </div>
+          </div>
+          
+          <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+             <h3 className="text-lg font-bold text-white mb-4">Location</h3>
+             <p className="text-sm text-neutral-400 mb-4">
+               We can request your location through the browser to verify your login area. 
+               This requires your permission.
+             </p>
+             {geoLoc ? (
+               <div className="p-4 rounded-xl bg-black/20 border border-white/5">
+                  <span className="text-xs text-neutral-500 uppercase tracking-wider block mb-1">Coordinates</span>
+                  <span className="text-sm text-white">Lat: {geoLoc.lat.toFixed(4)}, Lon: {geoLoc.lon.toFixed(4)}</span>
+               </div>
+             ) : (
+               <div className="flex items-center gap-4">
+                 <button onClick={requestLocation} className="px-4 py-2 bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-xl font-medium text-sm hover:bg-blue-600/30">
+                   Request Location Permission
+                 </button>
+                 {geoError && <span className="text-sm text-rose-400">{geoError}</span>}
+               </div>
+             )}
+          </div>
+        </motion.div>
+      )}
 
-        {activeTab === 'passkeys' && (
-          <motion.div key="passkeys" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-6">
-            <div className="bg-[#1a1b23] border border-white/10 rounded-3xl p-6">
-              <div className="flex items-start gap-4 mb-6">
-                <div className="p-3 bg-blue-500/20 text-blue-400 rounded-xl">
-                  <Fingerprint size={24} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">Passkeys (WebAuthn)</h3>
-                  <p className="text-slate-400 text-sm mt-1">Sign in safely without a password using your device's biometrics or security key.</p>
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between p-4 bg-black/20 rounded-2xl border border-white/5">
-                <div>
-                  <p className="font-bold text-white">Device Passkey</p>
-                  <p className="text-sm text-slate-400">{securitySettings.hasPasskey ? 'Configured and active' : 'Not configured'}</p>
-                </div>
-                {!securitySettings.hasPasskey ? (
-                  <button 
-                    onClick={handleRegisterPasskey}
-                    disabled={isProcessing}
-                    className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl transition-all"
+      {activeTab === 'devices' && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+          <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+             <div className="flex items-center justify-between mb-4">
+                 <h3 className="text-lg font-bold text-white">Active Sessions</h3>
+                 {activeDevices.length > 1 && (
+                     <button onClick={() => setShowRevokeAllModal(true)} className="px-4 py-2 text-sm bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 rounded-xl font-medium">
+                         Sign Out Other Sessions
+                     </button>
+                 )}
+             </div>
+             <p className="text-sm text-neutral-400 mb-6">These sessions are currently signed in to your account. This data is recorded by our backend.</p>
+             
+             {loadingDevices ? (
+               <div className="text-neutral-400 text-sm">Loading sessions...</div>
+             ) : activeDevices.length === 0 ? (
+               <div className="text-neutral-400 text-sm">No active sessions found.</div>
+             ) : (
+               <div className="space-y-4">
+                 {activeDevices.map((device) => (
+                   <div key={device.id} className={cn(
+                     "p-5 rounded-2xl border transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4",
+                     device.isCurrent ? "bg-blue-600/10 border-blue-500/30" : "bg-black/20 border-white/5"
+                   )}>
+                     <div className="flex items-center gap-4">
+                        <div className="shrink-0 flex items-center justify-center w-16 h-16">
+                          <AnimatedDeviceGraphic type={device.deviceType} isCurrent={device.isCurrent} />
+                        </div>
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <h4 className="text-white font-bold">{device.browser} on {device.os}</h4>
+                            {device.isCurrent && (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase">
+                                This Device
+                              </span>
+                            )}
+                            <span className={cn(
+                              "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
+                              device.status === 'Suspicious' ? "bg-amber-500/20 text-amber-400" :
+                              device.status === 'Blocked' ? "bg-rose-500/20 text-rose-400" :
+                              "bg-blue-500/20 text-blue-400"
+                            )}>
+                              {device.status || 'Active'}
+                            </span>
+                          </div>
+                          <div className="text-xs text-neutral-300 font-mono mb-1">
+                            ID: {device.id}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-indigo-300 font-medium">
+                            {device.location && device.location !== 'Unknown' && (
+                              <div className="flex items-center gap-1.5">
+                                <MapPin size={14} className="text-indigo-400" />
+                                {device.location}
+                              </div>
+                            )}
+                            {device.ip && device.ip !== 'Detecting...' && (
+                              <div className="flex items-center gap-1.5">
+                                <Globe size={14} className="text-indigo-400" />
+                                {device.ip}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-xs text-neutral-400 mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+                            <span><strong className="text-neutral-300">Signed in:</strong> {format(new Date(device.createdAt), 'MMM d, yyyy h:mm:ss.SSS a')}</span>
+                            <span><strong className="text-neutral-300">Last active:</strong> {format(new Date(device.lastActive), 'MMM d, yyyy h:mm:ss a')}</span>
+                            <span><strong className="text-neutral-300">Device:</strong> <span className="capitalize">{device.model ? (device.manufacturer && !device.model.toLowerCase().includes(device.manufacturer.toLowerCase()) ? `${device.manufacturer} ${device.model}` : device.model) : (device.deviceType || 'Unknown')}</span></span>
+                          </div>
+                        </div>
+                     </div>
+                     <button 
+                         onClick={() => setDeviceToRemove(device)}
+                         className="px-4 py-2 text-sm text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 rounded-xl transition-colors font-medium whitespace-nowrap"
+                     >
+                         Sign Out
+                     </button>
+                   </div>
+                 ))}
+               </div>
+             )}
+          </div>
+        </motion.div>
+      )}
+
+      {activeTab === 'history' && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+          <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+            <h3 className="text-lg font-bold text-white mb-1">Login History</h3>
+            <p className="text-sm text-neutral-400 mb-6">Recent authentication attempts recorded by our backend.</p>
+
+            {loadingLogs ? (
+               <div className="text-neutral-400 text-sm">Loading history...</div>
+             ) : loginLogs.length === 0 ? (
+               <div className="text-neutral-400 text-sm">No login history available.</div>
+             ) : (
+               <div className="overflow-x-auto">
+                 <table className="w-full text-left text-sm text-neutral-300">
+                   <thead className="bg-black/20 text-neutral-500 text-xs uppercase">
+                     <tr>
+                       <th className="px-4 py-3 rounded-l-xl font-medium">Date & Time</th>
+                       <th className="px-4 py-3 font-medium">Status</th>
+                       <th className="px-4 py-3 font-medium">Method</th>
+                       <th className="px-4 py-3 rounded-r-xl font-medium">Location & Device</th>
+                     </tr>
+                   </thead>
+                   <tbody className="divide-y divide-white/5">
+                     {loginLogs.map((log) => (
+                       <tr key={log.id} className="hover:bg-white/5">
+                         <td className="px-4 py-3 whitespace-nowrap text-xs sm:text-sm">{format(new Date(log.timestamp), 'MMM d, yyyy h:mm a')}</td>
+                         <td className="px-4 py-3 text-xs sm:text-sm">
+                           {log.status === 'Success' ? (
+                             <span className="text-emerald-400 font-medium">Success</span>
+                           ) : (
+                             <span className="text-rose-400 font-medium">Failed</span>
+                           )}
+                         </td>
+                         <td className="px-4 py-3 text-xs sm:text-sm">{log.method || 'Unknown'}</td>
+                         <td className="px-4 py-3">
+                           <div className="font-medium text-white text-xs sm:text-sm">{log.browser} on {log.os}</div>
+                           {log.location && log.location !== 'Unknown' && (
+                             <div className="text-xs text-indigo-300/80 mt-0.5 flex items-center gap-1">
+                               <MapPin size={10} /> {log.location}
+                             </div>
+                           )}
+                         </td>
+                       </tr>
+                     ))}
+                   </tbody>
+                 </table>
+               </div>
+             )}
+          </div>
+        </motion.div>
+      )}
+
+      {activeTab === 'autologout' && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+          <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+            <h3 className="text-lg font-bold text-white mb-1">Auto Logout</h3>
+            <p className="text-sm text-neutral-400 mb-6">Automatically sign out after a period of inactivity.</p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[
+                { label: 'Off', minutes: 0 },
+                { label: '5 minutes', minutes: 5 },
+                { label: '15 minutes', minutes: 15 },
+                { label: '30 minutes', minutes: 30 },
+                { label: '1 hour', minutes: 60 }
+              ].map((opt) => {
+                const isSelected = (!isAutoLogout && opt.minutes === 0) || (isAutoLogout && currentTimeout === opt.minutes);
+                return (
+                  <button
+                    key={opt.minutes}
+                    onClick={() => handleTimeoutChange(opt.minutes)}
+                    className={cn(
+                      "p-4 rounded-xl border text-left transition-all",
+                      isSelected 
+                        ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-300"
+                        : "bg-black/20 border-white/5 hover:border-white/20 text-neutral-300"
+                    )}
                   >
-                    {isProcessing ? 'Registering...' : 'Add Passkey'}
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold">{opt.label}</span>
+                      {isSelected && <Check className="w-5 h-5 text-emerald-400" />}
+                    </div>
                   </button>
-                ) : (
-                  <div className="flex items-center gap-2 text-emerald-400 font-bold">
-                    <CheckCircle2 size={18} /> Active
-                  </div>
-                )}
-              </div>
+                )
+              })}
             </div>
-            
-            <div className="bg-[#1a1b23] border border-white/10 rounded-3xl p-6">
-               <h3 className="text-lg font-bold text-white mb-2 uppercase tracking-wide text-xs text-slate-400">Two-Factor Authentication</h3>
-               
-               {!isMfaEnabled ? (
+          </div>
+        </motion.div>
+      )}
+
+      {activeTab === 'pin' && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+          <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+             <h3 className="text-lg font-bold text-white mb-1">App Lock (PIN)</h3>
+             <p className="text-sm text-neutral-400 mb-6">Require a PIN to unlock the app when it is opened or after auto-logout.</p>
+             
+             <div className="flex flex-col sm:flex-row gap-4">
+               {securitySettings.pinEnabled ? (
                  <>
-                   <p className="text-slate-400 text-sm mb-4">Not configured</p>
-                   <button
-                      onClick={() => setShowTotpModal(true)}
-                     className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl transition-all uppercase tracking-wider text-sm"
+                   <button 
+                     onClick={() => setShowPinModal(true)}
+                     className="px-6 py-3 rounded-xl bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 font-semibold border border-blue-500/30"
                    >
-                      SETUP 2FA
+                     Change PIN
+                   </button>
+                   <button 
+                     onClick={lockApp}
+                     className="px-6 py-3 rounded-xl bg-white/10 text-white hover:bg-white/20 font-semibold"
+                   >
+                     Lock App Now
                    </button>
                  </>
                ) : (
-                 <>
-                   <div className="flex items-center gap-2 mb-2">
-                     <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-                     <span className="text-emerald-400 font-bold tracking-widest uppercase text-sm">ENABLED</span>
-                   </div>
-                   <p className="text-white font-medium mb-1">Authenticator App</p>
-                   <p className="text-slate-400 text-sm mb-4">Protected with TOTP</p>
-                   <button
-                     onClick={async () => {
-                        const code = window.prompt("To disable 2FA, please enter a valid authenticator code:");
-                        if (!code) return;
-                        setIsProcessing(true);
-                        try {
-                           const token = await auth.currentUser?.getIdToken();
-                           const res = await fetch('/api/security/2fa/disable', {
-                             method: 'POST',
-                             headers: {
-                               'Content-Type': 'application/json',
-                               'Authorization': `Bearer ${token}`
-                             },
-                             body: JSON.stringify({ code })
-                           });
-                           const data = await res.json();
-                           if (data.success) {
-                             setIsMfaEnabled(false);
-                             alert("Two-Factor Authentication disabled.");
-                           } else {
-                             alert("Failed to disable 2FA: " + (data.error || 'Invalid code'));
-                           }
-                        } catch (err: any) {
-                           alert("Error disabling 2FA: " + err.message);
-                        } finally {
-                           setIsProcessing(false);
-                        }
-                     }}
-                     className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl transition-all uppercase tracking-wider text-sm"
-                   >
-                     MANAGE 2FA
-                   </button>
-                 </>
+                 <button 
+                   onClick={() => setShowPinModal(true)}
+                   className="px-6 py-3 rounded-xl bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 font-semibold border border-emerald-500/30"
+                 >
+                   Set Up PIN
+                 </button>
                )}
-            </div>
-            
-            <AnimatePresence>
-              {showTotpModal && (
-                <TotpSetupModal 
-                  onClose={() => setShowTotpModal(false)}
-                  onComplete={() => {
-                    setShowTotpModal(false);
-                    setIsMfaEnabled(true);
-                  }}
-                />
-              )}
-            </AnimatePresence>
-          </motion.div>
-        )}
-
-        {activeTab === 'audit' && (
-          <motion.div key="audit" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
-             <h3 className="text-lg font-bold text-white mb-4">Immutable Audit Log</h3>
-             <div className="bg-[#1a1b23] border border-white/10 rounded-3xl overflow-hidden">
-                {auditLogs.length === 0 ? (
-                  <div className="p-8 text-center text-slate-400">
-                    No security events recorded yet.
-                  </div>
-                ) : (
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-black/40 text-slate-400">
-                      <tr>
-                        <th className="p-4 font-semibold">Time</th>
-                        <th className="p-4 font-semibold">Event</th>
-                        <th className="p-4 font-semibold">IP Address</th>
-                        <th className="p-4 font-semibold">Details</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {auditLogs.map((log: any) => (
-                        <tr key={log.id} className="hover:bg-white/5">
-                          <td className="p-4 text-slate-300 whitespace-nowrap">
-                            {format(new Date(log.timestamp), 'MMM d, HH:mm')}
-                          </td>
-                          <td className="p-4">
-                            <span className={cn(
-                              "px-2 py-1 rounded text-xs font-bold",
-                              log.eventType.includes('SUCCESS') ? "bg-emerald-500/20 text-emerald-400" :
-                              log.eventType.includes('FAILED') ? "bg-red-500/20 text-red-400" :
-                              log.eventType.includes('LEDGER') ? "bg-blue-500/20 text-blue-400" :
-                              "bg-white/10 text-slate-300"
-                            )}>
-                              {log.eventType}
-                            </span>
-                          </td>
-                          <td className="p-4 text-slate-400 font-mono text-xs">{log.ip}</td>
-                          <td className="p-4 text-slate-400 text-xs truncate max-w-[200px]" title={log.details}>
-                            {log.details || '-'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
              </div>
-          </motion.div>
-        )}
+          </div>
+        </motion.div>
+      )}
 
-        {activeTab === 'history' && (
-          <motion.div key="history" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-4">
-            {loginLogs.length === 0 ? (
-              <div className="text-center p-8 text-slate-400 bg-[#1a1b23] rounded-3xl border border-white/5">
-                No sign-in history available.
+      <AnimatePresence>
+        {deviceToRemove && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDeviceToRemove(null)} />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative vision-glass rounded-[24px] p-6 max-w-sm w-full">
+              <h3 className="text-lg font-bold text-white mb-2">Sign Out Session?</h3>
+              <p className="text-sm text-neutral-400 mb-6">
+                Are you sure you want to sign out <strong>{deviceToRemove.deviceName || deviceToRemove.browser}</strong>? This session will be terminated immediately.
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => setDeviceToRemove(null)} className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium">Cancel</button>
+                <button onClick={handleConfirmRevokeDevice} className="flex-1 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-medium">Sign Out</button>
               </div>
-            ) : (
-              loginLogs.map(log => (
-                <div key={log.id} className="bg-[#1a1b23] border border-white/10 p-4 rounded-2xl flex items-center justify-between">
-                  <div>
-                    <h4 className="text-white font-bold">{log.deviceName} • {log.browser}</h4>
-                    <p className="text-sm text-slate-400">{log.city}, {log.country} • {log.ip}</p>
-                    <p className="text-xs text-slate-500 mt-1">{format(new Date(log.timestamp), 'MMM d, yyyy h:mm a')}</p>
-                  </div>
-                  <div className={cn(
-                    "px-3 py-1 rounded-lg text-xs font-bold uppercase",
-                    log.status === 'Success' ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"
-                  )}>
-                    {log.status}
-                  </div>
-                </div>
-              ))
-            )}
-          </motion.div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
-      {/* Revoke All Modal */}
       <AnimatePresence>
         {showRevokeAllModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowRevokeAllModal(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-neutral-900 border border-white/10 p-6 rounded-3xl w-full max-w-md relative z-10 shadow-2xl">
-              <h3 className="text-xl font-bold text-white mb-2">Sign out all other devices?</h3>
-              <p className="text-slate-400 text-sm mb-6">This will securely invalidate all session tokens across every other device logged into this account. You will remain signed in here.</p>
-              <div className="flex justify-end gap-3">
-                <button onClick={() => setShowRevokeAllModal(false)} className="px-5 py-2.5 rounded-xl font-bold text-white bg-white/10 hover:bg-white/20 transition-all">Cancel</button>
-                <button onClick={handleRevokeAll} disabled={isProcessing} className="px-5 py-2.5 rounded-xl font-bold text-white bg-red-500 hover:bg-red-600 transition-all disabled:opacity-50">
-                  {isProcessing ? 'Processing...' : 'Confirm Sign Out'}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Lockdown Modal */}
-      <AnimatePresence>
-        {showLockdownModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowLockdownModal(false)} className="absolute inset-0 bg-red-950/80 backdrop-blur-md" />
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-neutral-900 border border-red-500/30 p-8 rounded-3xl w-full max-w-md relative z-10 shadow-2xl">
-              <div className="w-16 h-16 rounded-2xl bg-red-500/20 text-red-500 flex items-center justify-center mb-6 border border-red-500/30">
-                <ShieldAlert size={32} />
-              </div>
-              <h3 className="text-2xl font-black text-white mb-2">Emergency Lockdown</h3>
-              <p className="text-red-300 text-sm mb-6 font-medium leading-relaxed">
-                WARNING: This will instantly revoke ALL sessions, block sensitive operations, and lock out your account. 
-                You will need to reauthenticate to regain access. Use only if you suspect a breach.
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowRevokeAllModal(false)} />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative vision-glass rounded-[24px] p-6 max-w-sm w-full">
+              <h3 className="text-lg font-bold text-white mb-2">Sign Out Other Sessions?</h3>
+              <p className="text-sm text-neutral-400 mb-6">
+                Are you sure you want to sign out all other active sessions? Your current session will remain active.
               </p>
-              <div className="space-y-3">
-                <button onClick={handleEmergencyLockdown} disabled={isProcessing} className="w-full py-4 rounded-xl font-bold text-white bg-red-600 hover:bg-red-500 transition-all shadow-[0_0_20px_rgba(220,38,38,0.4)] disabled:opacity-50">
-                  {isProcessing ? 'LOCKING DOWN...' : 'YES, LOCKDOWN ACCOUNT'}
-                </button>
-                <button onClick={() => setShowLockdownModal(false)} className="w-full py-4 rounded-xl font-bold text-white bg-white/5 hover:bg-white/10 transition-all">
-                  Cancel
-                </button>
+              <div className="flex gap-3">
+                <button onClick={() => setShowRevokeAllModal(false)} className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium">Cancel</button>
+                <button onClick={handleRevokeAllOther} className="flex-1 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-medium">Sign Out All Others</button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {showPinModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowPinModal(false)} />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative vision-glass rounded-[24px] p-6 max-w-sm w-full">
+              <h3 className="text-lg font-bold text-white mb-2">{securitySettings.pinEnabled ? 'Change PIN' : 'Set Up PIN'}</h3>
+              <p className="text-sm text-neutral-400 mb-6">Enter a secure PIN to protect your account.</p>
+              
+              <form onSubmit={handleSavePin} className="space-y-4">
+                {securitySettings.pinEnabled && (
+                  <div>
+                    <label className="text-xs text-neutral-500 mb-1 block">Current PIN</label>
+                    <input 
+                      type="password" 
+                      value={currentPinInput}
+                      onChange={(e) => setCurrentPinInput(e.target.value)}
+                      className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-emerald-500"
+                      maxLength={securitySettings.pinLength || 4}
+                      required
+                    />
+                  </div>
+                )}
+                
+                {!securitySettings.pinEnabled && (
+                  <div className="flex gap-2 mb-4">
+                    <button type="button" onClick={() => setPinLengthChoice(4)} className={cn("flex-1 py-2 rounded-lg text-sm font-medium", pinLengthChoice === 4 ? "bg-emerald-600 text-white" : "bg-white/5 text-neutral-400")}>4 Digits</button>
+                    <button type="button" onClick={() => setPinLengthChoice(6)} className={cn("flex-1 py-2 rounded-lg text-sm font-medium", pinLengthChoice === 6 ? "bg-emerald-600 text-white" : "bg-white/5 text-neutral-400")}>6 Digits</button>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-xs text-neutral-500 mb-1 block">New PIN</label>
+                  <input 
+                    type="password" 
+                    value={newPinInput}
+                    onChange={(e) => setNewPinInput(e.target.value)}
+                    className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-emerald-500"
+                    maxLength={pinLengthChoice}
+                    minLength={pinLengthChoice}
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-xs text-neutral-500 mb-1 block">Confirm New PIN</label>
+                  <input 
+                    type="password" 
+                    value={confirmPinInput}
+                    onChange={(e) => setConfirmPinInput(e.target.value)}
+                    className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-emerald-500"
+                    maxLength={pinLengthChoice}
+                    minLength={pinLengthChoice}
+                    required
+                  />
+                </div>
+
+                {pinError && <p className="text-rose-400 text-sm">{pinError}</p>}
+                {pinSuccess && <p className="text-emerald-400 text-sm">{pinSuccess}</p>}
+
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setShowPinModal(false)} className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium">Cancel</button>
+                  {securitySettings.pinEnabled && (
+                      <button type="button" onClick={handleRemovePin} className="flex-1 py-2.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 font-medium">Remove</button>
+                  )}
+                  <button type="submit" className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-medium">Save</button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -228,28 +228,28 @@ export default function Notifications() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#05060a] text-white p-4 sm:p-6 lg:p-8 space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-6 max-w-6xl mx-auto text-white">
       {/* Top Header Card */}
-      <div className="relative overflow-hidden rounded-3xl bg-neutral-900/60 backdrop-blur-2xl border border-white/10 p-6 sm:p-8 shadow-2xl">
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-neutral-900/60 backdrop-blur-2xl border border-white/10 p-5 sm:p-8 shadow-2xl">
         <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
         
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-inner">
-              <Bell size={28} className={unreadCount > 0 ? 'animate-bounce' : ''} />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-inner flex-shrink-0">
+              <Bell size={24} className={unreadCount > 0 ? 'animate-bounce' : ''} />
             </div>
             <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+              <div className="flex items-center gap-3 flex-wrap">
+                <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-white">
                   Notification Center
                 </h1>
                 {unreadCount > 0 && (
-                  <span className="px-3 py-1 bg-rose-500 text-white text-xs font-bold rounded-full shadow-lg animate-pulse">
+                  <span className="px-2.5 py-0.5 bg-rose-500 text-white text-xs font-bold rounded-full shadow-lg animate-pulse">
                     {unreadCount} Unread
                   </span>
                 )}
               </div>
-              <p className="text-sm text-slate-400 mt-1">
+              <p className="text-xs sm:text-sm text-slate-400 mt-1">
                 Real-time alerts generated from verified ledger, billing, backup, and security events.
               </p>
             </div>
@@ -261,14 +261,14 @@ export default function Notifications() {
               onClick={handleRefresh}
               disabled={isRefreshing}
               title="Re-evaluate application events"
-              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all disabled:opacity-50"
+              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all disabled:opacity-50 min-h-[38px] flex items-center justify-center"
             >
               <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
             </button>
 
             <button
               onClick={() => setIsBillManagerOpen(true)}
-              className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+              className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm min-h-[38px]"
             >
               <Receipt size={15} className="text-indigo-400" />
               Manage Bills ({bills.filter(b => !b.isPaid).length})
@@ -277,7 +277,7 @@ export default function Notifications() {
             {unreadCount > 0 && (
               <button
                 onClick={markAllAsRead}
-                className="px-3.5 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 hover:text-indigo-200 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+                className="px-3 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 hover:text-indigo-200 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm min-h-[38px]"
               >
                 <CheckCheck size={15} />
                 Mark All Read
@@ -286,7 +286,7 @@ export default function Notifications() {
 
             <button
               onClick={() => setIsSettingsOpen(true)}
-              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all"
+              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all min-h-[38px] flex items-center justify-center"
               title="Notification Settings"
             >
               <SettingsIcon size={16} />
@@ -298,12 +298,12 @@ export default function Notifications() {
       {/* Filter and Search Controls Bar */}
       <div className="flex flex-col md:flex-row items-center justify-between gap-4">
         {/* Horizontal Category Filter Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 w-full md:w-auto scrollbar-none">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 w-full md:w-auto no-scrollbar">
           {filterTabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveFilter(tab.id)}
-              className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 border ${
+              className={`px-3.5 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 border min-h-[36px] ${
                 activeFilter === tab.id
                   ? 'bg-indigo-600 text-white border-indigo-500 shadow-lg shadow-indigo-600/30'
                   : 'bg-neutral-900/60 hover:bg-neutral-800 text-slate-400 hover:text-white border-white/5'
@@ -497,7 +497,7 @@ function NotificationCard({ notification: n, onActionClick, onMarkRead, onDelete
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className={`group relative p-5 rounded-3xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+      className={`group relative p-4 sm:p-5 rounded-2xl sm:rounded-3xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 ${
         !n.read
           ? 'bg-gradient-to-r from-neutral-900/90 to-neutral-900/60 border-indigo-500/30 shadow-lg shadow-indigo-500/5'
           : 'bg-neutral-900/40 border-white/5 hover:border-white/10 opacity-80 hover:opacity-100'
@@ -509,9 +509,9 @@ function NotificationCard({ notification: n, onActionClick, onMarkRead, onDelete
       )}
 
       {/* Left Details */}
-      <div className="flex items-start gap-4 pl-3 sm:pl-4 min-w-0">
-        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 border shadow-inner ${visuals.bgColor} ${visuals.borderColor} ${visuals.color}`}>
-          <Icon size={22} />
+      <div className="flex items-start gap-3 sm:gap-4 pl-2 sm:pl-4 min-w-0">
+        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0 border shadow-inner ${visuals.bgColor} ${visuals.borderColor} ${visuals.color}`}>
+          <Icon size={20} className="sm:w-[22px] sm:h-[22px]" />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -542,11 +542,11 @@ function NotificationCard({ notification: n, onActionClick, onMarkRead, onDelete
       </div>
 
       {/* Right Actions */}
-      <div className="flex items-center justify-between sm:justify-end gap-2 self-end sm:self-center pl-3 sm:pl-0 flex-shrink-0">
+      <div className="flex items-center justify-end gap-2 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-white/5 flex-shrink-0">
         {n.actionUrl && (
           <button
             onClick={() => onActionClick(n)}
-            className="px-3.5 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 hover:border-indigo-500/50 text-indigo-300 hover:text-indigo-200 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
+            className="px-3.5 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 hover:border-indigo-500/50 text-indigo-300 hover:text-indigo-200 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow-sm min-h-[36px]"
           >
             {n.actionLabel || 'View'}
             <ArrowUpRight size={14} />
@@ -557,18 +557,18 @@ function NotificationCard({ notification: n, onActionClick, onMarkRead, onDelete
           <button
             onClick={() => onMarkRead(n.id)}
             title="Mark as read"
-            className="p-2 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-xl transition-colors"
+            className="p-2 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-xl transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
           >
-            <CheckCircle2 size={17} />
+            <CheckCircle2 size={18} />
           </button>
         )}
 
         <button
           onClick={() => onDelete(n.id)}
           title="Delete notification"
-          className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors"
+          className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors min-h-[36px] min-w-[36px] flex items-center justify-center"
         >
-          <Trash2 size={17} />
+          <Trash2 size={18} />
         </button>
       </div>
     </motion.div>

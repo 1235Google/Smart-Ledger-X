@@ -79,7 +79,6 @@ export interface SecuritySettings {
   autoLogoutEnabled?: boolean;
   registeredDevices: RegisteredDevice[];
   adminPasswordHash?: string;
-  hasPasskey?: boolean;
   fallbackPassword?: string;
   appCheckEnabled?: boolean;
 }
@@ -91,7 +90,7 @@ export interface LoginHistoryEntry {
   userName?: string;
   userAvatar?: string;
   deviceName: string;
-  deviceType?: 'desktop' | 'mobile' | 'tablet';
+  deviceType?: 'desktop' | 'laptop' | 'mobile' | 'tablet';
   browser: string;
   os: string;
   ip: string;
@@ -120,7 +119,7 @@ export interface UserDevice {
   userAvatar?: string;
   deviceId: string;
   deviceName: string;
-  deviceType?: 'desktop' | 'mobile' | 'tablet';
+  deviceType?: 'desktop' | 'laptop' | 'mobile' | 'tablet';
   browser: string;
   os: string;
   ip: string;
@@ -132,6 +131,11 @@ export interface UserDevice {
   flagEmoji?: string;
   latitude?: number;
   longitude?: number;
+  accuracy?: number;
+  locationSource?: 'gps' | 'ip';
+  locationTimestamp?: string;
+  model?: string;
+  manufacturer?: string;
   isp?: string;
   screenResolution?: string;
   lastActive: string;

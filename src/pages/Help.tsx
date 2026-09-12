@@ -68,12 +68,12 @@ export default function Help() {
       {/* Header */}
       <header className="mb-6">
         <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 flex-shrink-0">
             <HelpCircle size={22} />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">Help & Support</h1>
-            <p className="text-slate-400 text-sm mt-0.5">Find answers to common questions or reach out to our team</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Help & Support</h1>
+            <p className="text-slate-400 text-xs sm:text-sm mt-0.5">Find answers to common questions or reach out to our team</p>
           </div>
         </div>
       </header>

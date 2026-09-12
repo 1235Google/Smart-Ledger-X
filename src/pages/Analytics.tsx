@@ -211,7 +211,7 @@ export default function Analytics() {
         </div>
         
         {/* Apple Segmented Pill Filter */}
-        <div className="flex items-center p-1 bg-[#1c1c1e] border border-white/[0.08] rounded-full self-start md:self-auto overflow-x-auto max-w-full shadow-sm">
+        <div className="flex items-center p-1 bg-[#1c1c1e] border border-white/[0.08] rounded-full self-start md:self-auto overflow-x-auto max-w-full no-scrollbar shadow-sm">
           {[
             { id: 'today', label: 'Day' },
             { id: 'week', label: 'Week' },
@@ -224,7 +224,7 @@ export default function Analytics() {
               key={tab.id}
               onClick={() => setFilter(tab.id as DateFilter)}
               className={cn(
-                "px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 whitespace-nowrap",
+                "px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 whitespace-nowrap min-h-[32px] flex items-center justify-center",
                 filter === tab.id
                   ? "bg-[#0a84ff] text-white shadow-[0_2px_8px_rgba(10,132,255,0.3)]"
                   : "text-[#86868b] hover:text-white"
@@ -237,7 +237,7 @@ export default function Analytics() {
       </header>
       
       {/* 1. Net Worth Tracker Glass Card */}
-      <div className="vision-glass rounded-[24px] p-7 md:p-8 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] relative overflow-hidden">
+      <div className="vision-glass rounded-2xl sm:rounded-[24px] p-5 sm:p-7 md:p-8 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] relative overflow-hidden">
         <div className="pointer-events-none absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/15 to-transparent" />
         
         <div className="flex items-center justify-between mb-6">
@@ -253,21 +253,21 @@ export default function Analytics() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 divide-y md:divide-y-0 md:divide-x divide-white/[0.06]">
             <div>
                 <p className="text-[#86868b] text-xs font-bold uppercase tracking-wider">Estimated Net Worth</p>
-                <p className="text-4xl font-extrabold text-white mt-1 font-tabular tracking-tight">
+                <p className="text-2xl min-[380px]:text-3xl sm:text-4xl font-extrabold text-white mt-1 font-tabular tracking-tight">
                   <CountUp value={netWorth.netWorth} formatter={(v) => formatCurrency(v)} />
                 </p>
                 <p className="text-xs text-[#86868b] mt-1 font-medium">Liquidity after unsettled liabilities</p>
             </div>
             <div className="pt-4 md:pt-0 md:pl-6">
                 <p className="text-[#86868b] text-xs font-bold uppercase tracking-wider">Inflows (Assets)</p>
-                <p className="text-2xl font-extrabold text-[#30d158] mt-1 font-tabular">
+                <p className="text-xl sm:text-2xl font-extrabold text-[#30d158] mt-1 font-tabular">
                   <CountUp value={netWorth.assets} formatter={(v) => `+ ${formatCurrency(v)}`} />
                 </p>
                 <p className="text-xs text-[#86868b] mt-1 font-medium">Cleared deposits in timeframe</p>
             </div>
             <div className="pt-4 md:pt-0 md:pl-6">
                 <p className="text-[#86868b] text-xs font-bold uppercase tracking-wider">Pending Receivables</p>
-                <p className="text-2xl font-extrabold text-[#ffd60a] mt-1 font-tabular">
+                <p className="text-xl sm:text-2xl font-extrabold text-[#ffd60a] mt-1 font-tabular">
                   <CountUp value={netWorth.liabilities} formatter={(v) => formatCurrency(v)} />
                 </p>
                 <p className="text-xs text-[#86868b] mt-1 font-medium">Outstanding payments due to you</p>
@@ -276,8 +276,8 @@ export default function Analytics() {
       </div>
 
       {/* 2. Insights & Warnings */}
-      <div className="vision-glass rounded-[24px] p-6 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)]">
-        <div className="flex items-center justify-between mb-4">
+      <div className="vision-glass rounded-2xl sm:rounded-[24px] p-4 sm:p-6 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-[#bf5af2]/15 text-[#bf5af2]">
               <Sparkles size={18}/>
@@ -287,7 +287,7 @@ export default function Analytics() {
           {aiInsights.length === 0 && (
             <button 
               onClick={generateInsights}
-              className="px-4 py-1.5 rounded-full bg-white/[0.08] hover:bg-white/[0.15] text-white text-xs font-bold transition-all"
+              className="px-4 py-2 rounded-full bg-white/[0.08] hover:bg-white/[0.15] text-white text-xs font-bold transition-all min-h-[36px]"
             >
               Analyze Financial Behavior
             </button>
@@ -316,10 +316,10 @@ export default function Analytics() {
       </div>
 
       {/* 3. Financial Health & Forecast */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="vision-glass rounded-[24px] p-6 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] flex items-center gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+        <div className="vision-glass rounded-2xl sm:rounded-[24px] p-5 sm:p-6 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
             <div className={cn(
-              "w-20 h-20 rounded-full border-4 flex items-center justify-center font-extrabold text-2xl shadow-inner shrink-0 font-tabular", 
+              "w-16 h-16 sm:w-20 sm:h-20 rounded-full border-4 flex items-center justify-center font-extrabold text-xl sm:text-2xl shadow-inner shrink-0 font-tabular", 
               healthScore > 75 ? "border-[#30d158] bg-[#30d158]/10 text-[#30d158]" : 
               healthScore > 50 ? "border-[#ffd60a] bg-[#ffd60a]/10 text-[#ffd60a]" : 
               "border-[#ff453a] bg-[#ff453a]/10 text-[#ff453a]"
@@ -328,26 +328,26 @@ export default function Analytics() {
             </div>
             <div>
                 <p className="text-xs font-bold uppercase tracking-wider text-[#86868b]">Health Score</p>
-                <p className="font-extrabold text-lg text-white mt-0.5">{healthScore > 75 ? 'Optimal Standing' : healthScore > 50 ? 'Stable Liquidity' : 'Action Recommended'}</p>
+                <p className="font-extrabold text-base sm:text-lg text-white mt-0.5">{healthScore > 75 ? 'Optimal Standing' : healthScore > 50 ? 'Stable Liquidity' : 'Action Recommended'}</p>
                 <p className="text-xs text-[#86868b] mt-1 leading-relaxed">{healthScore > 75 ? 'High savings velocity and low receivable risk.' : 'Watch overdue pending receivables to preserve cashflow.'}</p>
             </div>
         </div>
 
-        <div className="vision-glass rounded-[24px] p-6 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] flex flex-col justify-between">
+        <div className="vision-glass rounded-2xl sm:rounded-[24px] p-5 sm:p-6 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] flex flex-col justify-between">
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-[#86868b]">30-Day Pro Forma Forecast</p>
               <p className="text-xs text-[#86868b] mt-0.5">Projected trajectory based on current collection velocity</p>
             </div>
-            <p className="text-3xl font-extrabold text-[#0a84ff] font-tabular tracking-tight mt-3">
+            <p className="text-2xl sm:text-3xl font-extrabold text-[#0a84ff] font-tabular tracking-tight mt-3">
               <CountUp value={forecast} formatter={(v) => formatCurrency(v)} />
             </p>
         </div>
       </div>
 
       {/* 4. Progressive Animated Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="vision-glass rounded-[24px] h-[400px] p-6 flex flex-col justify-between shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)]">
-          <h3 className="text-sm font-bold text-white">Cashflow Velocity (Inflow vs Outflow)</h3>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <div className="vision-glass rounded-2xl sm:rounded-[24px] h-[320px] sm:h-[400px] p-4 sm:p-6 flex flex-col justify-between shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)]">
+          <h3 className="text-sm font-bold text-white mb-2">Cashflow Velocity (Inflow vs Outflow)</h3>
           <ResponsiveContainer width="100%" height="88%">
             <BarChart data={timelineData}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)"/>
@@ -360,8 +360,8 @@ export default function Analytics() {
           </ResponsiveContainer>
         </div>
 
-        <div className="vision-glass rounded-[24px] h-[400px] p-6 flex flex-col justify-between shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)]">
-          <h3 className="text-sm font-bold text-white">Expense Category Distribution</h3>
+        <div className="vision-glass rounded-2xl sm:rounded-[24px] h-[320px] sm:h-[400px] p-4 sm:p-6 flex flex-col justify-between shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)]">
+          <h3 className="text-sm font-bold text-white mb-2">Expense Category Distribution</h3>
           <ResponsiveContainer width="100%" height="88%">
             <PieChart>
               <Pie 
@@ -370,8 +370,8 @@ export default function Analytics() {
                 nameKey="name" 
                 cx="50%" 
                 cy="50%" 
-                innerRadius={70} 
-                outerRadius={105}
+                innerRadius={60} 
+                outerRadius={95}
                 paddingAngle={5}
                 isAnimationActive={true}
                 animationDuration={800}

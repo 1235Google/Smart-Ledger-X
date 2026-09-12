@@ -321,7 +321,7 @@ export default function Gullak() {
         {progress >= 100 && <Confetti width={width} height={height} recycle={false} numberOfPieces={500} gravity={0.2} />}
       
       {/* Premium Hero Section */}
-      <div className="relative overflow-hidden rounded-[2.5rem] p-8 md:p-12 bg-[#0A0B10] border border-white/5 shadow-2xl group">
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-8 md:p-12 bg-[#0A0B10] border border-white/5 shadow-2xl group">
         {/* Background Mesh & Ambient Glow */}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/20 via-[#0A0B10] to-[#0A0B10] opacity-80" />
         <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-purple-500/10 blur-[100px] rounded-full pointer-events-none" />
@@ -358,24 +358,24 @@ export default function Gullak() {
           ))}
         </div>
 
-        <div className="absolute -inset-[1px] bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-[2.5rem] opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-md pointer-events-none" />
+        <div className="absolute -inset-[1px] bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-2xl sm:rounded-[2.5rem] opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-md pointer-events-none" />
         
-        <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-12 pr-0 lg:pr-8">
-          <div className="space-y-10 flex-1">
-            <div className="flex items-center gap-4">
-              <div className="p-3.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-[0_0_30px_rgba(99,102,241,0.3)] border border-white/10 relative overflow-hidden group-hover:scale-105 transition-transform duration-500">
+        <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 sm:gap-12 pr-0 lg:pr-8">
+          <div className="space-y-6 sm:space-y-10 flex-1 w-full">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="p-3 sm:p-3.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-[0_0_30px_rgba(99,102,241,0.3)] border border-white/10 relative overflow-hidden group-hover:scale-105 transition-transform duration-500 shrink-0">
                 <div className="absolute inset-0 bg-white/20 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <PiggyBank className="text-white relative z-10" size={26} />
+                <PiggyBank className="text-white relative z-10" size={24} />
               </div>
-              <h1 className="text-2xl font-bold text-white tracking-tight">Gullak Savings</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Gullak Savings</h1>
             </div>
             
             <div className="relative">
-              <p className="text-slate-400 font-medium tracking-[0.2em] text-[11px] uppercase mb-4 flex items-center gap-2">
+              <div className="text-slate-400 font-medium tracking-[0.2em] text-[10px] sm:text-[11px] uppercase mb-2 sm:mb-4 flex items-center gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
                 Current Savings
-              </p>
-              <div className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white via-slate-200 to-slate-500 tracking-tight flex items-baseline gap-1 relative group cursor-default w-fit">
+              </div>
+              <div className="text-3xl sm:text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white via-slate-200 to-slate-500 tracking-tight flex items-baseline gap-1 relative group cursor-default w-fit max-w-full break-words">
                 <CountUp prefix="₹" value={totalSavings} />
                 
                 {/* Floating Coins on Hover */}
@@ -412,30 +412,30 @@ export default function Gullak() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
               {[
                 { icon: TrendingUp, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", shadow: "hover:shadow-[0_0_15px_rgba(16,185,129,0.2)]", label: `+₹${todaySavings.toLocaleString('en-IN')} Today` },
                 { icon: Flame, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", shadow: "hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]", label: `${savingsStreak} Day Streak` },
                 { icon: Sparkles, color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/20", shadow: "hover:shadow-[0_0_15px_rgba(168,85,247,0.2)]", label: "AI On Track" }
               ].map((badge, idx) => (
-                <div key={idx} className={`flex items-center gap-2 ${badge.bg} border ${badge.border} px-4 py-2.5 rounded-xl backdrop-blur-md transition-all duration-300 hover:-translate-y-1 ${badge.shadow} cursor-default`}>
-                  <badge.icon size={16} className={badge.color} />
-                  <span className={`${badge.color} text-[13px] font-semibold tracking-wide`}>{badge.label}</span>
+                <div key={idx} className={`flex items-center gap-2 ${badge.bg} border ${badge.border} px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl backdrop-blur-md transition-all duration-300 hover:-translate-y-1 ${badge.shadow} cursor-default text-xs sm:text-[13px]`}>
+                  <badge.icon size={15} className={badge.color} />
+                  <span className={`${badge.color} font-semibold tracking-wide truncate`}>{badge.label}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="relative w-full lg:w-[22rem] aspect-square max-w-[300px] mx-auto lg:mx-0 flex items-center justify-center shrink-0">
+          <div className="relative w-full lg:w-[22rem] aspect-square max-w-[260px] sm:max-w-[300px] mx-auto lg:mx-0 flex items-center justify-center shrink-0">
              <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/20 to-pink-500/20 rounded-full blur-[40px] animate-pulse group-hover:blur-[60px] transition-all duration-700" />
-             <div className="relative w-[90%] h-[90%] bg-[#0f1117]/80 border border-white/10 rounded-full backdrop-blur-2xl flex flex-col items-center justify-center shadow-[0_20px_50px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.1)] p-6 group-hover:scale-[1.02] transition-transform duration-500">
-                <Target size={20} className="text-slate-400 mb-3 opacity-50" />
+             <div className="relative w-[90%] h-[90%] bg-[#0f1117]/80 border border-white/10 rounded-full backdrop-blur-2xl flex flex-col items-center justify-center shadow-[0_20px_50px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.1)] p-4 sm:p-6 group-hover:scale-[1.02] transition-transform duration-500">
+                <Target size={18} className="text-slate-400 mb-2 sm:mb-3 opacity-50" />
                 <div className="text-slate-400 text-[10px] font-bold tracking-[0.2em] uppercase mb-1">Goal Progress</div>
-                <div className="text-5xl font-black text-white mb-2 tracking-tighter flex items-baseline">
+                <div className="text-4xl sm:text-5xl font-black text-white mb-1.5 sm:mb-2 tracking-tighter flex items-baseline">
                   <CountUp value={progress} />
-                  <span className="text-3xl font-bold text-white/50 ml-1">%</span>
+                  <span className="text-2xl sm:text-3xl font-bold text-white/50 ml-1">%</span>
                 </div>
-                <div className="text-[13px] text-slate-400 font-medium tracking-wide">
+                <div className="text-xs sm:text-[13px] text-slate-400 font-medium tracking-wide">
                   ₹{totalSavings.toLocaleString('en-IN')} / ₹{goal.toLocaleString('en-IN')}
                 </div>
                 
@@ -464,33 +464,35 @@ export default function Gullak() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex overflow-x-auto gap-2 pb-2 hide-scrollbar items-center w-full border-b border-white/10">
-        {[
-          { id: 'dashboard', icon: Target, label: 'Overview' },
-          { id: 'list', icon: ListIcon, label: 'Entries' },
-          { id: 'analytics', icon: BarChart3, label: 'Analytics' },
-          { id: 'achievements', icon: Trophy, label: 'Achievements' },
-          { id: 'settings', icon: Settings, label: 'Settings' }
-        ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
-            className={`flex items-center gap-2 px-5 py-3.5 rounded-t-xl whitespace-nowrap transition-all font-semibold ${
-              activeTab === tab.id 
-                ? 'bg-white/10 text-white border-b-2 border-indigo-500' 
-                : 'text-slate-400 hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <tab.icon size={18} />
-            {tab.label}
-          </button>
-        ))}
+      {/* Tabs Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-2">
+        <div className="flex overflow-x-auto gap-1.5 sm:gap-2 pb-1 hide-scrollbar items-center w-full sm:w-auto -mx-1 px-1">
+          {[
+            { id: 'dashboard', icon: Target, label: 'Overview' },
+            { id: 'list', icon: ListIcon, label: 'Entries' },
+            { id: 'analytics', icon: BarChart3, label: 'Analytics' },
+            { id: 'achievements', icon: Trophy, label: 'Achievements' },
+            { id: 'settings', icon: Settings, label: 'Settings' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-2.5 sm:py-3.5 rounded-xl sm:rounded-t-xl whitespace-nowrap transition-all font-semibold text-xs sm:text-sm min-h-[44px] ${
+                activeTab === tab.id 
+                  ? 'bg-white/10 text-white sm:border-b-2 sm:border-indigo-500' 
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <tab.icon size={16} />
+              {tab.label}
+            </button>
+          ))}
+        </div>
         
-        <div className="ml-auto pl-4">
+        <div className="w-full sm:w-auto sm:ml-auto">
           <button
             onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white font-semibold rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:shadow-[0_0_25px_rgba(99,102,241,0.5)]"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white font-semibold rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:shadow-[0_0_25px_rgba(99,102,241,0.5)] min-h-[44px] text-sm"
           >
             <Plus size={18} />
             New Saving
@@ -677,9 +679,9 @@ export default function Gullak() {
                  </select>
                </div>
             </div>
-            <div className="bg-[#0a0b10] border border-white/10 rounded-3xl overflow-hidden shadow-xl">
+            <div className="bg-[#0a0b10] border border-white/10 rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl">
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+                <table className="w-full text-left border-collapse min-w-[600px]">
                   <thead>
                     <tr className="border-b border-white/5 bg-black/20 text-slate-400 text-sm">
                       <th className="p-4 font-medium">Date & Time</th><th className="p-4 font-medium">Added By</th>
@@ -701,10 +703,10 @@ export default function Gullak() {
                           <td className="p-4"><span className="px-2.5 py-1 bg-white/5 rounded-md text-slate-300 text-xs">{entry.category || 'Savings'}</span></td>
                           <td className="p-4 text-slate-400 text-sm">{entry.paymentMethod}</td>
                           <td className="p-4 text-right">
-                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => handleDuplicate(entry)} className="p-1.5 text-slate-400 hover:text-white rounded-md hover:bg-white/10"><Copy size={16} /></button>
-                              <button onClick={() => openEditModal(entry)} className="p-1.5 text-slate-400 hover:text-indigo-400 rounded-md hover:bg-white/10"><Edit2 size={16} /></button>
-                              <button onClick={() => openDeleteModal(entry.id)} className="p-1.5 text-slate-400 hover:text-red-400 rounded-md hover:bg-white/10"><Trash2 size={16} /></button>
+                            <div className="flex items-center justify-end gap-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => handleDuplicate(entry)} aria-label="Duplicate entry" className="p-2 min-h-[38px] min-w-[38px] flex items-center justify-center text-slate-400 hover:text-white rounded-lg hover:bg-white/10 active:scale-95"><Copy size={16} /></button>
+                              <button onClick={() => openEditModal(entry)} aria-label="Edit entry" className="p-2 min-h-[38px] min-w-[38px] flex items-center justify-center text-slate-400 hover:text-indigo-400 rounded-lg hover:bg-white/10 active:scale-95"><Edit2 size={16} /></button>
+                              <button onClick={() => openDeleteModal(entry.id)} aria-label="Delete entry" className="p-2 min-h-[38px] min-w-[38px] flex items-center justify-center text-slate-400 hover:text-red-400 rounded-lg hover:bg-white/10 active:scale-95"><Trash2 size={16} /></button>
                             </div>
                           </td>
                         </tr>
@@ -803,37 +805,43 @@ export default function Gullak() {
       {/* Add / Edit Modal */}
       <AnimatePresence>
         {(isAddModalOpen || isEditModalOpen) && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-[#0f1117] border border-white/10 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden">
-              <div className="flex items-center justify-between p-6 border-b border-white/5 bg-black/20">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-[#0f1117] border border-white/10 rounded-2xl sm:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+              <div className="flex items-center justify-between p-4 sm:p-6 border-b border-white/5 bg-black/20 shrink-0">
+                <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
                   <PiggyBank className="text-indigo-400" /> 
                   {isEditModalOpen ? 'Edit Saving' : 'Add to Gullak'}
                 </h2>
-                <button onClick={() => { setIsAddModalOpen(false); setIsEditModalOpen(false); }} className="text-slate-400 hover:text-white transition-colors"><X size={24} /></button>
+                <button 
+                  onClick={() => { setIsAddModalOpen(false); setIsEditModalOpen(false); }} 
+                  aria-label="Close modal"
+                  className="text-slate-400 hover:text-white transition-colors p-2 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                >
+                  <X size={22} />
+                </button>
               </div>
-              <form onSubmit={isEditModalOpen ? handleEditEntry : handleAddEntry} className="p-6 space-y-5">
+              <form onSubmit={isEditModalOpen ? handleEditEntry : handleAddEntry} className="p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto">
                 <div>
                   <label className="text-sm font-medium text-slate-300 block mb-1.5">Amount (₹)</label>
-                  <input type="number" required value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-lg font-bold focus:border-indigo-500/50 outline-none" placeholder="0" />
+                  <input type="number" required value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-lg font-bold focus:border-indigo-500/50 outline-none min-h-[48px]" placeholder="0" />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-slate-300 block mb-1.5">Added By</label>
-                  <input type="text" required value={formData.personName} onChange={e => setFormData({...formData, personName: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none" placeholder="e.g. Rahul" />
+                  <input type="text" required value={formData.personName} onChange={e => setFormData({...formData, personName: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none min-h-[48px]" placeholder="e.g. Rahul" />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium text-slate-300 block mb-1.5">Date</label>
-                    <input type="date" required value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none" />
+                    <input type="date" required value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none min-h-[48px]" />
                   </div>
                   <div>
                     <label className="text-sm font-medium text-slate-300 block mb-1.5">Category</label>
-                    <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none">
+                    <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none min-h-[48px]">
                       {['Savings', 'Emergency', 'Investment', 'Goal', 'Other'].map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
                 </div>
-                <button type="submit" className="w-full py-4 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:shadow-[0_0_25px_rgba(99,102,241,0.5)] mt-2">
+                <button type="submit" className="w-full min-h-[48px] py-3.5 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:shadow-[0_0_25px_rgba(99,102,241,0.5)] mt-2">
                   {isEditModalOpen ? 'Save Changes' : 'Add to Piggy Bank'}
                 </button>
               </form>
@@ -845,14 +853,14 @@ export default function Gullak() {
       {/* Delete Modal */}
       <AnimatePresence>
         {isDeleteModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-[#0f1117] border border-white/10 rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl">
-              <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto mb-4 border border-red-500/20"><Trash2 size={32} /></div>
-              <h3 className="text-xl font-bold text-white mb-2">Delete Entry?</h3>
-              <p className="text-slate-400 mb-6">This action cannot be undone. Are you sure you want to remove this saving entry?</p>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-[#0f1117] border border-white/10 rounded-2xl sm:rounded-3xl p-5 sm:p-6 max-w-sm w-full text-center shadow-2xl">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto mb-4 border border-red-500/20"><Trash2 size={28} /></div>
+              <h3 className="text-lg sm:text-xl font-bold text-white mb-2">Delete Entry?</h3>
+              <p className="text-xs sm:text-sm text-slate-400 mb-6">This action cannot be undone. Are you sure you want to remove this saving entry?</p>
               <div className="flex gap-3">
-                <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white font-semibold rounded-xl transition-colors">Cancel</button>
-                <button onClick={handleDeleteConfirm} className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl transition-colors shadow-lg shadow-red-500/20">Delete</button>
+                <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 min-h-[44px] py-2.5 bg-white/5 hover:bg-white/10 text-white font-semibold rounded-xl transition-colors">Cancel</button>
+                <button onClick={handleDeleteConfirm} className="flex-1 min-h-[44px] py-2.5 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl transition-colors shadow-lg shadow-red-500/20">Delete</button>
               </div>
             </motion.div>
           </div>

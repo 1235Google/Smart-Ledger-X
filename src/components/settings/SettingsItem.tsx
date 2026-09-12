@@ -21,7 +21,7 @@ export default function SettingsItem({ icon: Icon, title, description, action, o
       whileHover={onClick ? { backgroundColor: "rgba(255, 255, 255, 0.03)" } : {}}
       whileTap={onClick ? { scale: 0.995 } : {}}
       className={cn(
-        "w-full flex items-center justify-between p-3.5 rounded-2xl transition-all duration-200",
+        "w-full flex items-center justify-between p-3.5 rounded-2xl transition-all duration-200 min-h-[48px]",
         onClick && "cursor-pointer"
       )}
     >

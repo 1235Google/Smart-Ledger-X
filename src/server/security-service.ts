@@ -9,18 +9,23 @@ export interface GeoLocation {
   country: string;
   region: string;
   city: string;
-  source: string;
+  source: 'gps' | 'ip' | 'approximate_ip';
+  latitude?: number;
+  longitude?: number;
+  accuracy?: number;
 }
 
 export interface ParsedDeviceInfo {
-  category: 'Desktop' | 'Mobile' | 'Tablet' | 'Unknown';
+  category: 'Desktop' | 'Laptop' | 'Mobile' | 'Tablet' | 'Unknown';
   model: string;
+  manufacturer?: string;
   os: string;
   osVersion: string;
   browser: string;
   browserVersion: string;
   userAgent: string;
   clientHints?: Record<string, any>;
+  hasBattery?: boolean;
 }
 
 export interface AuthoritativeSecurityEvent {
@@ -96,34 +101,8 @@ export function generateDeviceSignature(device: ParsedDeviceInfo): string {
 }
 
 // --- 1. Real Server-Side IP Extraction ---
-export function extractClientIp(req: Request): string {
-  // Respect Google Cloud Run, Nginx reverse proxy, and Cloudflare headers
-  const cfConnectingIp = req.headers['cf-connecting-ip'];
-  if (typeof cfConnectingIp === 'string' && cfConnectingIp.trim()) {
-    return cleanIp(cfConnectingIp.trim());
-  }
-
-  const xRealIp = req.headers['x-real-ip'];
-  if (typeof xRealIp === 'string' && xRealIp.trim()) {
-    return cleanIp(xRealIp.trim());
-  }
-
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string' && forwarded.trim()) {
-    // In Cloud Run / standard proxies, the leftmost address is the client address
-    const firstIp = forwarded.split(',')[0].trim();
-    if (firstIp) return cleanIp(firstIp);
-  } else if (Array.isArray(forwarded) && forwarded.length > 0) {
-    const firstIp = forwarded[0].split(',')[0].trim();
-    if (firstIp) return cleanIp(firstIp);
-  }
-
-  const rawIp = req.ip || req.socket?.remoteAddress || '127.0.0.1';
-  return cleanIp(rawIp);
-}
-
-function cleanIp(ip: string): string {
-  let cleaned = ip.trim();
+export function cleanIp(ip: string): string {
+  let cleaned = (ip || '').trim();
   // Strip IPv6-mapped IPv4 prefix (::ffff:)
   if (cleaned.startsWith('::ffff:')) {
     cleaned = cleaned.substring(7);
@@ -131,29 +110,151 @@ function cleanIp(ip: string): string {
   return cleaned;
 }
 
-// Helper: Check if IP is private or local
-function isPrivateOrLocalIp(ip: string): boolean {
-  if (ip === '127.0.0.1' || ip === '::1' || ip === 'localhost') return true;
-  if (ip.startsWith('10.') || ip.startsWith('192.168.')) return true;
-  if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ip)) return true;
+export function isValidPublicIp(ip: string): boolean {
+  if (!ip || typeof ip !== 'string') return false;
+  const trimmed = cleanIp(ip);
+  if (!trimmed || trimmed === '127.0.0.1' || trimmed === '::1' || trimmed === 'localhost') {
+    return false;
+  }
+
+  // IPv4 validation
+  const ipv4Regex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+  const match = trimmed.match(ipv4Regex);
+  if (match) {
+    const o1 = parseInt(match[1], 10);
+    const o2 = parseInt(match[2], 10);
+    const o3 = parseInt(match[3], 10);
+    const o4 = parseInt(match[4], 10);
+    if (o1 > 255 || o2 > 255 || o3 > 255 || o4 > 255) return false;
+
+    // Check private & reserved ranges
+    if (o1 === 0) return false; // 0.0.0.0/8
+    if (o1 === 10) return false; // 10.0.0.0/8
+    if (o1 === 127) return false; // 127.0.0.0/8 loopback
+    if (o1 === 169 && o2 === 254) return false; // 169.254.0.0/16 link-local
+    if (o1 === 172 && o2 >= 16 && o2 <= 31) return false; // 172.16.0.0/12
+    if (o1 === 192 && o2 === 168) return false; // 192.168.0.0/16
+    if (o1 === 100 && o2 >= 64 && o2 <= 127) return false; // 100.64.0.0/10 CGNAT
+    if (o1 >= 224) return false; // Multicast & broadcast
+
+    return true;
+  }
+
+  // IPv6 validation
+  if (trimmed.includes(':')) {
+    const lower = trimmed.toLowerCase();
+    if (lower === '::1' || lower === '::') return false;
+    if (lower.startsWith('fe80:')) return false; // link-local
+    if (lower.startsWith('fc') || lower.startsWith('fd')) return false; // unique local
+    return true;
+  }
+
   return false;
 }
 
-// --- 2. Real Approximate IP Geolocation ---
+export function isPrivateOrLocalIp(ip: string): boolean {
+  return !isValidPublicIp(ip);
+}
+
+export function extractClientIp(req: Request, clientReportedPublicIp?: string): string {
+  // 1. Cloudflare connecting IP
+  const cfConnectingIp = req.headers['cf-connecting-ip'];
+  if (typeof cfConnectingIp === 'string' && cfConnectingIp.trim()) {
+    const cleaned = cleanIp(cfConnectingIp);
+    if (isValidPublicIp(cleaned)) return cleaned;
+  }
+
+  // 2. X-Real-IP (Nginx / Cloud Run / Reverse Proxy)
+  const xRealIp = req.headers['x-real-ip'];
+  if (typeof xRealIp === 'string' && xRealIp.trim()) {
+    const cleaned = cleanIp(xRealIp);
+    if (isValidPublicIp(cleaned)) return cleaned;
+  }
+
+  // 3. X-Forwarded-For (parse chain, find leftmost valid public IP from trusted proxies)
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    const rawList = (Array.isArray(forwarded) ? forwarded.join(',') : forwarded)
+      .split(',')
+      .map(s => cleanIp(s.trim()))
+      .filter(Boolean);
+
+    for (const ip of rawList) {
+      if (isValidPublicIp(ip)) {
+        return ip;
+      }
+    }
+  }
+
+  // 4. Client-reported verified public IP (fallback when behind internal container ingress proxy)
+  if (clientReportedPublicIp && isValidPublicIp(clientReportedPublicIp)) {
+    return cleanIp(clientReportedPublicIp);
+  }
+
+  // 5. Socket remote address / req.ip
+  const rawIp = cleanIp(req.ip || req.socket?.remoteAddress || '');
+  if (rawIp && isValidPublicIp(rawIp)) {
+    return rawIp;
+  }
+
+  // 6. Genuinely local connection fallback
+  return rawIp || '127.0.0.1';
+}
+
+// --- 2. Reverse Geocoding for GPS & Approximate IP Geolocation ---
+export async function reverseGeocodeGps(lat: number, lon: number): Promise<{
+  location: string;
+  city?: string;
+  region?: string;
+  country?: string;
+  countryCode?: string;
+}> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&localityLanguage=en`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeout);
+
+    if (res.ok) {
+      const data = await res.json();
+      const city = data.city || data.locality || '';
+      const region = data.principalSubdivision || '';
+      const country = data.countryName || '';
+      const countryCode = data.countryCode || '';
+      const parts = [city, region, country].filter(Boolean);
+      return {
+        location: parts.length > 0 ? parts.join(', ') : `${lat.toFixed(4)}, ${lon.toFixed(4)}`,
+        city: city || undefined,
+        region: region || undefined,
+        country: country || undefined,
+        countryCode: countryCode || undefined
+      };
+    }
+  } catch (e) {}
+
+  return {
+    location: `${lat.toFixed(4)}, ${lon.toFixed(4)}`
+  };
+}
+
 export async function getApproximateLocation(ip: string): Promise<GeoLocation> {
   const defaultLocation: GeoLocation = {
     country: 'Unknown',
     region: 'Unavailable',
     city: 'Unavailable',
-    source: 'Approximate location based on IP'
+    source: 'approximate_ip'
   };
 
-  if (!ip || isPrivateOrLocalIp(ip)) {
+  if (!ip || !isValidPublicIp(ip)) {
     return {
-      country: 'Local Network / Cloud Sandbox',
-      region: 'Development Environment',
-      city: 'Container Ingress',
-      source: 'Approximate location based on IP'
+      country: 'Local Network',
+      region: 'Local Environment',
+      city: 'Local Session',
+      source: 'approximate_ip'
     };
   }
 
@@ -161,11 +262,32 @@ export async function getApproximateLocation(ip: string): Promise<GeoLocation> {
     return geoCache.get(ip)!;
   }
 
+  // 1. ipwho.is (fast HTTPS, rich location, no key required)
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2500);
+    const res = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.success !== false) {
+        const loc: GeoLocation = {
+          country: data.country || 'Unknown',
+          region: data.region || 'Unavailable',
+          city: data.city || 'Unavailable',
+          source: 'approximate_ip'
+        };
+        geoCache.set(ip, loc);
+        return loc;
+      }
+    }
+  } catch (e) {}
+
+  // 2. ip-api.com fallback
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 2500);
 
-    // Use ip-api.com json endpoint (reliable, fast, no credentials required)
     const res = await fetch(`http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,country,regionName,city`, {
       signal: controller.signal
     });
@@ -178,91 +300,236 @@ export async function getApproximateLocation(ip: string): Promise<GeoLocation> {
           country: data.country || 'Unknown',
           region: data.regionName || 'Unavailable',
           city: data.city || 'Unavailable',
-          source: 'Approximate location based on IP'
+          source: 'approximate_ip'
         };
         geoCache.set(ip, loc);
         return loc;
       }
     }
-  } catch (err) {
-    // Network timeout or blocked lookup - graceful fallback
-  }
+  } catch (err) {}
 
   return defaultLocation;
 }
 
-// --- 3. Real Device & Browser Detection (ua-parser-js + Client Hints) ---
+// --- 3. Real Device & Browser Detection (User-Agent + Client Hints) ---
 export function parseDeviceAndBrowser(req: Request, clientHintsPayload?: Record<string, any>): ParsedDeviceInfo {
   const userAgent = req.headers['user-agent'] || (clientHintsPayload?.userAgent as string) || '';
   const parser = new UAParser(userAgent);
   const result = parser.getResult();
 
-  // Browser Name & Version
-  let browser = result.browser.name || 'Unknown Browser';
+  const secChUaPlatform = req.headers['sec-ch-ua-platform'] as string;
+  const chPlatformVersion = (req.headers['sec-ch-ua-platform-version'] as string) || (clientHintsPayload?.platformVersion as string);
+  const chBrands = clientHintsPayload?.brands || [];
+
+  // --- Operating System Detection ---
+  let os = 'Unknown OS';
+  let osVersion = 'Unavailable';
+
+  // 1. FydeOS Check (Highest precedence for Chromium OS forks)
+  const isFydeInUa = /FydeOS|FlintOS/i.test(userAgent);
+  const isFydeInPlatform = /FydeOS/i.test(secChUaPlatform || '') || /FydeOS/i.test(clientHintsPayload?.platform || '');
+  const isFydeInBrands = Array.isArray(chBrands) && chBrands.some((b: any) => /FydeOS/i.test(b?.brand || ''));
+
+  if (isFydeInUa || isFydeInPlatform || isFydeInBrands) {
+    os = 'FydeOS';
+    const match = userAgent.match(/(?:FydeOS|FlintOS)[\/\s]?v?([0-9.]+)/i);
+    if (match) {
+      osVersion = match[1];
+    } else if (chPlatformVersion && chPlatformVersion !== 'Unavailable') {
+      osVersion = chPlatformVersion.replace(/['"]/g, '').trim();
+    }
+  } else if (
+    /CrOS|Chrome\s?OS|Chromium\s?OS/i.test(userAgent) ||
+    /Chrome\s?OS|Chromium\s?OS/i.test(secChUaPlatform || '') ||
+    /Chrome\s?OS|Chromium\s?OS/i.test(clientHintsPayload?.platform || '')
+  ) {
+    // 2. ChromeOS / Chromium OS (per guidelines: if FydeOS cannot be distinguished reliably, show ChromeOS)
+    os = 'ChromeOS';
+    const match = userAgent.match(/CrOS\s+[^\s]+\s+([0-9.]+)/i) || userAgent.match(/ChromeOS\/([0-9.]+)/i);
+    if (match) {
+      osVersion = match[1];
+    } else if (chPlatformVersion && chPlatformVersion !== 'Unavailable') {
+      osVersion = chPlatformVersion.replace(/['"]/g, '').trim();
+    }
+  } else if (
+    /Windows/i.test(userAgent) ||
+    /Windows/i.test(secChUaPlatform || '') ||
+    /Windows/i.test(clientHintsPayload?.platform || '')
+  ) {
+    // 3. Windows (distinguish Windows 11 vs Windows 10 via Client Hints platformVersion >= 13)
+    const cleanPlatVer = (chPlatformVersion || '').replace(/['"]/g, '').trim();
+    const platMajor = parseFloat(cleanPlatVer.split('.')[0]);
+    if (!isNaN(platMajor) && platMajor >= 13) {
+      os = 'Windows 11';
+      osVersion = cleanPlatVer;
+    } else if (!isNaN(platMajor) && platMajor > 0) {
+      os = 'Windows 10';
+      osVersion = cleanPlatVer;
+    } else if (/Windows NT 10.0/i.test(userAgent)) {
+      os = 'Windows 11 / 10';
+      osVersion = '10.0';
+    } else if (/Windows NT 6.3/i.test(userAgent)) {
+      os = 'Windows 8.1';
+      osVersion = '8.1';
+    } else if (/Windows NT 6.2/i.test(userAgent)) {
+      os = 'Windows 8';
+      osVersion = '8.0';
+    } else if (/Windows NT 6.1/i.test(userAgent)) {
+      os = 'Windows 7';
+      osVersion = '7.0';
+    } else {
+      os = 'Windows';
+    }
+  } else if (
+    /Macintosh|Mac OS X/i.test(userAgent) ||
+    /macOS/i.test(secChUaPlatform || '') ||
+    /macOS/i.test(clientHintsPayload?.platform || '')
+  ) {
+    // 4. macOS
+    if (/iPad/i.test(userAgent) || clientHintsPayload?.isIPad) {
+      os = 'iPadOS';
+    } else {
+      os = 'macOS';
+      const match = userAgent.match(/Mac OS X\s+([0-9_]+)/i);
+      if (match) osVersion = match[1].replace(/_/g, '.');
+    }
+  } else if (
+    /Android/i.test(userAgent) ||
+    /Android/i.test(secChUaPlatform || '') ||
+    /Android/i.test(clientHintsPayload?.platform || '')
+  ) {
+    // 5. Android
+    os = 'Android';
+    const match = userAgent.match(/Android\s+([0-9.]+)/i);
+    if (match) osVersion = match[1];
+  } else if (/iPhone|iPod/i.test(userAgent)) {
+    // 6. iOS
+    os = 'iOS';
+    const match = userAgent.match(/OS\s+([0-9_]+)/i);
+    if (match) osVersion = match[1].replace(/_/g, '.');
+  } else if (/iPad/i.test(userAgent)) {
+    // 7. iPadOS
+    os = 'iPadOS';
+    const match = userAgent.match(/OS\s+([0-9_]+)/i);
+    if (match) osVersion = match[1].replace(/_/g, '.');
+  } else if (
+    /Linux/i.test(userAgent) ||
+    /Linux/i.test(secChUaPlatform || '') ||
+    /Linux/i.test(clientHintsPayload?.platform || '')
+  ) {
+    // 8. Linux
+    os = 'Linux';
+    if (result.os.name && result.os.name !== 'Linux' && result.os.name !== 'Unknown') {
+      os = result.os.name;
+    }
+  } else if (result.os.name && result.os.name !== 'Unknown') {
+    os = result.os.name;
+    if (result.os.version) osVersion = result.os.version;
+  }
+
+  // --- Browser Detection ---
+  let browser = 'Web Browser';
   let browserVersion = result.browser.version || 'Unavailable';
 
-  // OS Name & Version
-  let os = result.os.name || 'Unknown OS';
-  let osVersion = result.os.version || 'Unavailable';
+  if (/Edg\//i.test(userAgent) || (Array.isArray(chBrands) && chBrands.some((b: any) => /Microsoft Edge/i.test(b?.brand)))) {
+    const match = userAgent.match(/Edg\/([0-9.]+)/i);
+    const ver = match ? match[1].split('.')[0] : (result.browser.version?.split('.')[0] || '');
+    browser = ver ? `Microsoft Edge ${ver}` : 'Microsoft Edge';
+    browserVersion = match ? match[1] : (result.browser.version || 'Unavailable');
+  } else if (/OPR\/|Opera/i.test(userAgent) || (Array.isArray(chBrands) && chBrands.some((b: any) => /Opera/i.test(b?.brand)))) {
+    const match = userAgent.match(/OPR\/([0-9.]+)/i);
+    const ver = match ? match[1].split('.')[0] : (result.browser.version?.split('.')[0] || '');
+    browser = ver ? `Opera ${ver}` : 'Opera';
+    browserVersion = match ? match[1] : (result.browser.version || 'Unavailable');
+  } else if (/Brave/i.test(userAgent) || clientHintsPayload?.isBrave) {
+    const match = userAgent.match(/Chrome\/([0-9.]+)/i);
+    const ver = match ? match[1].split('.')[0] : (result.browser.version?.split('.')[0] || '');
+    browser = ver ? `Brave ${ver}` : 'Brave';
+    browserVersion = match ? match[1] : (result.browser.version || 'Unavailable');
+  } else if (/Vivaldi\//i.test(userAgent)) {
+    const match = userAgent.match(/Vivaldi\/([0-9.]+)/i);
+    const ver = match ? match[1].split('.')[0] : (result.browser.version?.split('.')[0] || '');
+    browser = ver ? `Vivaldi ${ver}` : 'Vivaldi';
+    browserVersion = match ? match[1] : (result.browser.version || 'Unavailable');
+  } else if (/Chrome\//i.test(userAgent) || (Array.isArray(chBrands) && chBrands.some((b: any) => /Google Chrome/i.test(b?.brand)))) {
+    const match = userAgent.match(/Chrome\/([0-9.]+)/i);
+    const ver = match ? match[1].split('.')[0] : (result.browser.version?.split('.')[0] || '');
+    browser = ver ? `Google Chrome ${ver}` : 'Google Chrome';
+    browserVersion = match ? match[1] : (result.browser.version || 'Unavailable');
+  } else if (/Firefox\//i.test(userAgent)) {
+    const match = userAgent.match(/Firefox\/([0-9.]+)/i);
+    const ver = match ? match[1].split('.')[0] : (result.browser.version?.split('.')[0] || '');
+    browser = ver ? `Mozilla Firefox ${ver}` : 'Mozilla Firefox';
+    browserVersion = match ? match[1] : (result.browser.version || 'Unavailable');
+  } else if (/Safari\//i.test(userAgent) && !/Chrome|Chromium|Edg|OPR/i.test(userAgent)) {
+    const match = userAgent.match(/Version\/([0-9.]+)/i);
+    const ver = match ? match[1].split('.')[0] : (result.browser.version?.split('.')[0] || '');
+    browser = ver ? `Apple Safari ${ver}` : 'Apple Safari';
+    browserVersion = match ? match[1] : (result.browser.version || 'Unavailable');
+  } else if (result.browser.name) {
+    browser = result.browser.version ? `${result.browser.name} ${result.browser.version.split('.')[0]}` : result.browser.name;
+  }
 
-  // Device Category
-  let category: 'Desktop' | 'Mobile' | 'Tablet' | 'Unknown' = 'Unknown';
-  const rawType = result.device.type?.toLowerCase();
-  if (rawType === 'mobile') {
-    category = 'Mobile';
-  } else if (rawType === 'tablet') {
+  // --- Device Category (Desktop | Laptop | Mobile | Tablet) ---
+  let category: 'Desktop' | 'Laptop' | 'Mobile' | 'Tablet' | 'Unknown' = 'Unknown';
+  if (/iPad/i.test(userAgent) || clientHintsPayload?.isIPad || result.device.type === 'tablet') {
     category = 'Tablet';
-  } else if (!rawType) {
-    // If no mobile/tablet flag in user agent, check OS and sec-ch-ua-mobile
-    const chMobile = req.headers['sec-ch-ua-mobile'] || clientHintsPayload?.mobile;
-    if (chMobile === '?1' || chMobile === true) {
-      category = 'Mobile';
-    } else if (/windows|macintosh|mac os|linux|cros/i.test(userAgent) || /windows|mac os|linux/i.test(os)) {
-      category = 'Desktop';
-    } else if (/android/i.test(userAgent) || /iphone/i.test(userAgent)) {
-      category = 'Mobile';
-    } else if (/ipad/i.test(userAgent)) {
-      category = 'Tablet';
+  } else if (
+    /iPhone|iPod/i.test(userAgent) ||
+    (/Android/i.test(userAgent) && /Mobile/i.test(userAgent)) ||
+    result.device.type === 'mobile'
+  ) {
+    category = 'Mobile';
+  } else if (/Android/i.test(userAgent) && !/Mobile/i.test(userAgent)) {
+    category = 'Tablet';
+  } else {
+    // Distinguish Laptop vs Desktop via battery signal, portable hints, or model
+    const hasBattery = clientHintsPayload?.hasBattery === true;
+    const isLaptopHint =
+      clientHintsPayload?.isLaptop === true ||
+      /Chromebook|Laptop|ThinkPad|IdeaPad|MacBook|Notebook|ZenBook|Inspiron|XPS|Latitude|EliteBook|Envy|Surface Laptop|Yoga|Swift|Gram/i.test(userAgent) ||
+      /Chromebook|Laptop|ThinkPad|IdeaPad|MacBook|Notebook|ZenBook|Inspiron|XPS|Latitude|EliteBook|Envy|Surface Laptop|Yoga|Swift|Gram/i.test(clientHintsPayload?.model || '');
+
+    if (isLaptopHint || hasBattery || (os === 'FydeOS' && clientHintsPayload?.hasBattery !== false) || (os === 'ChromeOS' && clientHintsPayload?.hasBattery !== false)) {
+      category = 'Laptop';
     } else {
       category = 'Desktop';
     }
   }
 
-  // Client Hints Overrides (Sec-CH-UA, Sec-CH-UA-Platform, Sec-CH-UA-Model)
-  const secChUaPlatform = req.headers['sec-ch-ua-platform'] as string;
-  if (secChUaPlatform) {
-    const cleanPlatform = secChUaPlatform.replace(/['"]/g, '').trim();
-    if (cleanPlatform && cleanPlatform.toLowerCase() !== 'unknown') {
-      os = cleanPlatform;
-    }
-  }
-
-  // Device Model: ONLY if reliably supplied by Client Hints or verified parser, NEVER guessed!
+  // --- Model & Manufacturer: ONLY if legitimately supplied, NEVER fabricated! ---
   let deviceModel = 'Unavailable';
-  const secChUaModel = (req.headers['sec-ch-ua-model'] as string) || (clientHintsPayload?.model as string);
-  if (secChUaModel && typeof secChUaModel === 'string') {
-    const cleanModel = secChUaModel.replace(/['"]/g, '').trim();
-    if (cleanModel && cleanModel.toLowerCase() !== 'unknown' && cleanModel !== '""') {
-      deviceModel = cleanModel;
+  let manufacturer: string | undefined = undefined;
+
+  const rawModel = (req.headers['sec-ch-ua-model'] as string) || (clientHintsPayload?.model as string);
+  if (rawModel && typeof rawModel === 'string') {
+    const clean = rawModel.replace(/['"]/g, '').trim();
+    if (clean && clean.toLowerCase() !== 'unknown' && clean !== '""' && clean !== 'Unavailable') {
+      deviceModel = clean;
     }
   } else if (result.device.model && result.device.model.trim()) {
     deviceModel = result.device.model.trim();
   }
 
-  // Client Hints platform version
-  const chPlatformVersion = (req.headers['sec-ch-ua-platform-version'] as string) || (clientHintsPayload?.platformVersion as string);
-  if (chPlatformVersion && osVersion === 'Unavailable') {
-    osVersion = chPlatformVersion.replace(/['"]/g, '').trim();
+  if (result.device.vendor && result.device.vendor.trim()) {
+    manufacturer = result.device.vendor.trim();
+  } else if (deviceModel !== 'Unavailable') {
+    const oemMatch = deviceModel.match(/^(Lenovo|HP|Dell|Apple|Samsung|Google|Asus|Acer|Microsoft|Huawei|Xiaomi|Sony|Motorola|OnePlus)\b/i);
+    if (oemMatch) {
+      manufacturer = oemMatch[1];
+    }
   }
 
   return {
     category,
     model: deviceModel,
+    manufacturer,
     os,
     osVersion,
     browser,
     browserVersion,
     userAgent,
+    hasBattery: clientHintsPayload?.hasBattery,
     clientHints: {
       secChUa: req.headers['sec-ch-ua'] || clientHintsPayload?.brands,
       secChUaMobile: req.headers['sec-ch-ua-mobile'] || clientHintsPayload?.mobile,

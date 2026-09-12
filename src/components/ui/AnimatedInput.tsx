@@ -71,7 +71,7 @@ export const AnimatedInput: React.FC<AnimatedInputProps> = ({
           onFocus={handleFocus}
           onBlur={handleBlur}
           className={cn(
-            'w-full bg-[#171717] border rounded-2xl py-3.5 px-4 text-sm text-white placeholder-[#737373] transition-all duration-200 outline-none',
+            'w-full bg-[#171717] border rounded-2xl py-3.5 px-4 text-base sm:text-sm text-white placeholder-[#737373] transition-all duration-200 outline-none',
             icon ? 'pl-10' : '',
             (error || isSuccess) ? 'pr-10' : '',
             error

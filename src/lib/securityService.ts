@@ -22,9 +22,14 @@ const LOCAL_LOGIN_HISTORY_KEY = 'smartledger_local_login_history';
 
 export interface DeviceInfo {
   deviceName: string;
-  deviceType: 'desktop' | 'mobile' | 'tablet';
+  deviceType: 'desktop' | 'laptop' | 'mobile' | 'tablet';
   browser: string;
+  browserVersion?: string;
   os: string;
+  osVersion?: string;
+  model?: string;
+  manufacturer?: string;
+  hasBattery?: boolean;
   screenResolution: string;
   colorDepth: string;
   platform: string;
@@ -35,6 +40,7 @@ export interface DeviceInfo {
   language: string;
   connectionType: string;
   userAgent: string;
+  clientHints?: Record<string, any>;
 }
 
 export interface NetworkGeoInfo {
@@ -47,6 +53,8 @@ export interface NetworkGeoInfo {
   flagEmoji: string;
   latitude: number | null;
   longitude: number | null;
+  accuracy?: number;
+  locationSource?: 'gps' | 'ip';
   isp: string;
   timezone: string;
 }
@@ -68,7 +76,7 @@ export function getOrCreateDeviceId(): string {
 }
 
 /**
- * Detect client browser, OS, hardware specs, and friendly device name
+ * Detect client browser, OS, hardware specs, and friendly device name (Synchronous baseline)
  */
 export function detectDeviceInfo(): DeviceInfo {
   if (typeof window === 'undefined' || typeof navigator === 'undefined') {
@@ -88,67 +96,134 @@ export function detectDeviceInfo(): DeviceInfo {
   }
 
   const ua = navigator.userAgent;
-  let os = 'Unknown OS';
-  let deviceName = 'Desktop Workstation';
-  let deviceType: 'desktop' | 'mobile' | 'tablet' = 'desktop';
-  let browser = 'Web Browser';
+  const uaData = (navigator as any).userAgentData;
+  const chBrands: Array<{ brand: string; version: string }> = uaData?.brands || [];
+  const chPlatform: string = uaData?.platform || '';
 
-  // Detect OS & Device Name
-  if (/iPad/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+  let os = 'Unknown OS';
+  let osVersion = '';
+  let deviceName = 'Desktop Workstation';
+  let deviceType: 'desktop' | 'laptop' | 'mobile' | 'tablet' = 'desktop';
+  let browser = 'Web Browser';
+  let browserVersion = '';
+  let model: string | undefined = undefined;
+  let manufacturer: string | undefined = undefined;
+
+  // 1. FydeOS Detection (Highest priority for Chromium OS forks)
+  const isFydeInUa = /FydeOS|FlintOS/i.test(ua);
+  const isFydeInPlatform = /FydeOS/i.test(chPlatform);
+  const isFydeInBrands = chBrands.some((b) => /FydeOS/i.test(b.brand));
+  const isFydeInWindow = typeof (window as any).fyde !== 'undefined';
+
+  if (isFydeInUa || isFydeInPlatform || isFydeInBrands || isFydeInWindow) {
+    os = 'FydeOS';
+    const match = ua.match(/(?:FydeOS|FlintOS)[\/\s]?v?([0-9.]+)/i);
+    if (match) osVersion = match[1];
+    deviceType = 'laptop';
+    deviceName = 'FydeOS Laptop';
+  } else if (
+    /CrOS|Chrome\s?OS|Chromium\s?OS/i.test(ua) ||
+    /Chrome\s?OS|Chromium\s?OS/i.test(chPlatform)
+  ) {
+    // 2. ChromeOS / Chromium OS (when FydeOS is not indicated)
+    os = 'ChromeOS';
+    const match = ua.match(/CrOS\s+[^\s]+\s+([0-9.]+)/i) || ua.match(/ChromeOS\/([0-9.]+)/i);
+    if (match) osVersion = match[1];
+    deviceType = 'laptop';
+    deviceName = 'Chromebook';
+  } else if (/iPad/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
     os = 'iPadOS';
     deviceName = 'Apple iPad';
     deviceType = 'tablet';
   } else if (/iPhone|iPod/.test(ua)) {
     os = 'iOS';
     const match = ua.match(/OS\s([0-9_]+)/);
-    const osVer = match ? ` ${match[1].replace(/_/g, '.')}` : '';
-    deviceName = `Apple iPhone (iOS${osVer})`;
+    osVersion = match ? match[1].replace(/_/g, '.') : '';
+    deviceName = `Apple iPhone${osVersion ? ` (iOS ${osVersion})` : ''}`;
     deviceType = 'mobile';
-  } else if (/Android/.test(ua)) {
+  } else if (/Android/.test(ua) || /Android/i.test(chPlatform)) {
     os = 'Android';
     const isTablet = /Tablet|Android(?!.*Mobile)/i.test(ua);
     deviceType = isTablet ? 'tablet' : 'mobile';
     const match = ua.match(/Android\s([0-9.]+)/);
-    const osVer = match ? ` ${match[1]}` : '';
+    if (match) osVersion = match[1];
     
     // Check specific Android model if available
     const modelMatch = ua.match(/;\s([A-Za-z0-9\s-_]+)\sBuild/);
-    const modelName = modelMatch ? modelMatch[1].trim() : (isTablet ? 'Android Tablet' : 'Android Mobile');
-    deviceName = `${modelName} (Android v${osVer.trim() || 'OS'})`;
-  } else if (/Macintosh|Mac OS X/.test(ua)) {
+    if (modelMatch) {
+      model = modelMatch[1].trim();
+      const oem = model.match(/^(Samsung|Google|Xiaomi|OnePlus|Motorola|Huawei|Sony|Oppo|Vivo|Realme|Lenovo|Asus)\b/i);
+      if (oem) manufacturer = oem[1];
+    }
+    deviceName = model ? `${model} (Android${osVersion ? ` v${osVersion}` : ''})` : (isTablet ? 'Android Tablet' : 'Android Mobile');
+  } else if (/Macintosh|Mac OS X/.test(ua) || /macOS/i.test(chPlatform)) {
     os = 'macOS';
-    const isAppleSilicon = (navigator as any).userAgentData?.architecture === 'arm' || 
-      /Apple/.test(navigator.vendor || '');
-    deviceName = isAppleSilicon ? 'Apple Mac (Apple Silicon)' : 'Apple Mac Workstation';
+    const match = ua.match(/Mac OS X\s+([0-9_]+)/i);
+    if (match) osVersion = match[1].replace(/_/g, '.');
+    if (/MacBook/i.test(ua) || /MacBook/i.test(navigator.platform || '')) {
+      deviceType = 'laptop';
+      deviceName = 'Apple MacBook';
+    } else {
+      deviceType = 'desktop';
+      deviceName = 'Apple Mac';
+    }
+  } else if (/Windows/.test(ua) || /Windows/i.test(chPlatform)) {
+    if (/Windows NT 10.0/.test(ua)) {
+      os = 'Windows 11 / 10';
+      osVersion = '10.0';
+    } else if (/Windows NT 6.3/.test(ua)) {
+      os = 'Windows 8.1';
+      osVersion = '8.1';
+    } else if (/Windows NT 6.1/.test(ua)) {
+      os = 'Windows 7';
+      osVersion = '7.0';
+    } else {
+      os = 'Windows';
+    }
     deviceType = 'desktop';
-  } else if (/Windows NT/.test(ua)) {
-    os = 'Windows';
-    if (/Windows NT 10.0/.test(ua)) os = 'Windows 11 / 10';
-    else if (/Windows NT 6.3/.test(ua)) os = 'Windows 8.1';
-    else if (/Windows NT 6.1/.test(ua)) os = 'Windows 7';
     deviceName = `${os} PC`;
-    deviceType = 'desktop';
-  } else if (/Linux/.test(ua)) {
+  } else if (/Linux/.test(ua) || /Linux/i.test(chPlatform)) {
     os = 'Linux';
-    deviceName = 'Linux Workstation';
     deviceType = 'desktop';
+    deviceName = 'Linux Workstation';
   }
 
   // Detect Browser & Version
-  if (/Edg\//.test(ua)) {
+  if (/Edg\//.test(ua) || chBrands.some((b) => /Microsoft Edge/i.test(b.brand))) {
     const match = ua.match(/Edg\/([0-9.]+)/);
-    browser = `Microsoft Edge ${match ? match[1].split('.')[0] : ''}`.trim();
-  } else if (/Chrome\//.test(ua) && !/Chromium|Edg|OPR/.test(ua)) {
+    const ver = match ? match[1].split('.')[0] : (chBrands.find((b) => /Microsoft Edge/i.test(b.brand))?.version || '');
+    browser = ver ? `Microsoft Edge ${ver}` : 'Microsoft Edge';
+    browserVersion = match ? match[1] : ver;
+  } else if (/OPR\/|Opera/.test(ua) || chBrands.some((b) => /Opera/i.test(b.brand))) {
+    const match = ua.match(/OPR\/([0-9.]+)/);
+    const ver = match ? match[1].split('.')[0] : '';
+    browser = ver ? `Opera ${ver}` : 'Opera';
+    browserVersion = match ? match[1] : ver;
+  } else if (/Brave/.test(ua) || (navigator as any).brave) {
     const match = ua.match(/Chrome\/([0-9.]+)/);
-    browser = `Google Chrome ${match ? match[1].split('.')[0] : ''}`.trim();
-  } else if (/Safari\//.test(ua) && !/Chrome|Chromium|Edg/.test(ua)) {
-    const match = ua.match(/Version\/([0-9.]+)/);
-    browser = `Apple Safari ${match ? match[1].split('.')[0] : ''}`.trim();
+    const ver = match ? match[1].split('.')[0] : '';
+    browser = ver ? `Brave ${ver}` : 'Brave';
+    browserVersion = match ? match[1] : ver;
+  } else if (/Vivaldi\//.test(ua)) {
+    const match = ua.match(/Vivaldi\/([0-9.]+)/);
+    const ver = match ? match[1].split('.')[0] : '';
+    browser = ver ? `Vivaldi ${ver}` : 'Vivaldi';
+    browserVersion = match ? match[1] : ver;
+  } else if (/Chrome\//.test(ua) || chBrands.some((b) => /Google Chrome/i.test(b.brand))) {
+    const match = ua.match(/Chrome\/([0-9.]+)/);
+    const ver = match ? match[1].split('.')[0] : (chBrands.find((b) => /Google Chrome/i.test(b.brand))?.version || '');
+    browser = ver ? `Google Chrome ${ver}` : 'Google Chrome';
+    browserVersion = match ? match[1] : ver;
   } else if (/Firefox\//.test(ua)) {
     const match = ua.match(/Firefox\/([0-9.]+)/);
-    browser = `Mozilla Firefox ${match ? match[1].split('.')[0] : ''}`.trim();
-  } else if (/OPR\//.test(ua) || /Opera/.test(ua)) {
-    browser = 'Opera Browser';
+    const ver = match ? match[1].split('.')[0] : '';
+    browser = ver ? `Mozilla Firefox ${ver}` : 'Mozilla Firefox';
+    browserVersion = match ? match[1] : ver;
+  } else if (/Safari\//.test(ua) && !/Chrome|Chromium|Edg/.test(ua)) {
+    const match = ua.match(/Version\/([0-9.]+)/);
+    const ver = match ? match[1].split('.')[0] : '';
+    browser = ver ? `Apple Safari ${ver}` : 'Apple Safari';
+    browserVersion = match ? match[1] : ver;
   }
 
   // Hardware & Display properties
@@ -173,7 +248,6 @@ export function detectDeviceInfo(): DeviceInfo {
       if (debugInfo) {
         const rawGpu = (gl as any).getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
         if (rawGpu && typeof rawGpu === 'string') {
-          // Clean common prefix like ANGLE (...)
           gpu = rawGpu.replace(/ANGLE \((.*)\)/, '$1').trim();
         }
       }
@@ -190,7 +264,11 @@ export function detectDeviceInfo(): DeviceInfo {
     deviceName,
     deviceType,
     browser,
+    browserVersion,
     os,
+    osVersion,
+    model,
+    manufacturer,
     screenResolution,
     colorDepth,
     platform,
@@ -200,7 +278,153 @@ export function detectDeviceInfo(): DeviceInfo {
     touchPoints,
     language,
     connectionType,
-    userAgent: ua
+    userAgent: ua,
+    clientHints: {
+      brands: chBrands,
+      platform: chPlatform
+    }
+  };
+}
+
+/**
+ * Enhanced asynchronous device detection:
+ * Uses User-Agent Client Hints High Entropy values + Battery API to detect real hardware model,
+ * FydeOS, ChromeOS, Windows 11, and accurately determine Laptop vs Desktop.
+ */
+export async function detectDeviceInfoAsync(): Promise<DeviceInfo> {
+  const base = detectDeviceInfo();
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    return base;
+  }
+
+  let hasBattery = false;
+  let highEntropyModel: string | undefined = undefined;
+  let highEntropyManufacturer: string | undefined = undefined;
+  let highEntropyPlatformVer: string | undefined = undefined;
+
+  // 1. Battery API check (Detects if computer is a laptop or portable)
+  try {
+    if (typeof (navigator as any).getBattery === 'function') {
+      const battery = await (navigator as any).getBattery();
+      if (battery && typeof battery.level === 'number') {
+        hasBattery = true;
+      }
+    }
+  } catch (e) {}
+
+  // 2. Chromium User-Agent Client Hints High Entropy Values
+  try {
+    const uaData = (navigator as any).userAgentData;
+    if (uaData && typeof uaData.getHighEntropyValues === 'function') {
+      const highEntropy = await uaData.getHighEntropyValues([
+        'model',
+        'platform',
+        'platformVersion',
+        'architecture',
+        'bitness',
+        'fullVersionList'
+      ]);
+
+      if (highEntropy) {
+        base.clientHints = { ...base.clientHints, ...highEntropy };
+
+        // Model: ONLY if supplied by browser, NEVER invented!
+        if (highEntropy.model && typeof highEntropy.model === 'string') {
+          const raw = highEntropy.model.replace(/['"]/g, '').trim();
+          if (raw && raw.toLowerCase() !== 'unknown' && raw !== '""' && raw !== 'Unavailable') {
+            highEntropyModel = raw;
+            base.model = raw;
+            const oem = raw.match(/^(Lenovo|HP|Dell|Apple|Samsung|Google|Asus|Acer|Microsoft|Huawei|Xiaomi|Sony|Motorola|OnePlus)\b/i);
+            if (oem) {
+              highEntropyManufacturer = oem[1];
+              base.manufacturer = oem[1];
+            }
+          }
+        }
+
+        // Windows 11 platformVersion check (platformVersion >= 13 is Windows 11)
+        if (highEntropy.platformVersion) {
+          highEntropyPlatformVer = String(highEntropy.platformVersion).replace(/['"]/g, '').trim();
+          base.osVersion = highEntropyPlatformVer;
+          const major = parseFloat(highEntropyPlatformVer.split('.')[0]);
+          if (!isNaN(major) && major >= 13 && /Windows/i.test(base.os)) {
+            base.os = 'Windows 11';
+          } else if (!isNaN(major) && major > 0 && /Windows/i.test(base.os)) {
+            base.os = 'Windows 10';
+          }
+        }
+
+        // High entropy platform check (e.g. FydeOS in platform)
+        if (highEntropy.platform && /FydeOS/i.test(highEntropy.platform)) {
+          base.os = 'FydeOS';
+        }
+      }
+    }
+  } catch (e) {}
+
+  base.hasBattery = hasBattery;
+
+  // 3. Resolve Laptop vs Desktop
+  if (base.deviceType !== 'mobile' && base.deviceType !== 'tablet') {
+    const isLaptopHint =
+      hasBattery ||
+      /Chromebook|Laptop|ThinkPad|IdeaPad|MacBook|Notebook|ZenBook|Inspiron|XPS|Latitude|EliteBook|Envy|Surface Laptop|Yoga|Swift|Gram/i.test(base.userAgent + (highEntropyModel || '')) ||
+      base.os === 'FydeOS' ||
+      base.os === 'ChromeOS';
+
+    if (isLaptopHint) {
+      base.deviceType = 'laptop';
+      if (highEntropyModel) {
+        base.deviceName = highEntropyModel;
+      } else if (base.os === 'FydeOS') {
+        base.deviceName = 'FydeOS Laptop';
+      } else if (base.os === 'ChromeOS') {
+        base.deviceName = 'Chromebook';
+      } else {
+        base.deviceName = `${base.os} Laptop`;
+      }
+    } else {
+      base.deviceType = 'desktop';
+      if (highEntropyModel) {
+        base.deviceName = highEntropyModel;
+      }
+    }
+  }
+
+  return base;
+}
+
+/**
+ * Fetch public IP & rich real location with memory & localStorage caching
+ */
+/**
+ * Reverse geocode GPS coordinates via BigDataCloud API
+ */
+async function reverseGeocodeClientGps(latitude: number, longitude: number): Promise<{
+  location: string;
+  city?: string;
+  region?: string;
+  country?: string;
+  countryCode?: string;
+}> {
+  try {
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`,
+      { signal: AbortSignal.timeout(3500) }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      const city = data.locality || data.city || '';
+      const region = data.principalSubdivision || '';
+      const country = data.countryName || '';
+      const countryCode = data.countryCode || '';
+      const parts = [city, region, country].filter(Boolean);
+      const location = parts.length > 0 ? parts.join(', ') : `${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°`;
+      return { location, city, region, country, countryCode };
+    }
+  } catch (e) {}
+  return {
+    location: `${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°`
   };
 }
 
@@ -210,32 +434,103 @@ export function detectDeviceInfo(): DeviceInfo {
 let cachedClientNetwork: NetworkGeoInfo | null = null;
 let isFetchingGeo = false;
 
-export async function getClientNetworkInfo(): Promise<NetworkGeoInfo> {
+export async function getClientNetworkInfo(geoCoords?: { latitude: number; longitude: number; accuracy?: number }): Promise<NetworkGeoInfo> {
+  // If GPS coordinates are explicitly provided, prioritize high accuracy GPS reverse-geocoding
+  if (geoCoords && typeof geoCoords.latitude === 'number' && typeof geoCoords.longitude === 'number') {
+    const rev = await reverseGeocodeClientGps(geoCoords.latitude, geoCoords.longitude);
+    const countryCode = rev.countryCode || 'US';
+    const flagEmoji = countryCodeToEmoji(countryCode);
+
+    // Get public IP if cached or lookup
+    let ip = cachedClientNetwork?.ip || '';
+    if (!ip || ip.includes('127.0.0.1')) {
+      try {
+        const ipRes = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(2000) });
+        if (ipRes.ok) {
+          const d = await ipRes.json();
+          if (d.ip) ip = d.ip;
+        }
+      } catch (e) {}
+    }
+
+    const gpsResult: NetworkGeoInfo = {
+      ip: ip || '127.0.0.1',
+      location: rev.location,
+      city: rev.city || '',
+      region: rev.region || '',
+      country: rev.country || '',
+      countryCode,
+      flagEmoji,
+      latitude: geoCoords.latitude,
+      longitude: geoCoords.longitude,
+      accuracy: typeof geoCoords.accuracy === 'number' ? geoCoords.accuracy : undefined,
+      locationSource: 'gps',
+      isp: cachedClientNetwork?.isp || 'Broadband Network',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    };
+
+    cachedClientNetwork = gpsResult;
+    try {
+      localStorage.setItem(CACHED_GEO_FULL_KEY, JSON.stringify(gpsResult));
+    } catch (e) {}
+    return gpsResult;
+  }
+
   if (cachedClientNetwork) return cachedClientNetwork;
 
-  // 1. Try restoring from localStorage if recently cached (< 1 hour)
+  // 1. Try restoring from localStorage if recently cached
   try {
     const saved = localStorage.getItem(CACHED_GEO_FULL_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
       if (parsed && parsed.ip && parsed.location) {
         cachedClientNetwork = parsed;
-        // Non-blocking refresh in background if older
         return cachedClientNetwork as NetworkGeoInfo;
       }
     }
   } catch (e) {}
 
   if (isFetchingGeo) {
-    // Wait briefly or return fallback if already in flight
     await new Promise((r) => setTimeout(r, 200));
     if (cachedClientNetwork) return cachedClientNetwork;
   }
 
   isFetchingGeo = true;
 
+  // Priority 1: Backend detection endpoint for accurate reverse-proxy public IP
   try {
-    // Priority 1: ipwho.is (fast, no key required, rich geolocation, flag emoji, and ISP)
+    const srvRes = await fetch('/api/auth/detect-session', { signal: AbortSignal.timeout(2500) });
+    if (srvRes.ok) {
+      const srvData = await srvRes.json();
+      if (srvData && srvData.ip && !srvData.ip.startsWith('127.') && srvData.ip !== '::1') {
+        const countryCode = srvData.country ? 'US' : '';
+        const flagEmoji = countryCodeToEmoji(countryCode);
+        const result: NetworkGeoInfo = {
+          ip: srvData.ip,
+          location: srvData.location || 'Online',
+          city: srvData.city || '',
+          region: srvData.region || '',
+          country: srvData.country || '',
+          countryCode,
+          flagEmoji,
+          latitude: null,
+          longitude: null,
+          locationSource: 'ip',
+          isp: 'Public Internet',
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+        };
+        cachedClientNetwork = result;
+        try {
+          localStorage.setItem(CACHED_GEO_FULL_KEY, JSON.stringify(result));
+        } catch (e) {}
+        isFetchingGeo = false;
+        return result;
+      }
+    }
+  } catch (e) {}
+
+  try {
+    // Priority 2: ipwho.is (fast, rich geolocation, flag emoji, and ISP)
     const res = await fetch('https://ipwho.is/', { 
       headers: { 'Accept': 'application/json' },
       signal: AbortSignal.timeout(3500) 
@@ -249,7 +544,7 @@ export async function getClientNetworkInfo(): Promise<NetworkGeoInfo> {
         const region = data.region || '';
         const country = data.country || '';
         const countryCode = data.country_code || 'US';
-        const flagEmoji = data.flag?.emoji || '🌐';
+        const flagEmoji = data.flag?.emoji || countryCodeToEmoji(countryCode);
         const latitude = typeof data.latitude === 'number' ? data.latitude : null;
         const longitude = typeof data.longitude === 'number' ? data.longitude : null;
         const isp = data.connection?.isp || data.connection?.org || 'Public Internet';
@@ -268,6 +563,7 @@ export async function getClientNetworkInfo(): Promise<NetworkGeoInfo> {
           flagEmoji,
           latitude,
           longitude,
+          locationSource: 'ip',
           isp,
           timezone
         };
@@ -280,12 +576,10 @@ export async function getClientNetworkInfo(): Promise<NetworkGeoInfo> {
         return result;
       }
     }
-  } catch (e) {
-    // Primary lookup failed, try secondary fallback
-  }
+  } catch (e) {}
 
   try {
-    // Priority 2: api.ipify.org + ipapi.co fallback
+    // Priority 3: api.ipify.org + freeipapi.com fallback
     const ipRes = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(2500) });
     let ip = '127.0.0.1';
     if (ipRes.ok) {
@@ -317,6 +611,7 @@ export async function getClientNetworkInfo(): Promise<NetworkGeoInfo> {
         flagEmoji,
         latitude,
         longitude,
+        locationSource: 'ip',
         isp,
         timezone
       };
@@ -328,14 +623,12 @@ export async function getClientNetworkInfo(): Promise<NetworkGeoInfo> {
       isFetchingGeo = false;
       return result;
     }
-  } catch (e) {
-    // Fallback if all external networks are unreachable or offline
-  }
+  } catch (e) {}
 
   isFetchingGeo = false;
 
-  // Priority 3: Browser system timezone fallback
-  const sysTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+  // Priority 4: Browser system timezone fallback
+  const sysTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   const tzParts = sysTz.split('/');
   const approxCity = tzParts.length > 1 ? tzParts[1].replace(/_/g, ' ') : sysTz;
   
@@ -349,6 +642,7 @@ export async function getClientNetworkInfo(): Promise<NetworkGeoInfo> {
     flagEmoji: '📍',
     latitude: null,
     longitude: null,
+    locationSource: 'ip',
     isp: 'Local Host / Secure Loopback',
     timezone: sysTz
   };
@@ -384,7 +678,7 @@ export async function recordLoginActivity(
   }
 ): Promise<void> {
   try {
-    const dev = detectDeviceInfo();
+    const dev = await detectDeviceInfoAsync();
     const net = await getClientNetworkInfo();
     const historyId = 'login_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
     const timestamp = new Date().toISOString();
@@ -454,14 +748,19 @@ export async function registerOrUpdateDevice(
     email?: string;
     userName?: string;
     userAvatar?: string;
+  },
+  geoCoords?: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
   }
 ): Promise<UserDevice> {
   const deviceId = getOrCreateDeviceId();
-  const dev = detectDeviceInfo();
-  const net = await getClientNetworkInfo();
+  const dev = await detectDeviceInfoAsync();
+  const net = await getClientNetworkInfo(geoCoords);
   const now = new Date().toISOString();
 
-  const deviceData: UserDevice = {
+  let deviceData: UserDevice = {
     id: deviceId,
     userId: userId || 'local_user',
     userEmail: userInfo?.email || '',
@@ -470,6 +769,8 @@ export async function registerOrUpdateDevice(
     deviceId,
     deviceName: dev.deviceName,
     deviceType: dev.deviceType,
+    model: dev.model,
+    manufacturer: dev.manufacturer,
     browser: dev.browser,
     os: dev.os,
     ip: net.ip,
@@ -481,6 +782,9 @@ export async function registerOrUpdateDevice(
     flagEmoji: net.flagEmoji,
     latitude: net.latitude ?? undefined,
     longitude: net.longitude ?? undefined,
+    accuracy: net.accuracy ?? undefined,
+    locationSource: net.locationSource || 'ip',
+    locationTimestamp: now,
     isp: net.isp,
     screenResolution: dev.screenResolution,
     lastActive: now,
@@ -490,6 +794,59 @@ export async function registerOrUpdateDevice(
     userAgent: dev.userAgent.slice(0, 200)
   };
 
+  // Synchronize with server-side authoritative detection endpoint
+  try {
+    const srvRes = await fetch('/api/auth/login-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: deviceData.userId,
+        sessionId: deviceData.id,
+        clientPublicIp: net.ip,
+        clientHints: {
+          brands: dev.clientHints?.brands,
+          platform: dev.clientHints?.platform,
+          platformVersion: dev.osVersion,
+          model: dev.model,
+          hasBattery: dev.hasBattery,
+          isLaptop: dev.deviceType === 'laptop'
+        },
+        geo: geoCoords ? {
+          latitude: geoCoords.latitude,
+          longitude: geoCoords.longitude,
+          accuracy: geoCoords.accuracy
+        } : undefined,
+        device: dev.deviceType,
+        browser: dev.browser,
+        os: dev.os,
+        location: deviceData.location,
+        loginTime: Date.now()
+      })
+    });
+
+    if (srvRes.ok) {
+      const srvData = await srvRes.json();
+      if (srvData && srvData.session) {
+        const s = srvData.session;
+        if (s.ip && !s.ip.startsWith('127.') && s.ip !== '::1') deviceData.ip = s.ip;
+        if (s.browser) deviceData.browser = s.browser;
+        if (s.os && s.os !== 'Unknown OS') deviceData.os = s.os;
+        if (s.deviceType) deviceData.deviceType = s.deviceType;
+        if (s.model) deviceData.model = s.model;
+        if (s.manufacturer) deviceData.manufacturer = s.manufacturer;
+        if (s.location) deviceData.location = s.location;
+        if (s.city) deviceData.city = s.city;
+        if (s.region) deviceData.region = s.region;
+        if (s.country) deviceData.country = s.country;
+        if (s.countryCode) deviceData.countryCode = s.countryCode;
+        if (typeof s.latitude === 'number') deviceData.latitude = s.latitude;
+        if (typeof s.longitude === 'number') deviceData.longitude = s.longitude;
+        if (typeof s.accuracy === 'number') deviceData.accuracy = s.accuracy;
+        if (s.locationSource) deviceData.locationSource = s.locationSource;
+      }
+    }
+  } catch (e) {}
+
   // 1. Save to local device storage
   saveLocalDevice(deviceData);
 
@@ -497,23 +854,6 @@ export async function registerOrUpdateDevice(
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('smartledger:device_updated', { detail: deviceData }));
   }
-
-  // Socket.io Real-Time Backend Hook
-  try {
-    fetch('/api/auth/login-session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: deviceData.userId,
-        sessionId: deviceData.id,
-        device: deviceData.deviceType,
-        browser: deviceData.browser,
-        os: deviceData.os,
-        location: deviceData.location,
-        loginTime: Date.now()
-      })
-    }).catch(() => {});
-  } catch(e) {}
 
   // 3. Save to Firestore if user logged in
   if (userId && userId !== 'anonymous' && userId !== 'local_user' && auth.currentUser) {
@@ -527,6 +867,74 @@ export async function registerOrUpdateDevice(
   }
 
   return deviceData;
+}
+
+/**
+ * Update the active session's location when GPS coordinates are acquired
+ */
+export async function updateActiveSessionLocation(coords: {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+}): Promise<UserDevice | null> {
+  try {
+    const currentDeviceId = getOrCreateDeviceId();
+    const net = await getClientNetworkInfo(coords);
+    const now = new Date().toISOString();
+
+    const updates: Partial<UserDevice> = {
+      location: net.location,
+      city: net.city,
+      region: net.region,
+      country: net.country,
+      countryCode: net.countryCode,
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      accuracy: coords.accuracy,
+      locationSource: 'gps',
+      locationTimestamp: now,
+      lastActive: now
+    };
+
+    // Update local cache
+    const local = getLocalDevices();
+    const current = local.find((d) => d.deviceId === currentDeviceId || d.id === currentDeviceId);
+    const updatedDevice = current ? { ...current, ...updates } : null;
+    if (updatedDevice) {
+      saveLocalDevice(updatedDevice);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('smartledger:device_updated', { detail: updatedDevice }));
+      }
+    }
+
+    // Update backend session
+    const currentUserId = auth.currentUser?.uid || 'local_user';
+    try {
+      await fetch('/api/auth/update-session-location', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUserId,
+          sessionId: currentDeviceId,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracy: coords.accuracy
+        })
+      });
+    } catch (e) {}
+
+    // Update Firestore if user is logged in
+    if (auth.currentUser && currentUserId !== 'local_user') {
+      try {
+        await updateUserDevice(currentUserId, currentDeviceId, updates);
+      } catch (e) {}
+    }
+
+    return updatedDevice;
+  } catch (err) {
+    console.warn('[Security] Failed to update session location:', err);
+    return null;
+  }
 }
 
 /**
@@ -961,81 +1369,4 @@ export function verifyPin(enteredPin: string, storedHashOrPin: string | null): b
   if (storedHashOrPin === enteredPin) return true;
 
   return false;
-}
-
-
-// --- ADDED BY SECURITY UPDATE ---
-export async function emergencyLockdown(): Promise<boolean> {
-  if (!auth.currentUser) return false;
-  try {
-    const idToken = await auth.currentUser.getIdToken();
-    const res = await fetch('/api/security/lockdown', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`
-      }
-    });
-    return res.ok;
-  } catch (err) {
-    console.warn('[Security] Failed emergency lockdown:', err);
-    return false;
-  }
-}
-
-export async function fetchAuditLogs(): Promise<any[]> {
-  if (!auth.currentUser) return [];
-  try {
-    const idToken = await auth.currentUser.getIdToken();
-    const res = await fetch('/api/security/get-audit-logs', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`
-      }
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.logs || [];
-  } catch (err) {
-    console.warn('[Security] Failed fetching audit logs:', err);
-    return [];
-  }
-}
-
-export async function revokeAllSessionsBackend(): Promise<boolean> {
-  if (!auth.currentUser) return false;
-  try {
-    const idToken = await auth.currentUser.getIdToken();
-    const res = await fetch('/api/security/revoke-all-sessions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`
-      }
-    });
-    return res.ok;
-  } catch (err) {
-    console.warn('[Security] Failed revoke all:', err);
-    return false;
-  }
-}
-
-export async function revokeDeviceBackend(sessionId: string): Promise<boolean> {
-  if (!auth.currentUser) return false;
-  try {
-    const idToken = await auth.currentUser.getIdToken();
-    const res = await fetch('/api/security/revoke-device', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`
-      },
-      body: JSON.stringify({ sessionId })
-    });
-    return res.ok;
-  } catch (err) {
-    console.warn('[Security] Failed revoke device:', err);
-    return false;
-  }
 }

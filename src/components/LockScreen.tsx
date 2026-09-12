@@ -418,7 +418,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
         initial={{ scale: 0.94, opacity: 0, y: 16 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="relative z-10 flex flex-col items-center max-w-[400px] w-full bg-[#1a1b20] border border-[#2d2f36] rounded-[32px] p-6 sm:p-8 shadow-[0_24px_64px_rgba(0,0,0,0.65)]"
+        className="relative z-10 flex flex-col items-center max-w-[400px] w-full bg-[#1a1b20] border border-[#2d2f36] rounded-[28px] sm:rounded-[32px] p-4 sm:p-8 shadow-[0_24px_64px_rgba(0,0,0,0.65)]"
       >
         {/* Brand & Entrance Animation */}
         <motion.div 
@@ -551,9 +551,9 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
               </div>
             </motion.div>
 
-            {/* M3 Expressive Number Pad: 72px Circular Buttons */}
+            {/* M3 Expressive Number Pad: 56px-72px Circular Buttons */}
             <div className="w-full mb-6">
-              <div className="grid grid-cols-3 gap-y-3.5 gap-x-4 place-items-center w-full max-w-[280px] mx-auto">
+              <div className="grid grid-cols-3 gap-y-3 sm:gap-y-3.5 gap-x-3 sm:gap-x-4 place-items-center w-full max-w-[280px] mx-auto">
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
                   <motion.button
                     key={num}
@@ -564,9 +564,9 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
                     whileTap={{ scale: 0.92 }}
                     transition={{ type: "spring", stiffness: 450, damping: 25 }}
                     aria-label={`Digit ${num}`}
-                    className="w-[72px] h-[72px] rounded-full flex flex-col items-center justify-center bg-[#252830] hover:bg-[#31343d] active:bg-[#3e424d] text-[#e2e2e9] transition-colors border border-[#343740] shadow-sm select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa] disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-full flex flex-col items-center justify-center bg-[#252830] hover:bg-[#31343d] active:bg-[#3e424d] text-[#e2e2e9] transition-colors border border-[#343740] shadow-sm select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa] disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <span className="text-2xl font-bold font-mono leading-none tracking-tight">{num}</span>
+                    <span className="text-xl sm:text-2xl font-bold font-mono leading-none tracking-tight">{num}</span>
                   </motion.button>
                 ))}
 
@@ -580,12 +580,12 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
                     whileTap={{ scale: 0.92 }}
                     aria-label="Use Biometrics"
                     title="Unlock with Biometrics"
-                    className="w-[72px] h-[72px] rounded-full flex items-center justify-center bg-[#20232b] hover:bg-[#2c303a] text-[#a8c7fa] border border-[#343740] transition-colors select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa]"
+                    className="w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-full flex items-center justify-center bg-[#20232b] hover:bg-[#2c303a] text-[#a8c7fa] border border-[#343740] transition-colors select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa]"
                   >
-                    {securitySettings.faceUnlockEnabled ? <ScanFace size={24} /> : <Fingerprint size={24} />}
+                    {securitySettings.faceUnlockEnabled ? <ScanFace size={22} /> : <Fingerprint size={22} />}
                   </motion.button>
                 ) : (
-                  <div className="w-[72px] h-[72px]" />
+                  <div className="w-14 h-14 sm:w-[72px] sm:h-[72px]" />
                 )}
 
                 <motion.button
@@ -596,9 +596,9 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
                   whileTap={{ scale: 0.92 }}
                   transition={{ type: "spring", stiffness: 450, damping: 25 }}
                   aria-label="Digit 0"
-                  className="w-[72px] h-[72px] rounded-full flex flex-col items-center justify-center bg-[#252830] hover:bg-[#31343d] active:bg-[#3e424d] text-[#e2e2e9] transition-colors border border-[#343740] shadow-sm select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa] disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-full flex flex-col items-center justify-center bg-[#252830] hover:bg-[#31343d] active:bg-[#3e424d] text-[#e2e2e9] transition-colors border border-[#343740] shadow-sm select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa] disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <span className="text-2xl font-bold font-mono leading-none tracking-tight">0</span>
+                  <span className="text-xl sm:text-2xl font-bold font-mono leading-none tracking-tight">0</span>
                 </motion.button>
 
                 <motion.button
@@ -608,9 +608,9 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.92 }}
                   aria-label="Delete last digit"
-                  className="w-[72px] h-[72px] rounded-full flex items-center justify-center bg-[#252830]/60 hover:bg-[#31343d] text-[#a5a7b0] hover:text-[#e2e2e9] border border-[#343740] transition-colors select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa] disabled:opacity-25 disabled:cursor-not-allowed"
+                  className="w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-full flex items-center justify-center bg-[#252830]/60 hover:bg-[#31343d] text-[#a5a7b0] hover:text-[#e2e2e9] border border-[#343740] transition-colors select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa] disabled:opacity-25 disabled:cursor-not-allowed"
                 >
-                  <Delete size={22} />
+                  <Delete size={20} />
                 </motion.button>
               </div>
             </div>

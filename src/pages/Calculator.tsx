@@ -348,23 +348,23 @@ export default function Calculator() {
     <div className="w-full flex flex-col md:flex-row gap-6 relative max-w-6xl mx-auto" ref={calculatorRef}>
       
       {/* Calculator Main Panel */}
-      <div className="flex-1 bg-black/40 backdrop-blur-3xl border border-white/10 rounded-3xl overflow-hidden flex flex-col shadow-2xl relative">
+      <div className="flex-1 bg-black/40 backdrop-blur-3xl border border-white/10 rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col shadow-2xl relative">
         
         {/* Display Area */}
-        <div className="p-8 pb-4 flex flex-col justify-end min-h-[220px] relative z-10">
-          <div className="text-slate-400 text-right text-lg mb-2 font-mono h-6 overflow-hidden text-ellipsis whitespace-nowrap">
+        <div className="p-4 sm:p-8 pb-3 sm:pb-4 flex flex-col justify-end min-h-[150px] sm:min-h-[200px] relative z-10">
+          <div className="text-slate-400 text-right text-sm sm:text-lg mb-1.5 sm:mb-2 font-mono h-6 overflow-hidden text-ellipsis whitespace-nowrap">
             {expression}
           </div>
           <div 
             ref={displayRef}
             className={cn(
-              "text-right font-light tracking-tight transition-all duration-200 break-all leading-tight",
-              displayValue.length > 15 ? "text-4xl" : "text-6xl text-white font-mono"
+              "text-right font-light tracking-tight transition-all duration-200 break-all leading-tight text-white font-mono",
+              displayValue.length > 15 ? "text-2xl sm:text-4xl" : displayValue.length > 9 ? "text-3xl sm:text-5xl" : "text-4xl sm:text-6xl"
             )}
           >
             {formatNumber(displayValue)}
           </div>
-          <div className="h-6 mt-1 text-right text-indigo-400/80 font-mono text-sm">
+          <div className="h-5 sm:h-6 mt-1 text-right text-indigo-400/80 font-mono text-xs sm:text-sm">
             {previewResult && previewResult !== displayValue ? `= ${formatNumber(previewResult)}` : ''}
           </div>
         </div>
@@ -376,17 +376,17 @@ export default function Calculator() {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="px-6 pb-4 overflow-hidden border-b border-white/5 bg-white/5"
+              className="px-4 sm:px-6 pb-3 sm:pb-4 overflow-hidden border-b border-white/5 bg-white/5"
             >
               <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                <button onClick={handleAddIncome} className="flex items-center gap-2 whitespace-nowrap px-4 py-2 bg-emerald-500/10 text-emerald-400 rounded-xl hover:bg-emerald-500/20 transition-colors text-sm font-medium">
-                  <Plus size={16} /> Add Income
+                <button onClick={handleAddIncome} className="flex items-center gap-2 whitespace-nowrap px-3.5 sm:px-4 py-2 bg-emerald-500/10 text-emerald-400 rounded-xl hover:bg-emerald-500/20 active:scale-95 transition-all text-xs sm:text-sm font-medium min-h-[40px]">
+                  <Plus size={15} /> Add Income
                 </button>
-                <button onClick={() => handleAddPendingPayment()} className="flex items-center gap-2 whitespace-nowrap px-4 py-2 bg-amber-500/10 text-amber-400 rounded-xl hover:bg-amber-500/20 transition-colors text-sm font-medium">
-                  <Clock size={16} /> Pending Payment
+                <button onClick={() => handleAddPendingPayment()} className="flex items-center gap-2 whitespace-nowrap px-3.5 sm:px-4 py-2 bg-amber-500/10 text-amber-400 rounded-xl hover:bg-amber-500/20 active:scale-95 transition-all text-xs sm:text-sm font-medium min-h-[40px]">
+                  <Clock size={15} /> Pending Payment
                 </button>
-                <button onClick={handleUpdateVault} className="flex items-center gap-2 whitespace-nowrap px-4 py-2 bg-indigo-500/10 text-indigo-400 rounded-xl hover:bg-indigo-500/20 transition-colors text-sm font-medium">
-                  <Wallet size={16} /> Set Vault
+                <button onClick={handleUpdateVault} className="flex items-center gap-2 whitespace-nowrap px-3.5 sm:px-4 py-2 bg-indigo-500/10 text-indigo-400 rounded-xl hover:bg-indigo-500/20 active:scale-95 transition-all text-xs sm:text-sm font-medium min-h-[40px]">
+                  <Wallet size={15} /> Set Vault
                 </button>
                 <button 
                   onClick={() => {
@@ -398,9 +398,9 @@ export default function Calculator() {
                       }
                     }).catch(() => {});
                   }}
-                  className="flex items-center gap-2 whitespace-nowrap px-4 py-2 bg-white/10 text-white/80 rounded-xl hover:bg-white/20 transition-colors text-sm font-medium"
+                  className="flex items-center gap-2 whitespace-nowrap px-3.5 sm:px-4 py-2 bg-white/10 text-white/80 rounded-xl hover:bg-white/20 active:scale-95 transition-all text-xs sm:text-sm font-medium min-h-[40px]"
                 >
-                  <FileText size={16} /> Paste Number
+                  <FileText size={15} /> Paste Number
                 </button>
                 <button 
                   onClick={() => {
@@ -408,9 +408,9 @@ export default function Calculator() {
                     setCopiedId('action');
                     setTimeout(() => setCopiedId(null), 2000);
                   }} 
-                  className="flex items-center gap-2 whitespace-nowrap px-4 py-2 bg-white/10 text-white/80 rounded-xl hover:bg-white/20 transition-colors text-sm font-medium"
+                  className="flex items-center gap-2 whitespace-nowrap px-3.5 sm:px-4 py-2 bg-white/10 text-white/80 rounded-xl hover:bg-white/20 active:scale-95 transition-all text-xs sm:text-sm font-medium min-h-[40px]"
                 >
-                  {copiedId === 'action' ? <Check size={16} /> : <Copy size={16} />} 
+                  {copiedId === 'action' ? <Check size={15} /> : <Copy size={15} />} 
                   {copiedId === 'action' ? 'Copied' : 'Copy'}
                 </button>
               </div>
@@ -419,10 +419,10 @@ export default function Calculator() {
         </AnimatePresence>
 
         {/* Keypad */}
-        <div className="flex-1 p-6 pt-4 bg-gradient-to-b from-transparent to-black/20 grid grid-cols-4 gap-3 sm:gap-4">
+        <div className="flex-1 p-3 sm:p-6 pt-2 sm:pt-4 bg-gradient-to-b from-transparent to-black/20 grid grid-cols-4 gap-2 sm:gap-3.5">
           
           {/* Memory Row */}
-          <div className="col-span-4 flex justify-between gap-2 mb-2">
+          <div className="col-span-4 flex justify-between gap-1 sm:gap-2 mb-1">
             <CalcButton onClick={() => handleMemory('MC')} variant="memory" className="flex-1">MC</CalcButton>
             <CalcButton onClick={() => handleMemory('MR')} variant="memory" className="flex-1">MR</CalcButton>
             <CalcButton onClick={() => handleMemory('M+')} variant="memory" className="flex-1">M+</CalcButton>
@@ -483,7 +483,7 @@ export default function Calculator() {
       <div className={cn(
         "md:w-80 lg:w-96 bg-black/40 backdrop-blur-3xl border border-white/10 rounded-3xl flex flex-col shadow-2xl transition-all duration-300",
         !showHistory && "hidden md:flex",
-        showHistory && "h-[400px] md:h-auto"
+        showHistory && "h-[360px] max-h-[50dvh] md:h-auto"
       )}>
         <div className="p-6 pb-4 border-b border-white/10 flex items-center justify-between">
           <div className="flex items-center gap-2 text-white font-semibold">
@@ -544,13 +544,14 @@ export default function Calculator() {
                       e.stopPropagation();
                       setHistory(prev => prev.map(h => h.id === item.id ? { ...h, isFavorite: !h.isFavorite } : h));
                     }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-label={item.isFavorite ? "Unfavorite calculation" : "Favorite calculation"}
+                    className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg hover:bg-white/10"
                   >
-                    <Star size={14} className={cn(item.isFavorite ? "text-yellow-400 fill-yellow-400" : "text-slate-400 hover:text-white")} />
+                    <Star size={15} className={cn(item.isFavorite ? "text-yellow-400 fill-yellow-400" : "text-slate-400 hover:text-white")} />
                   </button>
                 </div>
-                <div className="text-sm text-slate-400 font-mono mb-1">{item.expression} =</div>
-                <div className="text-lg text-white font-mono">{formatNumber(item.result)}</div>
+                <div className="text-xs sm:text-sm text-slate-400 font-mono mb-1">{item.expression} =</div>
+                <div className="text-base sm:text-lg text-white font-mono">{formatNumber(item.result)}</div>
               </motion.div>
             ))
           )}
@@ -579,7 +580,7 @@ function CalcButton({
       case 'primary': return 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white hover:opacity-90 shadow-lg shadow-indigo-500/20 border-white/10';
       case 'secondary': return 'bg-white/10 text-indigo-300 hover:bg-white/20 border-white/5';
       case 'danger': return 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border-red-500/10';
-      case 'memory': return 'bg-transparent text-slate-400 hover:bg-white/10 hover:text-white border-transparent text-sm font-semibold shadow-none';
+      case 'memory': return 'bg-transparent text-slate-400 hover:bg-white/10 hover:text-white border-transparent text-xs sm:text-sm font-semibold shadow-none';
       default: return 'bg-white/5 text-white hover:bg-white/10 border-white/5 hover:border-white/10';
     }
   };
@@ -588,14 +589,13 @@ function CalcButton({
     <button
       onClick={onClick}
       className={cn(
-        "relative rounded-2xl flex items-center justify-center text-xl font-medium transition-all active:scale-95 border overflow-hidden group outline-none focus-visible:ring-2 focus-visible:ring-indigo-500",
-        variant === 'memory' ? 'h-10' : 'h-16 sm:h-20',
+        "relative rounded-xl sm:rounded-2xl flex items-center justify-center text-lg sm:text-xl font-medium transition-all active:scale-95 border overflow-hidden group outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 select-none",
+        variant === 'memory' ? 'h-9 sm:h-10 min-h-[36px]' : 'h-13 sm:h-16 md:h-20 min-h-[52px]',
         getVariantStyles(),
         className
       )}
     >
       <span className="relative z-10">{children}</span>
-      {/* Ripple effect placeholder - can be implemented with motion if needed, but active:scale-95 is usually enough for responsiveness */}
     </button>
   );
 }

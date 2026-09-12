@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../context/StoreContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { Clock, Plus, User, Calendar, FileText, CheckCircle2, Phone, MessageCircle, Trash, AlertTriangle, Loader2, ClipboardList, Coins, Wallet, Brain, MoreVertical, Edit2, Play, Pause, Copy, Share2, Download, Archive, Bell } from 'lucide-react';
-import { formatCurrency, formatDate, formatName, getDaysDiff, calculateReminderDetails, formatReminderMessage } from '../lib/utils';
+import { formatCurrency, formatDate, formatName, getDaysDiff, calculateReminderDetails, formatReminderMessage, cn } from '../lib/utils';
 import { PendingMoney } from '../types';
 import LatePenaltyModal from '../components/LatePenaltyModal';
 import ReminderMessageEditor, { generateSmartDefaultReminder } from "../components/ReminderMessageEditor";
@@ -160,16 +160,16 @@ function PaymentCard({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.25, delay: 0.03 * idx, ease: [0.16, 1, 0.3, 1] }}
-      className="group vision-glass p-6 rounded-[22px] flex flex-col gap-5 relative overflow-hidden transition-all duration-200 ease-out shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)]"
+      className="group vision-glass p-4 sm:p-6 rounded-[20px] sm:rounded-[22px] flex flex-col gap-4 sm:gap-5 relative overflow-hidden transition-all duration-200 ease-out shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)]"
     >
       {/* Header */}
-      <div className="flex justify-between items-start gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-inner">
+      <div className="flex flex-col sm:flex-row justify-between items-start gap-3 sm:gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-base sm:text-lg shadow-inner shrink-0">
             {getInitials(formattedName)}
           </div>
-          <div>
-            <h3 className="text-lg font-bold text-white leading-tight">{formattedName}</h3>
+          <div className="min-w-0">
+            <h3 className="text-base sm:text-lg font-bold text-white leading-tight truncate">{formattedName}</h3>
             <div className="flex items-center gap-2 mt-1">
               {isPaid ? (
                 <span className="px-2.5 py-0.5 rounded-full bg-green-500/20 text-green-400 text-[10px] font-bold uppercase tracking-wider border border-green-500/20">Paid</span>
@@ -184,17 +184,17 @@ function PaymentCard({
           </div>
         </div>
         
-        <div className="text-right flex flex-col items-end">
+        <div className="text-left sm:text-right flex flex-wrap sm:flex-col items-start sm:items-end justify-between w-full sm:w-auto gap-1 sm:gap-0">
           {tx.penaltyEnabled && penaltyAmount > 0 && !isPaid ? (
-            <div className="flex flex-col items-end mb-1">
+            <div className="flex flex-row sm:flex-col items-baseline sm:items-end gap-2 sm:gap-0 mb-1">
               <span className="text-sm text-slate-400 line-through mr-1">{formatCurrency(tx.amount)}</span>
-              <span className="text-2xl font-bold text-white tracking-tight">{formatCurrency(totalDue)}</span>
+              <span className="text-xl sm:text-2xl font-bold text-white tracking-tight">{formatCurrency(totalDue)}</span>
             </div>
           ) : (
-            <span className="text-2xl font-bold text-white tracking-tight">{formatCurrency(totalDue)}</span>
+            <span className="text-xl sm:text-2xl font-bold text-white tracking-tight">{formatCurrency(totalDue)}</span>
           )}
           {!isPaid && (
-            <span className={`text-xs font-semibold mt-1 ${isOverdue ? 'text-red-400' : 'text-slate-400'}`}>
+            <span className={`text-xs font-semibold mt-0.5 sm:mt-1 ${isOverdue ? 'text-red-400' : 'text-slate-400'}`}>
               {isOverdue ? `Overdue by ${Math.abs(daysDiff)} Days` : (daysDiff === 0 ? 'Due Today' : `Due in ${daysDiff} Days`)}
             </span>
           )}
@@ -203,7 +203,7 @@ function PaymentCard({
           {!isPaid && (
             <button 
               onClick={() => onEditPenalty(tx)}
-              className={`mt-2.5 px-3 py-1.5 rounded-full text-[10px] font-bold tracking-wide uppercase border flex items-center gap-1.5 transition-all ${
+              className={`mt-2 sm:mt-2.5 px-3 py-1.5 rounded-full text-[10px] font-bold tracking-wide uppercase border flex items-center gap-1.5 transition-all ${
                 tx.penaltyEnabled && penaltyAmount > 0
                   ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20'
                   : tx.penaltyEnabled
@@ -250,10 +250,34 @@ function PaymentCard({
                 className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full"
               />
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-1 mt-2 text-[11px] text-slate-400/90 font-medium">
-              <span>Last: {reminderDetails.lastSentDisplay || 'None'}</span>
-              <span>Next: {reminderDetails.isStopped ? 'Completed' : (reminderDetails.nextReminderDisplay === 'Today' ? 'Today' : (reminderDetails.nextReminderDate ? formatDate(reminderDetails.nextReminderDate, generalSettings?.timezone) : 'N/A'))}</span>
-              <span>Status: {tx.phoneNumber ? 'Delivered' : 'Pending'}</span>
+            <div className="grid grid-cols-1 min-[340px]:grid-cols-3 gap-1.5 sm:gap-2 mt-2.5 pt-2.5 border-t border-white/[0.06] text-[11px] text-slate-400 font-medium">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-slate-500 shrink-0">Last:</span>
+                <span className="text-slate-300 truncate">{reminderDetails.lastSentDisplay || 'None'}</span>
+              </div>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-slate-500 shrink-0">Next:</span>
+                <span className="text-slate-300 truncate">
+                  {reminderDetails.isStopped 
+                    ? 'Completed' 
+                    : (reminderDetails.nextReminderDisplay === 'Today' 
+                        ? 'Today' 
+                        : (reminderDetails.nextReminderDate 
+                            ? formatDate(reminderDetails.nextReminderDate, generalSettings?.timezone) 
+                            : 'N/A'))}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 min-w-0 min-[340px]:justify-end">
+                <span className="text-slate-500 shrink-0">Status:</span>
+                <span className={cn(
+                  "font-semibold truncate px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider",
+                  tx.phoneNumber 
+                    ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25" 
+                    : "bg-amber-500/15 text-amber-400 border border-amber-500/25"
+                )}>
+                  {tx.phoneNumber ? 'Delivered' : 'Pending'}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -653,21 +677,21 @@ export default function PendingPayments() {
         </header>
 
       {/* Apple Metrics 4-Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6 sm:mb-8">
         
         {/* Card 1: Pending Records */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-[#12131a]/85 border border-white/[0.08] rounded-2xl p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between"
+          className="bg-[#12131a]/85 border border-white/[0.08] rounded-2xl p-3.5 sm:p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between"
         >
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2.5 bg-[#0a84ff]/15 rounded-xl">
-              <ClipboardList size={18} className="text-[#0a84ff]" />
+          <div className="flex items-center gap-2 sm:gap-3 mb-1.5 sm:mb-2">
+            <div className="p-2 sm:p-2.5 bg-[#0a84ff]/15 rounded-xl shrink-0">
+              <ClipboardList size={16} className="text-[#0a84ff]" />
             </div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-[#86868b]">Active Receivables</h3>
+            <h3 className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#86868b] truncate">Receivables</h3>
           </div>
-          <div className="text-3xl font-extrabold text-white mt-2 font-tabular">
+          <div className="text-2xl sm:text-3xl font-extrabold text-white mt-1 sm:mt-2 font-tabular">
             <AnimatedCounter value={pendingRecordsCount} />
           </div>
         </motion.div>
@@ -677,15 +701,15 @@ export default function PendingPayments() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-[#12131a]/85 border border-white/[0.08] rounded-2xl p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between"
+          className="bg-[#12131a]/85 border border-white/[0.08] rounded-2xl p-3.5 sm:p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between"
         >
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2.5 bg-[#ffd60a]/15 rounded-xl">
-              <Coins size={18} className="text-[#ffd60a]" />
+          <div className="flex items-center gap-2 sm:gap-3 mb-1.5 sm:mb-2">
+            <div className="p-2 sm:p-2.5 bg-[#ffd60a]/15 rounded-xl shrink-0">
+              <Coins size={16} className="text-[#ffd60a]" />
             </div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-[#86868b]">Total Outstanding</h3>
+            <h3 className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#86868b] truncate">Outstanding</h3>
           </div>
-          <div className="text-3xl font-extrabold text-white mt-2 font-tabular">
+          <div className="text-xl min-[380px]:text-2xl sm:text-3xl font-extrabold text-[#ffd60a] mt-1 sm:mt-2 font-tabular truncate">
             <AnimatedCounter value={totalPendingAmount} isCurrency />
           </div>
         </motion.div>
@@ -695,20 +719,20 @@ export default function PendingPayments() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-[#12131a]/85 border border-[#ff453a]/25 rounded-2xl p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between"
+          className="bg-[#12131a]/85 border border-[#ff453a]/25 rounded-2xl p-3.5 sm:p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between"
         >
           <div>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2.5 bg-[#ff453a]/15 rounded-xl">
-                <AlertTriangle size={18} className="text-[#ff453a]" />
+            <div className="flex items-center gap-2 sm:gap-3 mb-1.5 sm:mb-2">
+              <div className="p-2 sm:p-2.5 bg-[#ff453a]/15 rounded-xl shrink-0">
+                <AlertTriangle size={16} className="text-[#ff453a]" />
               </div>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-[#ff453a]">Overdue Balance</h3>
+              <h3 className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#ff453a] truncate">Overdue</h3>
             </div>
-            <div className="text-3xl font-extrabold text-[#ff453a] mt-2 font-tabular">
+            <div className="text-xl min-[380px]:text-2xl sm:text-3xl font-extrabold text-[#ff453a] mt-1 sm:mt-2 font-tabular truncate">
               <AnimatedCounter value={overdueAmount} isCurrency />
             </div>
           </div>
-          <div className="mt-2 text-xs text-[#ff453a]/80 font-semibold">
+          <div className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-[#ff453a]/80 font-semibold truncate">
             {overdueCount} {overdueCount === 1 ? 'record' : 'records'} overdue
           </div>
         </motion.div>
@@ -718,21 +742,21 @@ export default function PendingPayments() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="bg-[#12131a]/85 border border-[#30d158]/25 rounded-2xl p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between"
+          className="bg-[#12131a]/85 border border-[#30d158]/25 rounded-2xl p-3.5 sm:p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between"
         >
           <div>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2.5 bg-[#30d158]/15 rounded-xl">
-                <CheckCircle2 size={18} className="text-[#30d158]" />
+            <div className="flex items-center gap-2 sm:gap-3 mb-1.5 sm:mb-2">
+              <div className="p-2 sm:p-2.5 bg-[#30d158]/15 rounded-xl shrink-0">
+                <CheckCircle2 size={16} className="text-[#30d158]" />
               </div>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-[#30d158]">Settled This Month</h3>
+              <h3 className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#30d158] truncate">Settled</h3>
             </div>
-            <div className="text-3xl font-extrabold text-[#30d158] mt-2 font-tabular">
+            <div className="text-xl min-[380px]:text-2xl sm:text-3xl font-extrabold text-[#30d158] mt-1 sm:mt-2 font-tabular truncate">
               <AnimatedCounter value={collectedThisMonthAmount} isCurrency />
             </div>
           </div>
-          <div className="mt-2 text-xs text-[#30d158]/80 font-semibold">
-            {collectedThisMonthCount} {collectedThisMonthCount === 1 ? 'payment' : 'payments'} collected
+          <div className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-[#30d158]/80 font-semibold truncate">
+            {collectedThisMonthCount} collected
           </div>
         </motion.div>
 
@@ -744,7 +768,7 @@ export default function PendingPayments() {
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white/5 border border-white/10 rounded-[2.5rem] p-6 backdrop-blur-xl"
+            className="bg-white/5 border border-white/10 rounded-[22px] sm:rounded-[2.5rem] p-4 sm:p-6 backdrop-blur-xl"
           >
             <h2 className="text-lg font-bold text-white mb-6">Add Pending Entry</h2>
             

@@ -688,13 +688,13 @@ export default function MonthlyReports() {
           </div>
         
             {/* Gullak Reports */}
-            <div className="mt-4 pt-4 border-t border-white/5">
+            <div className="col-span-2 lg:col-span-4 mt-4 pt-4 border-t border-white/5">
               <h3 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
                 <Shield size={16} className="text-amber-400" />
                 Gullak (Savings) Reports
               </h3>
               <div className="flex flex-wrap items-center gap-3">
-                <div className="flex gap-2 p-1.5 bg-black/20 rounded-xl border border-white/5">
+                <div className="flex flex-wrap gap-2 p-1.5 bg-black/20 rounded-xl border border-white/5">
                   <span className="text-xs font-semibold text-slate-400 self-center px-2">Deposits:</span>
                   <button
                     onClick={() => handleDownloadGullakReportPdf('deposit')}
@@ -711,8 +711,6 @@ export default function MonthlyReports() {
                     <FileSpreadsheet size={14} /> CSV
                   </button>
                 </div>
-                
-
               </div>
             </div>
 </motion.div>
@@ -722,30 +720,30 @@ export default function MonthlyReports() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="vision-glass-elevated rounded-3xl p-6 sm:p-7 relative overflow-hidden"
+          className="vision-glass-elevated rounded-2xl sm:rounded-3xl p-4 sm:p-7 relative overflow-hidden"
         >
           <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
 
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
             <div>
               <div className="flex items-center gap-2.5">
-                <span className="p-2 rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/25">
+                <span className="p-2 rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/25 shrink-0">
                   <Sparkles size={20} />
                 </span>
-                <h2 className="text-xl font-bold text-white">
+                <h2 className="text-lg sm:text-xl font-bold text-white">
                   Instant Report Studio ({selectedMonth})
                 </h2>
               </div>
-              <p className="text-sm text-slate-400 mt-1.5">
+              <p className="text-xs sm:text-sm text-slate-400 mt-1.5">
                 Generate and download high-resolution PDF or CSV files directly to your device right now.
               </p>
             </div>
 
             {/* Quick Action Buttons */}
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full lg:w-auto">
               <button
                 onClick={() => setIsPreviewOpen(true)}
-                className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 hover:border-white/20 font-medium text-sm flex items-center gap-2 transition-all"
+                className="flex-1 sm:flex-none justify-center px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 hover:border-white/20 font-medium text-xs sm:text-sm flex items-center gap-2 transition-all"
               >
                 <Eye size={16} className="text-cyan-400" />
                 Live Preview
@@ -754,17 +752,17 @@ export default function MonthlyReports() {
               <button
                 onClick={handleDownloadPdfReport}
                 disabled={isDownloadingPdf}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-sm flex items-center gap-2 shadow-lg shadow-indigo-600/25 transition-all disabled:opacity-50"
+                className="flex-1 sm:flex-none justify-center px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-indigo-600/25 transition-all disabled:opacity-50"
               >
                 {isDownloadingPdf ? (
                   <>
                     <RefreshCw size={16} className="animate-spin" />
-                    Generating report...
+                    Generating...
                   </>
                 ) : (
                   <>
                     <Download size={16} />
-                    Download PDF Report
+                    Download PDF
                   </>
                 )}
               </button>
@@ -772,7 +770,7 @@ export default function MonthlyReports() {
               <button
                 onClick={handleDownloadCsvReport}
                 disabled={isDownloadingCsv}
-                className="px-4 py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 font-medium text-sm flex items-center gap-2 transition-all disabled:opacity-50"
+                className="w-full sm:w-auto justify-center px-4 py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 font-medium text-xs sm:text-sm flex items-center gap-2 transition-all disabled:opacity-50"
               >
                 {isDownloadingCsv ? (
                   <RefreshCw size={16} className="animate-spin" />
@@ -792,7 +790,7 @@ export default function MonthlyReports() {
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 }}
-            className="lg:col-span-7 vision-glass rounded-3xl p-6 sm:p-7 relative overflow-hidden flex flex-col justify-between"
+            className="lg:col-span-7 vision-glass rounded-2xl sm:rounded-3xl p-4 sm:p-7 relative overflow-hidden flex flex-col justify-between"
           >
             <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent pointer-events-none" />
 
@@ -933,7 +931,7 @@ export default function MonthlyReports() {
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="lg:col-span-5 vision-glass rounded-3xl p-6 sm:p-7 relative overflow-hidden flex flex-col justify-between"
+            className="lg:col-span-5 vision-glass rounded-2xl sm:rounded-3xl p-4 sm:p-7 relative overflow-hidden flex flex-col justify-between"
           >
             <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/40 to-transparent pointer-events-none" />
 
@@ -1047,13 +1045,13 @@ export default function MonthlyReports() {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25 }}
-          className="vision-glass rounded-3xl p-6 sm:p-7 relative overflow-hidden"
+          className="vision-glass rounded-2xl sm:rounded-3xl p-4 sm:p-7 relative overflow-hidden"
         >
           <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-purple-400/40 to-transparent pointer-events-none" />
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-purple-500/15 rounded-xl text-purple-400 border border-purple-500/25">
+              <div className="p-2.5 bg-purple-500/15 rounded-xl text-purple-400 border border-purple-500/25 shrink-0">
                 <FileText size={22} />
               </div>
               <div>
@@ -1072,7 +1070,7 @@ export default function MonthlyReports() {
                   value={historySearch}
                   onChange={e => setHistorySearch(e.target.value)}
                   placeholder="Filter by month or email..."
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-400"
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2 sm:py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-400"
                 />
               </div>
             )}
@@ -1165,15 +1163,15 @@ export default function MonthlyReports() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="vision-glass-elevated max-w-3xl w-full max-h-[85vh] rounded-3xl p-6 sm:p-8 flex flex-col relative overflow-hidden"
+                className="vision-glass-elevated max-w-3xl w-full max-h-[90vh] rounded-2xl sm:rounded-3xl p-4 sm:p-8 flex flex-col relative overflow-hidden"
               >
                 <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent pointer-events-none" />
 
                 {/* Modal Header */}
                 <div className="flex items-center justify-between pb-4 border-b border-white/10">
                   <div>
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                      <FileText size={20} className="text-cyan-400" />
+                    <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                      <FileText size={20} className="text-cyan-400 shrink-0" />
                       Monthly Report Preview
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
@@ -1182,36 +1180,36 @@ export default function MonthlyReports() {
                   </div>
                   <button
                     onClick={() => setIsPreviewOpen(false)}
-                    className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 flex items-center justify-center transition-colors"
+                    className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 flex items-center justify-center transition-colors shrink-0"
                   >
                     ✕
                   </button>
                 </div>
 
                 {/* Modal Content Scrollable */}
-                <div className="flex-1 overflow-y-auto py-5 space-y-5 pr-1">
+                <div className="flex-1 overflow-y-auto py-4 sm:py-5 space-y-4 sm:space-y-5 pr-1">
                   {/* Financial Snapshot */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
                     <div className="p-3 rounded-xl bg-black/40 border border-white/10">
                       <div className="text-[10px] text-slate-400 uppercase font-semibold">Total Inflows</div>
-                      <div className="text-base font-bold text-emerald-400">{formatCurrency(monthInflow)}</div>
+                      <div className="text-sm sm:text-base font-bold text-emerald-400 font-tabular">{formatCurrency(monthInflow)}</div>
                     </div>
                     <div className="p-3 rounded-xl bg-black/40 border border-white/10">
                       <div className="text-[10px] text-slate-400 uppercase font-semibold">Total Outflows</div>
-                      <div className="text-base font-bold text-red-400">{formatCurrency(monthOutflow)}</div>
+                      <div className="text-sm sm:text-base font-bold text-red-400 font-tabular">{formatCurrency(monthOutflow)}</div>
                     </div>
                     <div className="p-3 rounded-xl bg-black/40 border border-white/10">
                       <div className="text-[10px] text-slate-400 uppercase font-semibold">Net Cashflow</div>
-                      <div className="text-base font-bold text-cyan-400">{formatCurrency(monthNet)}</div>
+                      <div className="text-sm sm:text-base font-bold text-cyan-400 font-tabular">{formatCurrency(monthNet)}</div>
                     </div>
                     <div className="p-3 rounded-xl bg-black/40 border border-white/10">
                       <div className="text-[10px] text-slate-400 uppercase font-semibold">Open Receivables</div>
-                      <div className="text-base font-bold text-amber-400">{formatCurrency(monthPending)}</div>
+                      <div className="text-sm sm:text-base font-bold text-amber-400 font-tabular">{formatCurrency(monthPending)}</div>
                     </div>
                   </div>
 
                   {/* AI Summary Card */}
-                  <div className="p-4 rounded-xl bg-black/40 border-l-4 border-cyan-400 border-white/10">
+                  <div className="p-3.5 sm:p-4 rounded-xl bg-black/40 border-l-4 border-cyan-400 border-white/10">
                     <div className="text-xs font-bold text-cyan-300 uppercase tracking-wider mb-1">
                       AI Executive Summary
                     </div>
@@ -1225,8 +1223,8 @@ export default function MonthlyReports() {
                     <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
                       Transactions in {selectedMonth} ({filteredTransactions.length} records)
                     </h4>
-                    <div className="max-h-60 overflow-auto rounded-xl border border-white/10">
-                      <table className="w-full text-left text-xs">
+                    <div className="max-h-60 overflow-x-auto rounded-xl border border-white/10">
+                      <table className="w-full min-w-[440px] text-left text-xs">
                         <thead className="bg-slate-900/90 text-slate-400 uppercase text-[10px] sticky top-0">
                           <tr>
                             <th className="p-2.5">Date</th>

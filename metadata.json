@@ -3,7 +3,8 @@
   "description": "Smart Ledger is a comprehensive financial ledger and cash flow management platform with automated backups, real-time background scheduled jobs monitoring, biometric security, and audit analytics.",
   "requestFramePermissions": [
     "publickey-credentials-create",
-    "publickey-credentials-get"
+    "publickey-credentials-get",
+    "geolocation"
   ],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

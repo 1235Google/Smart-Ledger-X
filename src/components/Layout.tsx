@@ -45,11 +45,11 @@ import SystemModeBanner from './SystemModeBanner';
 
 // Primary Apple Floating Bottom Tab Bar Items - Simple & Clear
 const mobilePrimaryTabs = [
-  { icon: LayoutDashboard, label: 'Home', path: '/' },
-  { icon: Wallet, label: 'Balance', path: '/balance' },
-  { icon: ArrowDownLeft, label: 'Money In', path: '/received' },
-  { icon: Clock, label: 'Due Money', path: '/pending' },
-  { icon: BarChart3, label: 'Analytics', path: '/analytics' },
+  { icon: LayoutDashboard, label: 'Home', shortLabel: 'Home', path: '/' },
+  { icon: Wallet, label: 'Balance', shortLabel: 'Balance', path: '/balance' },
+  { icon: ArrowDownLeft, label: 'Money In', shortLabel: 'Inflow', path: '/received' },
+  { icon: Clock, label: 'Due Money', shortLabel: 'Dues', path: '/pending' },
+  { icon: BarChart3, label: 'Analytics', shortLabel: 'Stats', path: '/analytics' },
 ];
 
 // All Navigation Items categorized with Simple, Natural, Plain English names
@@ -210,6 +210,11 @@ export default function Layout() {
 
   // Smooth & Snappy Scroll Context (tuned for responsive speed)
   useEffect(() => {
+    // Mobile devices have native 120Hz momentum touch scrolling
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return;
+    }
+
     const lenis = new Lenis({
       duration: 0.5,
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
@@ -255,7 +260,7 @@ export default function Layout() {
   const isPrimaryTabActive = mobilePrimaryTabs.some(t => t.path === location.pathname);
 
   return (
-    <div className="min-h-screen bg-transparent text-white font-sans flex relative selection:bg-[#0a84ff]/30 selection:text-white">
+    <div className="min-h-[100dvh] bg-transparent text-white font-sans flex relative selection:bg-[#0a84ff]/30 selection:text-white">
       {/* VisionOS Dynamic Liquid Spotlight Tracker */}
       <LiquidSpotlight />
 
@@ -453,33 +458,37 @@ export default function Layout() {
       </motion.aside>
 
       {/* Mobile Top Bar (Apple Frosted Header) */}
-      <div className="md:hidden fixed top-0 left-0 right-0 bg-black/40 backdrop-blur-[20px] border-b border-white/[0.08] z-30 pt-[env(safe-area-inset-top)]">
-        <div className="h-16 flex items-center justify-between px-4">
-          <div className="flex items-center gap-2.5">
+      <div className="md:hidden fixed top-0 left-0 right-0 bg-black/60 backdrop-blur-[20px] border-b border-white/[0.08] z-30 pt-[env(safe-area-inset-top,0px)]">
+        <div className="h-14 sm:h-16 flex items-center justify-between px-2 sm:px-4">
+          <div className="flex items-center gap-1 min-[360px]:gap-2 sm:gap-2.5 min-w-0">
             <button 
               onClick={() => setMobileMenuOpen(true)} 
               aria-label="Open Full App Menu"
-              className="w-9 h-9 flex items-center justify-center text-[#f5f5f7] rounded-full hover:bg-white/[0.08] active:scale-95 transition-all"
+              className="w-8 h-8 min-[360px]:w-9 min-[360px]:h-9 sm:w-10 sm:h-10 flex items-center justify-center text-[#f5f5f7] rounded-full hover:bg-white/[0.08] active:scale-95 transition-all shrink-0"
             >
-              <Menu size={20} />
+              <Menu size={18} />
             </button>
-            <Link to="/" className="flex items-center gap-1 sm:gap-2">
-              <div className="w-8 h-8 bg-gradient-to-tr from-[#0a84ff] to-[#5e5ce6] rounded-xl flex items-center justify-center shadow-md shadow-[#0a84ff]/20 border border-white/15">
-                <Wallet className="text-white" size={15} />
+            <Link to="/" className="flex items-center gap-1.5 min-[360px]:gap-2 min-w-0">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-tr from-[#0a84ff] to-[#5e5ce6] rounded-xl flex items-center justify-center shadow-md shadow-[#0a84ff]/20 border border-white/15 shrink-0">
+                <Wallet className="text-white" size={14} />
               </div>
-              <span className="font-bold tracking-tight text-white text-sm">Smart Ledger</span>
+              <div className="flex items-center gap-1 min-w-0">
+                <span className="font-bold tracking-tight text-white text-[13px] min-[360px]:text-sm sm:text-base whitespace-nowrap truncate">Smart Ledger</span>
+                <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 border border-white/20 shrink-0">
+                  X
+                </span>
+              </div>
             </Link>
           </div>
 
-          <div className="flex items-center gap-1 sm:gap-2">
+          <div className="flex items-center gap-1 min-[360px]:gap-1.5 shrink-0">
             <button
               onClick={openSearch}
               aria-label="Universal Search (Cmd+K)"
-              className="w-9 h-9 flex items-center justify-center text-[#86868b] hover:text-white rounded-full bg-white/[0.05] border border-white/[0.08] active:scale-95 transition-all"
+              className="w-8 h-8 min-[360px]:w-9 min-[360px]:h-9 sm:w-10 sm:h-10 flex items-center justify-center text-[#86868b] hover:text-white rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] active:scale-95 transition-all shrink-0"
             >
               <Search size={15} />
             </button>
-            <SyncStatusBadge />
             <NotificationDropdown ref={mobileNotifRef} />
             <UserProfileDropdown onOpenNotifications={() => mobileNotifRef.current?.open()} />
           </div>
@@ -506,23 +515,31 @@ export default function Layout() {
               transition={{ type: 'spring', damping: 30, stiffness: 300 }}
               className="md:hidden fixed inset-y-0 left-0 w-[86%] max-w-sm bg-[#0a0b12]/95 backdrop-blur-3xl border-r border-white/10 z-50 flex flex-col shadow-2xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] rounded-r-[32px] overflow-hidden"
             >
-              <div className="p-5 flex items-center justify-between border-b border-white/10 shrink-0">
-                <Link to="/" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-tr from-[#0a84ff] via-[#5e5ce6] to-[#bf5af2] rounded-2xl flex items-center justify-center shadow-lg shadow-[#0a84ff]/20 border border-white/20">
-                    <Wallet className="text-white" size={20} />
+              <div className="p-4 sm:p-5 flex items-center justify-between border-b border-white/10 shrink-0">
+                <Link to="/" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-tr from-[#0a84ff] via-[#5e5ce6] to-[#bf5af2] rounded-2xl flex items-center justify-center shadow-lg shadow-[#0a84ff]/20 border border-white/20 shrink-0">
+                    <Wallet className="text-white" size={18} />
                   </div>
-                  <div>
-                    <span className="text-lg font-bold tracking-tight text-white block">Smart Ledger</span>
-                    <span className="text-[10px] text-blue-400 font-semibold uppercase tracking-wider">Vision Edition</span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-base font-bold tracking-tight text-white block truncate">Smart Ledger</span>
+                      <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 border border-white/20">
+                        X
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-blue-400 font-semibold uppercase tracking-wider block">Vision Edition</span>
                   </div>
                 </Link>
-                <button 
-                  onClick={() => setMobileMenuOpen(false)} 
-                  aria-label="Close Navigation Menu"
-                  className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-white rounded-full bg-white/[0.06] active:scale-95 transition-all"
-                >
-                  <X size={18} />
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <SyncStatusBadge />
+                  <button 
+                    onClick={() => setMobileMenuOpen(false)} 
+                    aria-label="Close Navigation Menu"
+                    className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-white rounded-full bg-white/[0.06] active:scale-95 transition-all"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
               </div>
 
               <nav data-lenis-prevent="true" className="flex-1 min-h-0 px-4 py-4 space-y-5 overflow-y-auto custom-sidebar-scrollbar overscroll-contain pb-10">
@@ -577,7 +594,7 @@ export default function Layout() {
       </AnimatePresence>
 
       {/* Main Content Viewport */}
-      <main className="flex-1 flex flex-col min-h-screen z-10 relative w-full min-w-0 pb-28 md:pb-8">
+      <main className="flex-1 flex flex-col min-h-[100dvh] z-10 relative w-full min-w-0 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] md:pb-8">
         {/* Desktop Top Header - Floating Apple VisionOS Glass Navigation */}
         <header className="hidden md:flex h-16 items-center justify-between px-8 border-b border-white/[0.08] bg-black/40 backdrop-blur-[20px] flex-shrink-0 sticky top-0 z-30 shadow-[0_4px_30px_rgba(0,0,0,0.6)] relative">
           {/* Specular Top Rim */}
@@ -614,20 +631,22 @@ export default function Layout() {
         <SystemModeBanner isAdmin={false} />
 
         {/* Fast, Smooth Page Routing Container (Instant & Stutter-Free) */}
-        <div className="flex-1 w-full pt-[calc(4.5rem+env(safe-area-inset-top))] md:pt-0">
-          <div className="w-full max-w-7xl mx-auto p-4 sm:p-6 md:p-8 relative">
+        <div className="flex-1 w-full pt-[calc(3.75rem+env(safe-area-inset-top,0px))] md:pt-0">
+          <div className="w-full max-w-7xl mx-auto p-3 sm:p-6 md:p-8 relative">
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={location.pathname}
-                initial={{ opacity: 0, y: 20, scale: 0.97, filter: 'blur(10px)' }}
+                initial={{ opacity: 0, y: 16, scale: 0.98, filter: 'blur(8px)' }}
                 animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
-                exit={{ opacity: 0, y: -20, scale: 0.97, filter: 'blur(10px)' }}
-                transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                exit={{ opacity: 0, y: -16, scale: 0.98, filter: 'blur(8px)' }}
+                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
                 className="w-full relative"
               >
                 <Outlet />
               </motion.div>
             </AnimatePresence>
+            {/* Explicit bottom clearance spacer so no content is obscured behind the floating tab capsule */}
+            <div className="h-14 md:hidden pointer-events-none" aria-hidden="true" />
           </div>
         </div>
       </main>
@@ -635,12 +654,12 @@ export default function Layout() {
       {/* ========================================================================= */}
       {/* APPLE-STYLE FLOATING BOTTOM CAPSULE TAB BAR (Mobile & Tablet)             */}
       {/* ========================================================================= */}
-      <div className="md:hidden fixed bottom-5 left-0 right-0 z-40 px-4 pointer-events-none flex justify-center pb-[env(safe-area-inset-bottom)]">
+      <div className="md:hidden fixed bottom-2 sm:bottom-4 left-0 right-0 z-40 px-2 sm:px-4 pointer-events-none flex justify-center pb-[env(safe-area-inset-bottom,0px)]">
         <motion.nav 
           initial={{ y: 50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-          className="pointer-events-auto flex items-center justify-between gap-1 p-1.5 rounded-full bg-[#12131e]/90 backdrop-blur-3xl border border-white/[0.14] shadow-[0_20px_50px_rgba(0,0,0,0.85),inset_0_1px_0_0_rgba(255,255,255,0.15)] max-w-md w-full"
+          className="pointer-events-auto flex items-center justify-between gap-0.5 sm:gap-1 p-1 sm:p-1.5 rounded-full bg-[#12131e]/90 backdrop-blur-3xl border border-white/[0.14] shadow-[0_20px_50px_rgba(0,0,0,0.85),inset_0_1px_0_0_rgba(255,255,255,0.15)] max-w-md w-full"
         >
           {mobilePrimaryTabs.map((tab) => {
             const isActive = location.pathname === tab.path;
@@ -648,7 +667,7 @@ export default function Layout() {
               <NavLink
                 key={tab.path}
                 to={tab.path}
-                className="relative flex-1 flex flex-col items-center justify-center py-2 px-1 rounded-full outline-none transition-all select-none"
+                className="relative flex-1 flex flex-col items-center justify-center py-1.5 px-0.5 min-h-[44px] rounded-full outline-none transition-all select-none min-w-0"
               >
                 {isActive && (
                   <motion.div
@@ -661,12 +680,15 @@ export default function Layout() {
                 <motion.div 
                   whileTap={{ scale: 0.88 }}
                   className={cn(
-                    "relative z-10 flex flex-col items-center gap-0.5 transition-colors",
+                    "relative z-10 flex flex-col items-center gap-0.5 transition-colors w-full px-0.5",
                     isActive ? "text-white font-bold" : "text-[#86868b]"
                   )}
                 >
-                  <tab.icon size={19} strokeWidth={isActive ? 2.5 : 2} />
-                  <span className="text-[10px] tracking-tight">{tab.label}</span>
+                  <tab.icon size={18} strokeWidth={isActive ? 2.5 : 2} className="shrink-0" />
+                  <span className="text-[9.5px] min-[380px]:text-[10px] tracking-tight leading-none text-center truncate max-w-full block">
+                    <span className="min-[380px]:hidden">{tab.shortLabel}</span>
+                    <span className="hidden min-[380px]:inline">{tab.label}</span>
+                  </span>
                 </motion.div>
               </NavLink>
             );
@@ -675,11 +697,11 @@ export default function Layout() {
           {/* More Action Capsule Button */}
           <button
             onClick={() => setMobileMenuOpen(true)}
-            className="relative flex-1 flex flex-col items-center justify-center py-2 px-1 rounded-full outline-none text-[#86868b] hover:text-white transition-all select-none active:scale-90"
+            className="relative flex-1 flex flex-col items-center justify-center py-1.5 px-0.5 min-h-[44px] rounded-full outline-none text-[#86868b] hover:text-white transition-all select-none active:scale-90 min-w-0"
             aria-label="More Features"
           >
-            <Compass size={19} />
-            <span className="text-[10px] tracking-tight">More</span>
+            <Compass size={18} className="shrink-0" />
+            <span className="text-[9.5px] min-[380px]:text-[10px] tracking-tight leading-none text-center truncate max-w-full block">More</span>
           </button>
         </motion.nav>
       </div>

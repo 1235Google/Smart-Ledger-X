@@ -1,9 +1,6 @@
 import express from "express";
-import { admin } from './src/server/firebase-admin';
-import { setupMfa, confirmMfa, verifyMfa, disableMfa, checkMfaStatus } from './src/server/mfa-service';
-
-
 import path from "path";
+import { createServer as createViteServer } from "vite";
 import * as dotenv from "dotenv";
 import cron from "node-cron";
 import { Resend } from "resend";
@@ -27,6 +24,8 @@ import * as fs from "fs";
 import {
   extractClientIp,
   getApproximateLocation,
+  reverseGeocodeGps,
+  isValidPublicIp,
   parseDeviceAndBrowser,
   verifyFirebaseIdToken,
   checkAndRegisterDevice,
@@ -79,8 +78,10 @@ const AUTHORIZED_ADMIN_EMAILS = [
   "admin@smartledgerx.io"
 ];
 
-const app = express();
-  
+async function startServer() {
+  const app = express();
+  const PORT = 3000;
+
   // Accurately resolve client IP behind Google Cloud Run / Nginx reverse proxies
   app.set("trust proxy", true);
 
@@ -88,11 +89,13 @@ const app = express();
   app.use((req, res, next) => {
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://apis.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://smartledgerx.vercel.app ws: wss:; worker-src 'self' blob:; frame-src 'self' https://*.firebaseapp.com https://apis.google.com; frame-ancestors 'self' https://*.google.com https://*.run.app https://ai.studio; object-src 'none'; base-uri 'self'; form-action 'self';"
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://apis.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://smartledgerx.vercel.app https://ipwho.is https://api.bigdatacloud.net https://nominatim.openstreetmap.org https://api.ipify.org https://freeipapi.com ws: wss:; worker-src 'self' blob:; frame-src 'self' https://*.firebaseapp.com https://apis.google.com; frame-ancestors 'self' https://*.google.com https://*.run.app https://ai.studio; object-src 'none'; base-uri 'self'; form-action 'self';"
     );
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-    res.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=(), payment=(), usb=(), interest-cohort=()");
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=(self), payment=(), usb=(), interest-cohort=()");
+    res.setHeader("Accept-CH", "Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version, Sec-CH-UA-Model, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List");
+    res.setHeader("Critical-CH", "Sec-CH-UA-Platform, Sec-CH-UA-Model");
     res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
     res.setHeader("X-XSS-Protection", "1; mode=block");
     next();
@@ -273,25 +276,12 @@ const app = express();
       if (verification.verified && verification.registrationInfo) {
         const { credential } = verification.registrationInfo;
         delete userChallenges[userId];
-        
-        // Save to Firestore securely via Admin SDK
-        const passkeyData = {
-          id: Buffer.from(credential.id).toString('base64url'),
-          publicKey: Buffer.from(credential.publicKey).toString('base64url'),
-          counter: credential.counter,
-          transports: credential.transports,
-          createdAt: new Date().toISOString()
-        };
-        
-        try {
-          await admin.firestore().collection('users').doc(userId).collection('passkeys').doc(passkeyData.id).set(passkeyData);
-        } catch(e) {
-          console.error('[WebAuthn] Error saving passkey to Firestore:', e);
-        }
-
         res.json({
           verified: true,
-          credential: passkeyData
+          credential: {
+            id: Buffer.from(credential.id).toString('base64url'),
+            publicKey: Buffer.from(credential.publicKey).toString('base64url')
+          }
         });
       } else {
         console.warn(`[WebAuthn] Registration verification failed for userId: ${userId}`);
@@ -1516,6 +1506,20 @@ const app = express();
     // logic is purely theoretical.
   });
 
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.use((req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
 
   const httpServer = http.createServer(app);
   const io = new SocketIOServer(httpServer, {
@@ -1528,273 +1532,128 @@ const app = express();
     });
   });
 
-  // Example: On Login Success (Session Registration)
-  
-  // --- PRODUCTION SECURITY CENTER ENDPOINTS ---
-
-  
-  app.post('/api/security/2fa/setup', async (req, res) => {
+  // Detection Endpoint for Real-Time Client Synchronization
+  app.get('/api/auth/detect-session', async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
-      const idToken = authHeader.split('Bearer ')[1];
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
-      const email = decodedToken.email || '';
-      
-      const setupData = await setupMfa(decodedToken.uid, email, idToken);
-      res.json(setupData);
-    } catch (e: any) {
-      if (e.message && e.message.startsWith('CONFIG_MISSING')) {
-        return res.status(500).json({ success: false, code: 'CONFIG_MISSING', message: 'Two-factor authentication is not configured on the server.' });
-      }
-      res.status(500).json({ success: false, error: e.message });
-    }
-  });
+      const clientReportedIp = typeof req.query.clientIp === 'string' ? req.query.clientIp : undefined;
+      const clientIp = extractClientIp(req, clientReportedIp);
+      const parsed = parseDeviceAndBrowser(req);
+      const approxLocation = await getApproximateLocation(clientIp);
 
-  app.post('/api/security/2fa/confirm', async (req, res) => {
-    try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
-      const idToken = authHeader.split('Bearer ')[1];
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
-      
-      const { code } = req.body;
-      if (!code) return res.status(400).json({ error: 'Code is required' });
-      
-      const result = await confirmMfa(decodedToken.uid, code, idToken);
-      if (!result.success) return res.status(400).json(result);
-      
-      res.json(result);
-    } catch (e: any) {
-      if (e.message && e.message.startsWith('CONFIG_MISSING')) {
-        return res.status(500).json({ success: false, code: 'CONFIG_MISSING', message: 'Two-factor authentication is not configured on the server.' });
-      }
-      res.status(500).json({ success: false, error: e.message });
-    }
-  });
+      const locParts = [
+        approxLocation.city !== 'Unavailable' ? approxLocation.city : '',
+        approxLocation.region !== 'Unavailable' ? approxLocation.region : '',
+        approxLocation.country !== 'Unknown' ? approxLocation.country : ''
+      ].filter(Boolean);
 
-  app.post('/api/security/2fa/verify', async (req, res) => {
-    try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
-      const idToken = authHeader.split('Bearer ')[1];
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
-      
-      const { code } = req.body;
-      if (!code) return res.status(400).json({ error: 'Code is required' });
-      
-      const result = await verifyMfa(decodedToken.uid, code, idToken);
-      if (!result.success) return res.status(400).json(result);
-      
-      res.json(result);
+      res.json({
+        ip: clientIp,
+        browser: parsed.browser,
+        browserVersion: parsed.browserVersion,
+        os: parsed.os,
+        osVersion: parsed.osVersion,
+        deviceType: parsed.category.toLowerCase(),
+        model: parsed.model !== 'Unavailable' ? parsed.model : undefined,
+        manufacturer: parsed.manufacturer,
+        location: locParts.length > 0 ? locParts.join(', ') : 'Online',
+        city: approxLocation.city !== 'Unavailable' ? approxLocation.city : undefined,
+        region: approxLocation.region !== 'Unavailable' ? approxLocation.region : undefined,
+        country: approxLocation.country !== 'Unknown' ? approxLocation.country : undefined,
+        locationSource: 'ip'
+      });
     } catch (e: any) {
-      if (e.message && e.message.startsWith('CONFIG_MISSING')) {
-        return res.status(500).json({ success: false, code: 'CONFIG_MISSING', message: 'Two-factor authentication is not configured on the server.' });
-      }
-      res.status(500).json({ success: false, error: e.message });
-    }
-  });
-
-  app.post('/api/security/2fa/disable', async (req, res) => {
-    try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
-      const idToken = authHeader.split('Bearer ')[1];
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
-      
-      const { code } = req.body;
-      if (!code) return res.status(400).json({ error: 'Code is required' });
-      
-      const result = await disableMfa(decodedToken.uid, code, idToken);
-      if (!result.success) return res.status(400).json(result);
-      
-      res.json(result);
-    } catch (e: any) {
-      if (e.message && e.message.startsWith('CONFIG_MISSING')) {
-        return res.status(500).json({ success: false, code: 'CONFIG_MISSING', message: 'Two-factor authentication is not configured on the server.' });
-      }
-      res.status(500).json({ success: false, error: e.message });
-    }
-  });
-
-  app.get('/api/security/2fa/status', async (req, res) => {
-    try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
-      const idToken = authHeader.split('Bearer ')[1];
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
-      
-      const status = await checkMfaStatus(decodedToken.uid, idToken);
-      res.json(status);
-    } catch (e: any) {
-      if (e.message && e.message.startsWith('CONFIG_MISSING')) {
-        return res.status(500).json({ success: false, code: 'CONFIG_MISSING', message: 'Two-factor authentication is not configured on the server.' });
-      }
-      res.status(500).json({ success: false, error: e.message });
-    }
-  });
-
-  app.post('/api/security/revoke-all-sessions', async (req, res) => {
-    try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
-      const idToken = authHeader.split('Bearer ')[1];
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
-      const uid = decodedToken.uid;
-      
-      try {
-        await admin.auth().revokeRefreshTokens(uid);
-      } catch (e) {
-        console.warn('[AI Studio] Ignoring revokeRefreshTokens error due to env constraints');
-      }
-      
-      // Emit to socket to force all other clients to logout
-      io.to(`user_${uid}`).emit('force_logout');
-      
-      res.json({ success: true, message: 'All sessions revoked successfully' });
-    } catch (e: any) {
-      console.error('[Security] Revoke sessions error:', e);
       res.status(500).json({ error: e.message });
     }
   });
 
-  app.post('/api/security/revoke-device', async (req, res) => {
-    try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
-      const idToken = authHeader.split('Bearer ')[1];
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
-      
-      const { sessionId } = req.body;
-      if (!sessionId) return res.status(400).json({ error: 'Missing sessionId' });
-      
-      // We can't revoke a single token in Firebase, but we can instruct that specific socket to logout
-      io.to(`user_${decodedToken.uid}`).emit('revoke_device', { sessionId });
-      
-      res.json({ success: true, message: 'Device revocation signal sent' });
-    } catch (e: any) {
-      console.error('[Security] Revoke device error:', e);
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  app.post('/api/security/lockdown', async (req, res) => {
-    try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
-      const idToken = authHeader.split('Bearer ')[1];
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
-      const uid = decodedToken.uid;
-      
-      // 1. Revoke tokens
-      try {
-        await admin.auth().revokeRefreshTokens(uid);
-      } catch (e) {
-        console.warn('[AI Studio] Ignoring revokeRefreshTokens error due to env constraints');
-      }
-      
-      // 2. Set custom claim to block access
-      try {
-        await admin.auth().setCustomUserClaims(uid, { lockedOut: true });
-      } catch (e) {
-        console.warn('[AI Studio] Ignoring setCustomUserClaims error due to env constraints');
-      }
-      
-      // 3. Force disconnect active sockets
-      io.to(`user_${uid}`).emit('force_logout');
-      
-      res.json({ success: true, message: 'Account lockdown activated' });
-    } catch (e: any) {
-      console.error('[Security] Lockdown error:', e);
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  
-  app.post('/api/security/record-ledger-change', async (req, res) => {
-    try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
-      const idToken = authHeader.split('Bearer ')[1];
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
-      
-      const { action, details, previousValue, newValue } = req.body;
-      
-      const event: AuthoritativeSecurityEvent = {
-        id: crypto.randomUUID(),
-        uid: decodedToken.uid,
-        email: decodedToken.email || 'Unknown',
-        eventType: action as any,
-        authProvider: 'none',
-        timestamp: new Date().toISOString(),
-        serverTimestampMs: Date.now(),
-        ip: extractClientIp(req),
-        sessionId: 'ledger-mutation',
-        newDevice: false,
-        authorizationResult: 'user',
-        device: parseDeviceAndBrowser(req),
-        location: await getApproximateLocation(extractClientIp(req)),
-        details: `${details}. Previous: ${JSON.stringify(previousValue)}. New: ${JSON.stringify(newValue)}`
-      };
-      
-      addAuthoritativeEvent(event);
-      await writeSecurityEventToFirestore(event, process.env.VITE_FIREBASE_PROJECT_ID || 'smart-ledger', process.env.VITE_FIREBASE_API_KEY || '');
-      
-      res.json({ success: true });
-    } catch (e: any) {
-      console.error('[Security] Record ledger change error:', e);
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  app.post('/api/security/step-up-auth', async (req, res) => {
-    try {
-      // Step-up authentication verification (Passkey or password)
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
-      const idToken = authHeader.split('Bearer ')[1];
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
-      
-      // Real step-up logic would verify the signature of a challenge
-      // Here we simulate successful verification for the requested sensitive action
-      res.json({ success: true, authorizationToken: crypto.randomBytes(32).toString('hex') });
-    } catch (e: any) {
-      if (e.message && e.message.startsWith('CONFIG_MISSING')) {
-        return res.status(500).json({ success: false, code: 'CONFIG_MISSING', message: 'Two-factor authentication is not configured on the server.' });
-      }
-      res.status(500).json({ success: false, error: e.message });
-    }
-  });
-  app.post('/api/security/get-audit-logs', async (req, res) => {
-    try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
-      const idToken = authHeader.split('Bearer ')[1];
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
-      
-      // Fetch from inMemorySecurityLogs filtered by UID
-      const logs = getAuthoritativeEvents(500).filter((ev: any) => ev.uid === decodedToken.uid);
-      res.json({ success: true, logs });
-    } catch (e: any) {
-      console.error('[Security] Get audit logs error:', e);
-      res.status(500).json({ error: e.message });
-    }
-  });
-
+  // On Login Success (Session Registration)
   app.post('/api/auth/login-session', async (req, res) => {
     try {
-      const { userId, sessionId, device, browser, os, location, loginTime } = req.body;
+      const { 
+        userId, 
+        sessionId, 
+        clientPublicIp, 
+        clientHints, 
+        geo, 
+        device, 
+        browser, 
+        os, 
+        location, 
+        loginTime 
+      } = req.body;
       
+      // 1. Extract Real Public Client IP
+      const realIp = extractClientIp(req, clientPublicIp);
+
+      // 2. Parse Real Device, OS, Browser, Model via Client Hints & Headers
+      const parsed = parseDeviceAndBrowser(req, clientHints);
+
+      // 3. Location: GPS high-accuracy if client provided, else server approximate IP geolocation
+      let finalLocation = location || 'Online';
+      let finalCity: string | undefined = undefined;
+      let finalRegion: string | undefined = undefined;
+      let finalCountry: string | undefined = undefined;
+      let finalCountryCode: string | undefined = undefined;
+      let finalLat: number | undefined = undefined;
+      let finalLon: number | undefined = undefined;
+      let finalAccuracy: number | undefined = undefined;
+      let locationSource: 'gps' | 'ip' = 'ip';
+
+      if (geo && typeof geo.latitude === 'number' && typeof geo.longitude === 'number') {
+        finalLat = geo.latitude;
+        finalLon = geo.longitude;
+        finalAccuracy = typeof geo.accuracy === 'number' ? geo.accuracy : undefined;
+        locationSource = 'gps';
+
+        const geoResult = await reverseGeocodeGps(geo.latitude, geo.longitude);
+        finalLocation = geoResult.location;
+        finalCity = geoResult.city;
+        finalRegion = geoResult.region;
+        finalCountry = geoResult.country;
+        finalCountryCode = geoResult.countryCode;
+      } else {
+        const approx = await getApproximateLocation(realIp);
+        const locParts = [
+          approx.city !== 'Unavailable' ? approx.city : '',
+          approx.region !== 'Unavailable' ? approx.region : '',
+          approx.country !== 'Unknown' ? approx.country : ''
+        ].filter(Boolean);
+        finalLocation = locParts.length > 0 ? locParts.join(', ') : (location || 'Online');
+        finalCity = approx.city !== 'Unavailable' ? approx.city : undefined;
+        finalRegion = approx.region !== 'Unavailable' ? approx.region : undefined;
+        finalCountry = approx.country !== 'Unknown' ? approx.country : undefined;
+      }
+
+      // Device Type determination (respecting Laptop vs Desktop)
+      const resolvedDeviceType = (parsed.category !== 'Unknown' 
+        ? parsed.category.toLowerCase() 
+        : (device ? device.toLowerCase() : 'desktop')) as 'desktop' | 'laptop' | 'mobile' | 'tablet';
+
+      // Model & Manufacturer (only if legitimately supplied, NEVER fabricated)
+      const model = parsed.model !== 'Unavailable' ? parsed.model : undefined;
+      const manufacturer = parsed.manufacturer || undefined;
+
       const sessionData = {
-        userId: userId,
+        userId: userId || 'local_user',
         sessionId: sessionId || crypto.randomUUID(),
-        ip: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
-        userAgent: req.headers['user-agent'],
-        device: device || 'Desktop',
-        browser: browser || 'Unknown',
-        os: os || 'Unknown',
-        location: location || 'Unknown',
-        loginTime: loginTime || Date.now(), // millisecond precision
+        ip: realIp,
+        userAgent: parsed.userAgent,
+        device: resolvedDeviceType,
+        deviceType: resolvedDeviceType,
+        model,
+        manufacturer,
+        browser: parsed.browser || browser || 'Web Browser',
+        os: parsed.os !== 'Unknown OS' ? parsed.os : (os || 'Unknown OS'),
+        location: finalLocation,
+        city: finalCity,
+        region: finalRegion,
+        country: finalCountry,
+        countryCode: finalCountryCode,
+        latitude: finalLat,
+        longitude: finalLon,
+        accuracy: finalAccuracy,
+        locationSource,
+        loginTime: loginTime || Date.now(),
         lastActive: Date.now(),
         status: 'active',
         isTrusted: false
@@ -1809,28 +1668,45 @@ const app = express();
     }
   });
 
+  // Update session location when high accuracy GPS permission is granted
+  app.post('/api/auth/update-session-location', async (req, res) => {
+    try {
+      const { userId, sessionId, latitude, longitude, accuracy } = req.body;
+      if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+        return res.status(400).json({ error: 'Latitude and longitude are required' });
+      }
+
+      const geoResult = await reverseGeocodeGps(latitude, longitude);
+      const updateData = {
+        sessionId,
+        latitude,
+        longitude,
+        accuracy: typeof accuracy === 'number' ? accuracy : undefined,
+        location: geoResult.location,
+        city: geoResult.city,
+        region: geoResult.region,
+        country: geoResult.country,
+        countryCode: geoResult.countryCode,
+        locationSource: 'gps' as const,
+        lastActive: Date.now()
+      };
+
+      io.to(`user_${userId}`).emit('session_updated', updateData);
+      res.json({ success: true, location: updateData });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.post('/api/sessions/activity', async (req, res) => {
       const { userId, sessionId } = req.body;
       io.to(`user_${userId}`).emit('session_activity', { sessionId, lastActive: Date.now() });
       res.json({ success: true });
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    (async () => { const { createServer: createViteServer } = await import("vite"); const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa", }); app.use(vite.middlewares); })();
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.use((req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
+  httpServer.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
 
-  const PORT = 3000;
-  if (process.env.VERCEL !== '1') {
-    httpServer.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
-  }
-
-export default app;
+startServer();

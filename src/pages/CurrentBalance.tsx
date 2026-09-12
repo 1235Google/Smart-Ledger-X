@@ -104,14 +104,14 @@ export default function CurrentBalance() {
           <p className="text-slate-400 text-sm font-medium">Real-time ledger audit, liquidity status, and activity tracking.</p>
         </div>
 
-        <div className="flex gap-3">
-          <Link to="/received">
-            <AnimatedButton variant="success" icon={<ArrowDownLeft size={16} />}>
+        <div className="flex flex-wrap sm:flex-nowrap gap-2.5 sm:gap-3 w-full sm:w-auto">
+          <Link to="/received" className="flex-1 sm:flex-none">
+            <AnimatedButton variant="success" icon={<ArrowDownLeft size={16} />} className="w-full sm:w-auto justify-center">
               Add Received
             </AnimatedButton>
           </Link>
-          <Link to="/pending">
-            <AnimatedButton variant="primary" icon={<Clock size={16} />}>
+          <Link to="/pending" className="flex-1 sm:flex-none">
+            <AnimatedButton variant="primary" icon={<Clock size={16} />} className="w-full sm:w-auto justify-center">
               Add Pending
             </AnimatedButton>
           </Link>
@@ -131,7 +131,7 @@ export default function CurrentBalance() {
         <GlassCard 
           delay={0.08} 
           glowColor="rgba(48, 209, 88, 0.25)"
-          className="p-6 md:p-7 relative select-none flex flex-col justify-between cursor-pointer group"
+          className="p-4 sm:p-6 md:p-7 relative select-none flex flex-col justify-between cursor-pointer group rounded-[22px] sm:rounded-[24px]"
           onClick={() => navigate('/received')}
         >
           {/* Top Specular Rim */}
@@ -141,40 +141,40 @@ export default function CurrentBalance() {
           <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#30d158]/10 rounded-full blur-2xl pointer-events-none group-hover:bg-[#30d158]/20 transition-all duration-500" />
 
           <div>
-            <div className="flex items-start justify-between relative z-10 mb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#30d158]/15 border border-[#30d158]/30 flex items-center justify-center text-[#30d158] shadow-sm">
-                  <ArrowDownLeft size={20} />
+            <div className="flex items-start justify-between relative z-10 mb-3 gap-2">
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#30d158]/15 border border-[#30d158]/30 flex items-center justify-center text-[#30d158] shadow-sm shrink-0">
+                  <ArrowDownLeft size={18} />
                 </div>
-                <div>
-                  <span className="text-[#86868b] text-xs font-bold uppercase tracking-wider block">
+                <div className="min-w-0">
+                  <span className="text-[#86868b] text-[11px] sm:text-xs font-bold uppercase tracking-wider block truncate">
                     Total Received
                   </span>
-                  <span className="text-[11px] text-[#30d158] font-semibold">
+                  <span className="text-[10px] sm:text-[11px] text-[#30d158] font-semibold">
                     Settled Inflows
                   </span>
                 </div>
               </div>
-              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#30d158]/15 text-[#30d158] border border-[#30d158]/25 shadow-sm flex items-center gap-1">
+              <span className="text-[10px] sm:text-[11px] font-bold px-2 sm:px-2.5 py-1 rounded-full bg-[#30d158]/15 text-[#30d158] border border-[#30d158]/25 shadow-sm flex items-center gap-1 shrink-0">
                 <CheckCircle2 size={12} /> {receivedCount} {receivedCount === 1 ? 'record' : 'records'}
               </span>
             </div>
 
-            <div className="text-3xl sm:text-4xl font-extrabold text-white font-tabular tracking-tight my-2 relative z-10">
+            <div className="text-2xl sm:text-4xl font-extrabold text-white font-tabular tracking-tight my-2 relative z-10 break-words">
               <CountUp value={totalReceived} formatter={(v) => formatCurrency(v)} />
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-xs pt-3 border-t border-white/[0.06] mt-4 relative z-10">
-            <div className="flex items-center gap-2 text-[#86868b]">
-              <Users size={14} className="text-[#30d158]" />
-              <span>
+          <div className="flex items-center justify-between text-xs pt-3 border-t border-white/[0.06] mt-4 relative z-10 gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 text-[#86868b] text-[11px] sm:text-xs truncate">
+              <Users size={14} className="text-[#30d158] shrink-0" />
+              <span className="truncate">
                 {receivedPeopleCount > 0 
                   ? `Received from ${receivedPeopleCount} ${receivedPeopleCount === 1 ? 'person' : 'people'}`
                   : 'Received from 0 people'}
               </span>
             </div>
-            <span className="text-xs text-[#30d158] font-bold group-hover:translate-x-1 transition-transform flex items-center gap-1">
+            <span className="text-xs text-[#30d158] font-bold group-hover:translate-x-1 transition-transform flex items-center gap-1 shrink-0">
               View History <ChevronRight size={13} />
             </span>
           </div>
@@ -184,7 +184,7 @@ export default function CurrentBalance() {
         <GlassCard 
           delay={0.16} 
           glowColor="rgba(255, 214, 10, 0.25)"
-          className="p-6 md:p-7 relative select-none flex flex-col justify-between cursor-pointer group"
+          className="p-4 sm:p-6 md:p-7 relative select-none flex flex-col justify-between cursor-pointer group rounded-[22px] sm:rounded-[24px]"
           onClick={() => navigate('/pending')}
         >
           {/* Top Specular Rim */}
@@ -194,47 +194,47 @@ export default function CurrentBalance() {
           <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#ffd60a]/10 rounded-full blur-2xl pointer-events-none group-hover:bg-[#ffd60a]/20 transition-all duration-500" />
 
           <div>
-            <div className="flex items-start justify-between relative z-10 mb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#ffd60a]/15 border border-[#ffd60a]/30 flex items-center justify-center text-[#ffd60a] shadow-sm">
-                  <Clock size={20} />
+            <div className="flex items-start justify-between relative z-10 mb-3 gap-2">
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#ffd60a]/15 border border-[#ffd60a]/30 flex items-center justify-center text-[#ffd60a] shadow-sm shrink-0">
+                  <Clock size={18} />
                 </div>
-                <div>
-                  <span className="text-[#86868b] text-xs font-bold uppercase tracking-wider block">
+                <div className="min-w-0">
+                  <span className="text-[#86868b] text-[11px] sm:text-xs font-bold uppercase tracking-wider block truncate">
                     Total Pending
                   </span>
-                  <span className="text-[11px] text-[#ffd60a] font-semibold">
+                  <span className="text-[10px] sm:text-[11px] text-[#ffd60a] font-semibold">
                     Outstanding Receivables
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 shrink-0">
                 {overduePendingCount > 0 && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#ff453a]/20 text-[#ff453a] border border-[#ff453a]/30 animate-pulse">
+                  <span className="text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-[#ff453a]/20 text-[#ff453a] border border-[#ff453a]/30 animate-pulse">
                     {overduePendingCount} overdue
                   </span>
                 )}
-                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#ffd60a]/15 text-[#ffd60a] border border-[#ffd60a]/25 shadow-sm">
+                <span className="text-[10px] sm:text-[11px] font-bold px-2 sm:px-2.5 py-1 rounded-full bg-[#ffd60a]/15 text-[#ffd60a] border border-[#ffd60a]/25 shadow-sm">
                   {pendingCount} {pendingCount === 1 ? 'due' : 'dues'}
                 </span>
               </div>
             </div>
 
-            <div className="text-3xl sm:text-4xl font-extrabold text-[#ffd60a] font-tabular tracking-tight my-2 relative z-10">
+            <div className="text-2xl sm:text-4xl font-extrabold text-[#ffd60a] font-tabular tracking-tight my-2 relative z-10 break-words">
               <CountUp value={totalPending} formatter={(v) => formatCurrency(v)} />
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-xs pt-3 border-t border-white/[0.06] mt-4 relative z-10">
-            <div className="flex items-center gap-2 text-[#86868b]">
-              <Users size={14} className="text-[#ffd60a]" />
-              <span>
+          <div className="flex items-center justify-between text-xs pt-3 border-t border-white/[0.06] mt-4 relative z-10 gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 text-[#86868b] text-[11px] sm:text-xs truncate">
+              <Users size={14} className="text-[#ffd60a] shrink-0" />
+              <span className="truncate">
                 {pendingPeopleCount > 0 
                   ? `Pending from ${pendingPeopleCount} ${pendingPeopleCount === 1 ? 'person' : 'people'}`
                   : 'Pending from 0 people'}
               </span>
             </div>
-            <span className="text-xs text-[#0a84ff] font-bold group-hover:translate-x-1 transition-transform flex items-center gap-1">
+            <span className="text-xs text-[#0a84ff] font-bold group-hover:translate-x-1 transition-transform flex items-center gap-1 shrink-0">
               Collect Now <ChevronRight size={13} />
             </span>
           </div>

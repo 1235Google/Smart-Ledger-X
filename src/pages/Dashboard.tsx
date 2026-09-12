@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Flame, ArrowRight, ShieldCheck, 
   Cloud, RefreshCw, Zap, Cpu, Lock, Search, PiggyBank,
   ChevronRight, Plus, Target, FileSpreadsheet, Calculator as CalculatorIcon,
-  CheckCircle2, Send, ExternalLink
+  CheckCircle2, Send, ExternalLink, History
 } from 'lucide-react';
 import { formatCurrency, formatDate, cn, calculateReminderDetails } from '../lib/utils';
 import { Link, useNavigate } from 'react-router-dom';
@@ -125,23 +125,23 @@ export default function Dashboard() {
         variants={shouldReduceMotion ? undefined : containerVariants}
         initial="hidden"
         animate="show"
-        className="w-full relative min-h-screen text-[#f5f5f7] overflow-x-hidden selection:bg-[#0a84ff]/30 selection:text-white pb-16"
+        className="w-full relative text-[#f5f5f7] selection:bg-[#0a84ff]/30 selection:text-white"
       >
         
         {/* Top Header - Apple VisionOS Style */}
         <motion.div 
           variants={itemVariants}
-          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-2 px-1 mb-6 border-b border-white/[0.08]"
+          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 py-2 px-1 mb-4 sm:mb-6 border-b border-white/[0.08]"
         >
           <div className="flex items-center gap-2.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#30d158] shadow-[0_0_12px_#30d158] animate-pulse" />
-            <span className="text-xs font-bold uppercase tracking-wider text-[#86868b]">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#30d158] shadow-[0_0_12px_#30d158] animate-pulse shrink-0" />
+            <span className="text-[10px] min-[380px]:text-xs font-bold uppercase tracking-wider text-[#86868b] truncate">
               SMART LEDGER X • VISIONOS COCKPIT
             </span>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-[#86868b]">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.05] border border-white/[0.1] backdrop-blur-md shadow-sm">
+          <div className="flex items-center gap-2 text-xs text-[#86868b] self-start sm:self-auto">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full bg-white/[0.05] border border-white/[0.1] text-[10px] min-[380px]:text-xs backdrop-blur-md shadow-sm">
               <span className="w-1.5 h-1.5 rounded-full bg-[#30d158]" /> Real-Time Vault Sync Active
             </span>
           </div>
@@ -162,7 +162,7 @@ export default function Dashboard() {
             {/* 1. CURRENT BALANCE & LIQUIDITY VAULT                                  */}
             {/* --------------------------------------------------------------------- */}
             <motion.section variants={itemVariants} id="section-balance" className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <div className="text-[11px] font-bold text-[#0a84ff] uppercase tracking-wider flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#0a84ff]" /> 01 • Core Financial Position
@@ -175,7 +175,7 @@ export default function Dashboard() {
                   whileHover={{ scale: 1.05, boxShadow: "0 0 20px rgba(10, 132, 255, 0.4)" }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => navigate('/balance')}
-                  className="text-xs font-semibold px-4 py-2 rounded-full bg-[#0a84ff]/10 hover:bg-[#0a84ff]/20 text-[#0a84ff] hover:text-white flex items-center gap-1.5 transition-all border border-[#0a84ff]/30"
+                  className="text-xs font-semibold px-4 py-2 rounded-full bg-[#0a84ff]/10 hover:bg-[#0a84ff]/20 text-[#0a84ff] hover:text-white flex items-center gap-1.5 transition-all border border-[#0a84ff]/30 self-start sm:self-auto"
                 >
                   Manage Vaults <ChevronRight size={14} />
                 </motion.button>
@@ -192,13 +192,13 @@ export default function Dashboard() {
                 </motion.div>
 
                 {/* Secondary Liquidity Caps in VisionOS Liquid Glass */}
-                <div className="lg:col-span-1 flex flex-col gap-4 justify-between">
+                <div className="lg:col-span-1 flex flex-col sm:flex-row lg:flex-col gap-3 sm:gap-4 justify-between">
                   {/* Total Received Capsule */}
                   <motion.div 
                     whileHover={{ y: -5, scale: 1.02, boxShadow: "0 10px 30px -10px rgba(48, 209, 88, 0.3)" }}
                     whileTap={{ scale: 0.985 }}
                     onClick={() => navigate('/received')}
-                    className="flex-1 vision-glass hover:border-[#30d158]/50 rounded-[26px] p-6 cursor-pointer transition-all duration-300 relative overflow-hidden group flex flex-col justify-between"
+                    className="flex-1 vision-glass hover:border-[#30d158]/50 rounded-[22px] sm:rounded-[26px] p-4 sm:p-6 cursor-pointer transition-all duration-300 relative overflow-hidden group flex flex-col justify-between"
                   >
                     {/* Top Specular Line */}
                     <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
@@ -206,20 +206,20 @@ export default function Dashboard() {
                     {/* Ambient Glow */}
                     <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#30d158]/10 rounded-full blur-2xl pointer-events-none group-hover:bg-[#30d158]/30 transition-all duration-500" />
 
-                    <div className="flex items-center justify-between mb-3 relative z-10">
-                      <div className="flex items-center gap-2 text-xs font-bold text-[#30d158] uppercase tracking-wider">
-                        <ArrowDownLeft size={16} /> Total Received
+                    <div className="flex items-center justify-between mb-2.5 sm:mb-3 relative z-10">
+                      <div className="flex items-center gap-1.5 sm:gap-2 text-xs font-bold text-[#30d158] uppercase tracking-wider">
+                        <ArrowDownLeft size={15} /> Total Received
                       </div>
-                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-[#30d158]/15 text-[#30d158] border border-[#30d158]/30 shadow-sm">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#30d158]/15 text-[#30d158] border border-[#30d158]/30 shadow-sm">
                         {receivedCount} clients
                       </span>
                     </div>
 
-                    <div className="text-3xl sm:text-4xl font-extrabold text-white font-tabular relative z-10 tracking-tight group-hover:text-[#30d158] transition-colors duration-300">
+                    <div className="text-2xl min-[380px]:text-3xl sm:text-4xl font-extrabold text-white font-tabular relative z-10 tracking-tight group-hover:text-[#30d158] transition-colors duration-300">
                       <CountUp value={totalReceived} formatter={(v) => formatCurrency(v)} />
                     </div>
 
-                    <div className="text-xs text-[#86868b] mt-3 flex items-center justify-between relative z-10 pt-2 border-t border-white/[0.06]">
+                    <div className="text-[11px] sm:text-xs text-[#86868b] mt-2.5 sm:mt-3 flex items-center justify-between relative z-10 pt-2 border-t border-white/[0.06]">
                       <span>Inflow Velocity</span>
                       <span className="text-[#30d158] font-bold drop-shadow-[0_0_8px_rgba(48,209,88,0.5)]">100% Settled</span>
                     </div>
@@ -230,7 +230,7 @@ export default function Dashboard() {
                     whileHover={{ y: -5, scale: 1.02, boxShadow: "0 10px 30px -10px rgba(255, 214, 10, 0.3)" }}
                     whileTap={{ scale: 0.985 }}
                     onClick={() => navigate('/pending')}
-                    className="flex-1 vision-glass hover:border-[#ffd60a]/50 rounded-[26px] p-6 cursor-pointer transition-all duration-300 relative overflow-hidden group flex flex-col justify-between"
+                    className="flex-1 vision-glass hover:border-[#ffd60a]/50 rounded-[22px] sm:rounded-[26px] p-4 sm:p-6 cursor-pointer transition-all duration-300 relative overflow-hidden group flex flex-col justify-between"
                   >
                     {/* Top Specular Line */}
                     <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
@@ -238,20 +238,20 @@ export default function Dashboard() {
                     {/* Ambient Glow */}
                     <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#ffd60a]/10 rounded-full blur-2xl pointer-events-none group-hover:bg-[#ffd60a]/30 transition-all duration-500" />
 
-                    <div className="flex items-center justify-between mb-3 relative z-10">
-                      <div className="flex items-center gap-2 text-xs font-bold text-[#ffd60a] uppercase tracking-wider">
-                        <Clock size={16} /> Total Pending
+                    <div className="flex items-center justify-between mb-2.5 sm:mb-3 relative z-10">
+                      <div className="flex items-center gap-1.5 sm:gap-2 text-xs font-bold text-[#ffd60a] uppercase tracking-wider">
+                        <Clock size={15} /> Total Pending
                       </div>
-                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-[#ffd60a]/15 text-[#ffd60a] border border-[#ffd60a]/30 shadow-sm">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#ffd60a]/15 text-[#ffd60a] border border-[#ffd60a]/30 shadow-sm">
                         {pendingCount} parties
                       </span>
                     </div>
 
-                    <div className="text-3xl sm:text-4xl font-extrabold text-[#ffd60a] font-tabular relative z-10 tracking-tight group-hover:drop-shadow-[0_0_12px_rgba(255,214,10,0.6)] transition-all duration-300">
+                    <div className="text-2xl min-[380px]:text-3xl sm:text-4xl font-extrabold text-[#ffd60a] font-tabular relative z-10 tracking-tight group-hover:drop-shadow-[0_0_12px_rgba(255,214,10,0.6)] transition-all duration-300">
                       <CountUp value={totalPending} formatter={(v) => formatCurrency(v)} />
                     </div>
 
-                    <div className="text-xs text-[#86868b] mt-3 flex items-center justify-between relative z-10 pt-2 border-t border-white/[0.06]">
+                    <div className="text-[11px] sm:text-xs text-[#86868b] mt-2.5 sm:mt-3 flex items-center justify-between relative z-10 pt-2 border-t border-white/[0.06]">
                       <span>Outstanding Receivables</span>
                       <span className="text-xs text-[#ffd60a] font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 drop-shadow-[0_0_8px_rgba(255,214,10,0.5)]">
                         View List <ChevronRight size={12} />
@@ -266,7 +266,7 @@ export default function Dashboard() {
             {/* 2. PENDING PAYMENTS (Active Receivables, Overdue Alerts, Reminders)     */}
             {/* --------------------------------------------------------------------- */}
             <motion.section variants={itemVariants} id="section-pending" className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <div className="text-[11px] font-bold text-[#ffd60a] uppercase tracking-wider flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#ffd60a]" /> 02 • Due Money
@@ -275,7 +275,7 @@ export default function Dashboard() {
                     Pending Dues & Reminders
                   </h2>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}>
                     <Link
                       to="/pending?new=true"
@@ -398,7 +398,7 @@ export default function Dashboard() {
             {/* 3. RECENT TRANSACTIONS (Activity Feed)                                */}
             {/* --------------------------------------------------------------------- */}
             <motion.section variants={itemVariants} id="section-transactions" className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <div className="text-[11px] font-bold text-[#30d158] uppercase tracking-wider flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#30d158]" /> 03 • Activity Feed
@@ -411,7 +411,7 @@ export default function Dashboard() {
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
                   onClick={() => navigate('/search')}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.1] text-[#0a84ff] hover:text-white flex items-center gap-1 transition-all border border-white/[0.08]"
+                  className="text-xs font-semibold px-3 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.1] text-[#0a84ff] hover:text-white flex items-center gap-1 transition-all border border-white/[0.08] self-start sm:self-auto"
                 >
                   Search Full Ledger <ChevronRight size={14} />
                 </motion.button>
@@ -497,17 +497,17 @@ export default function Dashboard() {
                 </h2>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+              <div className="grid grid-cols-4 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
                 {/* 1. Add Inflow */}
                 <motion.div whileHover={{ y: -4, scale: 1.03 }} whileTap={{ scale: 0.94 }}>
                   <Link
                     to="/received?new=true"
-                    className="vision-glass hover:border-[#30d158]/50 p-4 rounded-[22px] flex flex-col items-center justify-center gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
+                    className="vision-glass hover:border-[#30d158]/50 p-2 sm:p-4 rounded-[18px] sm:rounded-[22px] flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
                   >
-                    <div className="w-11 h-11 rounded-2xl bg-[#30d158]/15 text-[#30d158] border border-[#30d158]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(48,209,88,0.2)]">
-                      <ArrowDownLeft size={20} />
+                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#30d158]/15 text-[#30d158] border border-[#30d158]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(48,209,88,0.2)]">
+                      <ArrowDownLeft size={18} />
                     </div>
-                    <span className="text-xs font-bold text-white tracking-tight">+ Add Inflow</span>
+                    <span className="text-[10px] min-[380px]:text-xs font-bold text-white tracking-tight truncate max-w-full">+ Inflow</span>
                   </Link>
                 </motion.div>
 
@@ -515,78 +515,91 @@ export default function Dashboard() {
                 <motion.div whileHover={{ y: -4, scale: 1.03 }} whileTap={{ scale: 0.94 }}>
                   <Link
                     to="/pending?new=true"
-                    className="vision-glass hover:border-[#ffd60a]/50 p-4 rounded-[22px] flex flex-col items-center justify-center gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
+                    className="vision-glass hover:border-[#ffd60a]/50 p-2 sm:p-4 rounded-[18px] sm:rounded-[22px] flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
                   >
-                    <div className="w-11 h-11 rounded-2xl bg-[#ffd60a]/15 text-[#ffd60a] border border-[#ffd60a]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(255,214,10,0.2)]">
-                      <Clock size={20} />
+                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#ffd60a]/15 text-[#ffd60a] border border-[#ffd60a]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(255,214,10,0.2)]">
+                      <Clock size={18} />
                     </div>
-                    <span className="text-xs font-bold text-white tracking-tight">New Pending</span>
+                    <span className="text-[10px] min-[380px]:text-xs font-bold text-white tracking-tight truncate max-w-full">Pending</span>
                   </Link>
                 </motion.div>
 
-                {/* 4. Gullak Bank */}
+                {/* 3. Gullak Bank */}
                 <motion.div whileHover={{ y: -4, scale: 1.03 }} whileTap={{ scale: 0.94 }}>
                   <Link
                     to="/gullak"
-                    className="vision-glass hover:border-[#bf5af2]/50 p-4 rounded-[22px] flex flex-col items-center justify-center gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
+                    className="vision-glass hover:border-[#bf5af2]/50 p-2 sm:p-4 rounded-[18px] sm:rounded-[22px] flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
                   >
-                    <div className="w-11 h-11 rounded-2xl bg-[#bf5af2]/15 text-[#bf5af2] border border-[#bf5af2]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(191,90,242,0.2)]">
-                      <PiggyBank size={20} />
+                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#bf5af2]/15 text-[#bf5af2] border border-[#bf5af2]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(191,90,242,0.2)]">
+                      <PiggyBank size={18} />
                     </div>
-                    <span className="text-xs font-bold text-white tracking-tight">Gullak Bank</span>
+                    <span className="text-[10px] min-[380px]:text-xs font-bold text-white tracking-tight truncate max-w-full">Gullak</span>
                   </Link>
                 </motion.div>
 
-                {/* 5. New Goal */}
+                {/* 4. New Goal */}
                 <motion.div whileHover={{ y: -4, scale: 1.03 }} whileTap={{ scale: 0.94 }}>
                   <Link
                     to="/goals?new=true"
-                    className="vision-glass hover:border-[#64d2ff]/50 p-4 rounded-[22px] flex flex-col items-center justify-center gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
+                    className="vision-glass hover:border-[#64d2ff]/50 p-2 sm:p-4 rounded-[18px] sm:rounded-[22px] flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
                   >
-                    <div className="w-11 h-11 rounded-2xl bg-[#64d2ff]/15 text-[#64d2ff] border border-[#64d2ff]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(100,210,255,0.2)]">
-                      <Target size={20} />
+                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#64d2ff]/15 text-[#64d2ff] border border-[#64d2ff]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(100,210,255,0.2)]">
+                      <Target size={18} />
                     </div>
-                    <span className="text-xs font-bold text-white tracking-tight">New Goal</span>
+                    <span className="text-[10px] min-[380px]:text-xs font-bold text-white tracking-tight truncate max-w-full">Goal</span>
                   </Link>
                 </motion.div>
 
-                {/* 6. Spotlight Search */}
+                {/* 5. Spotlight Search */}
                 <motion.div whileHover={{ y: -4, scale: 1.03 }} whileTap={{ scale: 0.94 }}>
                   <button
                     type="button"
                     onClick={triggerSearch}
-                    className="vision-glass hover:border-[#0a84ff]/50 p-4 rounded-[22px] flex flex-col items-center justify-center gap-2.5 transition-all duration-200 group text-center w-full h-full shadow-sm"
+                    className="vision-glass hover:border-[#0a84ff]/50 p-2 sm:p-4 rounded-[18px] sm:rounded-[22px] flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 transition-all duration-200 group text-center w-full h-full shadow-sm"
                   >
-                    <div className="w-11 h-11 rounded-2xl bg-[#0a84ff]/15 text-[#0a84ff] border border-[#0a84ff]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(10,132,255,0.2)]">
-                      <Search size={20} />
+                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#0a84ff]/15 text-[#0a84ff] border border-[#0a84ff]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(10,132,255,0.2)]">
+                      <Search size={18} />
                     </div>
-                    <span className="text-xs font-bold text-white tracking-tight">⌘K Search</span>
+                    <span className="text-[10px] min-[380px]:text-xs font-bold text-white tracking-tight truncate max-w-full">Search</span>
                   </button>
                 </motion.div>
 
-                {/* 7. PDF Export */}
+                {/* 6. PDF Export */}
                 <motion.div whileHover={{ y: -4, scale: 1.03 }} whileTap={{ scale: 0.94 }}>
                   <Link
                     to="/reports"
-                    className="vision-glass hover:border-white/30 p-4 rounded-[22px] flex flex-col items-center justify-center gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
+                    className="vision-glass hover:border-white/30 p-2 sm:p-4 rounded-[18px] sm:rounded-[22px] flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
                   >
-                    <div className="w-11 h-11 rounded-2xl bg-white/[0.08] text-white border border-white/20 flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm">
-                      <FileSpreadsheet size={20} />
+                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-white/[0.08] text-white border border-white/20 flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm">
+                      <FileSpreadsheet size={18} />
                     </div>
-                    <span className="text-xs font-bold text-white tracking-tight">PDF Export</span>
+                    <span className="text-[10px] min-[380px]:text-xs font-bold text-white tracking-tight truncate max-w-full">Export</span>
                   </Link>
                 </motion.div>
 
-                {/* 8. Calculator */}
+                {/* 7. Calculator */}
                 <motion.div whileHover={{ y: -4, scale: 1.03 }} whileTap={{ scale: 0.94 }}>
                   <Link
                     to="/calculator"
-                    className="vision-glass hover:border-[#ff9f0a]/50 p-4 rounded-[22px] flex flex-col items-center justify-center gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
+                    className="vision-glass hover:border-[#ff9f0a]/50 p-2 sm:p-4 rounded-[18px] sm:rounded-[22px] flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
                   >
-                    <div className="w-11 h-11 rounded-2xl bg-[#ff9f0a]/15 text-[#ff9f0a] border border-[#ff9f0a]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(255,159,10,0.2)]">
-                      <CalculatorIcon size={20} />
+                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#ff9f0a]/15 text-[#ff9f0a] border border-[#ff9f0a]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(255,159,10,0.2)]">
+                      <CalculatorIcon size={18} />
                     </div>
-                    <span className="text-xs font-bold text-white tracking-tight">Calculator</span>
+                    <span className="text-[10px] min-[380px]:text-xs font-bold text-white tracking-tight truncate max-w-full">Calc</span>
+                  </Link>
+                </motion.div>
+
+                {/* 8. Audit Timeline */}
+                <motion.div whileHover={{ y: -4, scale: 1.03 }} whileTap={{ scale: 0.94 }}>
+                  <Link
+                    to="/timeline"
+                    className="vision-glass hover:border-[#30d158]/50 p-2 sm:p-4 rounded-[18px] sm:rounded-[22px] flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
+                  >
+                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#30d158]/15 text-[#30d158] border border-[#30d158]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(48,209,88,0.2)]">
+                      <History size={18} />
+                    </div>
+                    <span className="text-[10px] min-[380px]:text-xs font-bold text-white tracking-tight truncate max-w-full">Timeline</span>
                   </Link>
                 </motion.div>
               </div>
@@ -596,7 +609,7 @@ export default function Dashboard() {
             {/* 5. ANALYTICS & VELOCITY (Interactive Analytics Section)               */}
             {/* --------------------------------------------------------------------- */}
             <motion.section variants={itemVariants} id="section-analytics" className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <div className="text-[11px] font-bold text-[#bf5af2] uppercase tracking-wider flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#bf5af2]" /> 05 • Visual Intelligence
@@ -605,7 +618,7 @@ export default function Dashboard() {
                     Financial Analytics & Trajectory
                   </h2>
                 </div>
-                <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} className="self-start sm:self-auto">
                   <Link
                     to="/analytics"
                     className="text-xs font-semibold px-3 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.1] text-[#0a84ff] hover:text-white flex items-center gap-1 transition-all border border-white/[0.08]"

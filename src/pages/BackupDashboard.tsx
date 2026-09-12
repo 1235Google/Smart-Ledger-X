@@ -91,7 +91,7 @@ export default function BackupDashboard() {
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 min-h-screen text-slate-100">
+    <div className="w-full max-w-7xl mx-auto space-y-6 sm:space-y-8 text-slate-100">
       <BackupAuthGuard authStatus={authStatus} onSignIn={handleGoogleSignIn}>
         {/* Header with quick system indicators & Run Backup button */}
         <BackupStatusHeader

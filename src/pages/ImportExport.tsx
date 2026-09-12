@@ -431,18 +431,18 @@ export default function ImportExport() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-6"
+            className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6"
           >
             {/* Download Everything */}
-            <div className="col-span-1 md:col-span-2 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/30 rounded-3xl p-8 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 group backdrop-blur-xl">
+            <div className="col-span-1 md:col-span-2 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/30 rounded-2xl sm:rounded-3xl p-5 sm:p-8 relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6 group backdrop-blur-xl">
               <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-[80px] group-hover:bg-emerald-500/20 transition-all duration-500"></div>
               
               <div className="relative z-10 flex-1">
                 <div className="flex items-center gap-3 mb-2">
                   <FileArchive className="text-emerald-400" size={24} />
-                  <h2 className="text-2xl font-bold text-white">One-Click Complete Export</h2>
+                  <h2 className="text-xl sm:text-2xl font-bold text-white">One-Click Complete Export</h2>
                 </div>
-                <p className="text-neutral-300 text-sm font-normal max-w-xl">
+                <p className="text-neutral-300 text-xs sm:text-sm font-normal max-w-xl">
                   Get a complete ZIP archive containing your financial reports in PDF, all ledger transactions in Excel & CSV formats, and a full system backup JSON.
                 </p>
               </div>
@@ -450,7 +450,7 @@ export default function ImportExport() {
               <button 
                 onClick={generateZip}
                 disabled={isProcessing}
-                className="relative z-10 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-4 rounded-2xl font-bold transition-all shadow-lg shadow-emerald-600/30 w-full md:w-auto disabled:opacity-50 shrink-0"
+                className="relative z-10 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl sm:rounded-2xl font-bold transition-all shadow-lg shadow-emerald-600/30 w-full md:w-auto disabled:opacity-50 shrink-0 min-h-[48px]"
               >
                 <Download size={20} />
                 Download Everything
@@ -458,62 +458,62 @@ export default function ImportExport() {
             </div>
 
             {/* Individual Exports */}
-            <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-3xl p-6 hover:border-white/20 transition-all">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-center text-red-400">
+            <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl sm:rounded-3xl p-5 sm:p-6 hover:border-white/20 transition-all flex flex-col justify-between">
+              <div className="flex items-center gap-3 mb-5 sm:mb-6">
+                <div className="w-10 h-10 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-center text-red-400 shrink-0">
                   <FileText size={20} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Export as PDF</h3>
+                  <h3 className="text-base sm:text-lg font-bold text-white">Export as PDF</h3>
                   <p className="text-xs text-neutral-400">Printable official financial report</p>
                 </div>
               </div>
-              <button onClick={generatePDF} disabled={isProcessing} className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl transition-colors border border-white/10 font-semibold text-sm">
+              <button onClick={generatePDF} disabled={isProcessing} className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl transition-colors border border-white/10 font-semibold text-sm min-h-[44px]">
                 Generate PDF <ArrowRight size={16} className="text-neutral-400" />
               </button>
             </div>
 
-            <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-3xl p-6 hover:border-white/20 transition-all">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center text-emerald-400">
+            <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl sm:rounded-3xl p-5 sm:p-6 hover:border-white/20 transition-all flex flex-col justify-between">
+              <div className="flex items-center gap-3 mb-5 sm:mb-6">
+                <div className="w-10 h-10 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center text-emerald-400 shrink-0">
                   <FileSpreadsheet size={20} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Export as Excel</h3>
+                  <h3 className="text-base sm:text-lg font-bold text-white">Export as Excel</h3>
                   <p className="text-xs text-neutral-400">Formatted spreadsheets (.xlsx)</p>
                 </div>
               </div>
-              <button onClick={generateExcel} disabled={isProcessing} className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl transition-colors border border-white/10 font-semibold text-sm">
+              <button onClick={generateExcel} disabled={isProcessing} className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl transition-colors border border-white/10 font-semibold text-sm min-h-[44px]">
                 Generate Excel <ArrowRight size={16} className="text-neutral-400" />
               </button>
             </div>
 
-            <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-3xl p-6 hover:border-white/20 transition-all">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center justify-center text-blue-400">
+            <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl sm:rounded-3xl p-5 sm:p-6 hover:border-white/20 transition-all flex flex-col justify-between">
+              <div className="flex items-center gap-3 mb-5 sm:mb-6">
+                <div className="w-10 h-10 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center justify-center text-blue-400 shrink-0">
                   <FileText size={20} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Export as CSV</h3>
+                  <h3 className="text-base sm:text-lg font-bold text-white">Export as CSV</h3>
                   <p className="text-xs text-neutral-400">Raw transaction data</p>
                 </div>
               </div>
-              <button onClick={generateCSV} disabled={isProcessing} className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl transition-colors border border-white/10 font-semibold text-sm">
+              <button onClick={generateCSV} disabled={isProcessing} className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl transition-colors border border-white/10 font-semibold text-sm min-h-[44px]">
                 Generate CSV <ArrowRight size={16} className="text-neutral-400" />
               </button>
             </div>
 
-            <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-3xl p-6 hover:border-white/20 transition-all relative overflow-hidden">
-              <div className="flex items-center gap-3 mb-6 relative z-10">
-                <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-400">
+            <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl sm:rounded-3xl p-5 sm:p-6 hover:border-white/20 transition-all relative overflow-hidden flex flex-col justify-between">
+              <div className="flex items-center gap-3 mb-5 sm:mb-6 relative z-10">
+                <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-400 shrink-0">
                   <FileJson size={20} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Create System Backup</h3>
+                  <h3 className="text-base sm:text-lg font-bold text-white">Create System Backup</h3>
                   <p className="text-xs text-neutral-400">Full encrypted JSON snapshot</p>
                 </div>
               </div>
-              <button onClick={createBackup} disabled={isProcessing} className="w-full relative z-10 flex items-center justify-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 py-3 rounded-xl transition-colors border border-amber-500/20 font-semibold text-sm">
+              <button onClick={createBackup} disabled={isProcessing} className="w-full relative z-10 flex items-center justify-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 py-3 rounded-xl transition-colors border border-amber-500/20 font-semibold text-sm min-h-[44px]">
                 Create Backup <ArrowRight size={16} />
               </button>
             </div>
@@ -529,12 +529,12 @@ export default function ImportExport() {
           >
             {/* Import Success Notification */}
             {importSuccessSummary && (
-              <div className="p-6 bg-emerald-500/10 border border-emerald-500/30 rounded-3xl flex items-start justify-between gap-4">
+              <div className="p-4 sm:p-6 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl sm:rounded-3xl flex items-start justify-between gap-4">
                 <div className="flex items-start gap-3">
                   <CheckCircle2 size={24} className="text-emerald-400 shrink-0 mt-0.5" />
                   <div>
-                    <h3 className="text-emerald-400 font-bold text-lg">Import Completed Successfully!</h3>
-                    <p className="text-neutral-300 text-sm mt-1">
+                    <h3 className="text-emerald-400 font-bold text-base sm:text-lg">Import Completed Successfully!</h3>
+                    <p className="text-neutral-300 text-xs sm:text-sm mt-1">
                       Successfully imported <strong className="text-white">{importSuccessSummary.imported}</strong> ledger records. 
                       Skipped <strong className="text-amber-400">{importSuccessSummary.skipped}</strong> duplicate or invalid records.
                     </p>
@@ -548,10 +548,10 @@ export default function ImportExport() {
 
             {/* Import Error Message */}
             {importErrorMsg && (
-              <div className="p-5 bg-red-500/10 border border-red-500/30 rounded-3xl flex items-center justify-between gap-4">
+              <div className="p-4 sm:p-5 bg-red-500/10 border border-red-500/30 rounded-2xl sm:rounded-3xl flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <AlertCircle size={22} className="text-red-400 shrink-0" />
-                  <span className="text-red-300 text-sm font-medium">{importErrorMsg}</span>
+                  <span className="text-red-300 text-xs sm:text-sm font-medium">{importErrorMsg}</span>
                 </div>
                 <button onClick={() => setImportErrorMsg(null)} className="p-1 text-neutral-400 hover:text-white">
                   <X size={18} />
@@ -560,66 +560,66 @@ export default function ImportExport() {
             )}
 
             {importPreview && parseResult ? (
-              <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-3xl p-6 md:p-8 space-y-6">
+              <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 space-y-6">
                 {/* Header & Controls */}
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-white/10">
                   <div>
-                    <h3 className="text-2xl font-bold text-white">Import Records Preview</h3>
+                    <h3 className="text-xl sm:text-2xl font-bold text-white">Import Records Preview</h3>
                     <p className="text-xs text-neutral-400 mt-1">
-                      File: <span className="text-emerald-400 font-mono font-bold">{parseResult.fileName}</span> ({parseResult.fileType.toUpperCase()})
+                      File: <span className="text-emerald-400 font-mono font-bold break-all">{parseResult.fileName}</span> ({parseResult.fileType.toUpperCase()})
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                     <button 
                       onClick={resetImportState} 
-                      className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white border border-white/10 text-sm font-semibold transition-colors"
+                      className="px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white border border-white/10 text-xs sm:text-sm font-semibold transition-colors min-h-[40px]"
                     >
                       Cancel / Re-upload
                     </button>
                     {parseResult.errors.length > 0 && (
                       <button 
                         onClick={downloadErrorReport} 
-                        className="px-4 py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-sm font-semibold transition-colors flex items-center gap-2"
+                        className="px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs sm:text-sm font-semibold transition-colors flex items-center gap-2 min-h-[40px]"
                       >
-                        <FileX size={16} /> Download Error Log ({parseResult.errors.length})
+                        <FileX size={15} /> Error Log ({parseResult.errors.length})
                       </button>
                     )}
                     <button 
                       onClick={confirmImport} 
                       disabled={isProcessing || parseResult.validCount === 0} 
-                      className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-2"
+                      className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs sm:text-sm shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-2 min-h-[40px]"
                     >
-                      <CheckCircle2 size={18} /> Confirm & Commit Import
+                      <CheckCircle2 size={16} /> Confirm Import
                     </button>
                   </div>
                 </div>
 
                 {/* Summary Metrics Cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div className="p-4 bg-black/40 border border-white/10 rounded-2xl">
-                    <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Total Records</div>
-                    <div className="text-2xl font-bold text-white mt-1">{parseResult.totalCount}</div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                  <div className="p-3.5 sm:p-4 bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl">
+                    <div className="text-[10px] sm:text-xs font-semibold text-neutral-400 uppercase tracking-wider">Total Records</div>
+                    <div className="text-xl sm:text-2xl font-bold text-white mt-1">{parseResult.totalCount}</div>
                   </div>
 
-                  <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
-                    <div className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Valid Records</div>
-                    <div className="text-2xl font-bold text-emerald-400 mt-1">{parseResult.validCount}</div>
+                  <div className="p-3.5 sm:p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl sm:rounded-2xl">
+                    <div className="text-[10px] sm:text-xs font-semibold text-emerald-400 uppercase tracking-wider">Valid Records</div>
+                    <div className="text-xl sm:text-2xl font-bold text-emerald-400 mt-1">{parseResult.validCount}</div>
                   </div>
 
-                  <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl">
-                    <div className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Duplicates</div>
-                    <div className="text-2xl font-bold text-amber-400 mt-1">{parseResult.duplicateCount}</div>
+                  <div className="p-3.5 sm:p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl sm:rounded-2xl">
+                    <div className="text-[10px] sm:text-xs font-semibold text-amber-400 uppercase tracking-wider">Duplicates</div>
+                    <div className="text-xl sm:text-2xl font-bold text-amber-400 mt-1">{parseResult.duplicateCount}</div>
                   </div>
 
-                  <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl">
-                    <div className="text-xs font-semibold text-red-400 uppercase tracking-wider">Invalid Rows</div>
-                    <div className="text-2xl font-bold text-red-400 mt-1">{parseResult.invalidCount}</div>
+                  <div className="p-3.5 sm:p-4 bg-red-500/10 border border-red-500/20 rounded-xl sm:rounded-2xl">
+                    <div className="text-[10px] sm:text-xs font-semibold text-red-400 uppercase tracking-wider">Invalid Rows</div>
+                    <div className="text-xl sm:text-2xl font-bold text-red-400 mt-1">{parseResult.invalidCount}</div>
                   </div>
                 </div>
 
                 {/* Duplicate Settings Toggle */}
-                <div className="p-4 bg-black/40 border border-white/10 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
+                <div className="p-3.5 sm:p-4 bg-black/40 border border-white/10 rounded-xl sm:rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm">
                   <label className="flex items-center gap-3 cursor-pointer select-none">
                     <input 
                       type="checkbox" 
@@ -634,12 +634,12 @@ export default function ImportExport() {
                   </label>
 
                   {/* Filter Pills */}
-                  <div className="flex items-center gap-1.5 bg-white/5 p-1 rounded-xl border border-white/10 text-xs">
+                  <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 text-xs overflow-x-auto">
                     {(['all', 'valid', 'duplicate', 'invalid'] as const).map(mode => (
                       <button
                         key={mode}
                         onClick={() => setStatusFilter(mode)}
-                        className={`px-3 py-1.5 rounded-lg font-semibold capitalize transition-colors ${
+                        className={`px-2.5 sm:px-3 py-1.5 rounded-lg font-semibold capitalize whitespace-nowrap transition-colors ${
                           statusFilter === mode 
                             ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
                             : 'text-neutral-400 hover:text-white'
@@ -652,9 +652,9 @@ export default function ImportExport() {
                 </div>
 
                 {/* Scrollable Records Table */}
-                <div className="bg-black/40 rounded-2xl border border-white/10 overflow-hidden">
-                  <div className="max-h-[450px] overflow-y-auto relative">
-                    <table className="w-full text-left border-collapse">
+                <div className="bg-black/40 rounded-xl sm:rounded-2xl border border-white/10 overflow-hidden">
+                  <div className="max-h-[450px] overflow-y-auto overflow-x-auto custom-scrollbar relative">
+                    <table className="w-full text-left border-collapse min-w-[650px]">
                       <thead className="sticky top-0 bg-[#0c0c0c] z-10 border-b border-white/10">
                         <tr className="text-neutral-400 text-xs font-semibold uppercase tracking-wider">
                           <th className="py-3 px-4">Row #</th>
@@ -737,25 +737,25 @@ export default function ImportExport() {
             ) : (
               <div 
                 {...getRootProps()} 
-                className={`border-2 border-dashed rounded-3xl p-12 text-center transition-all cursor-pointer ${
+                className={`border-2 border-dashed rounded-2xl sm:rounded-3xl p-6 sm:p-12 text-center transition-all cursor-pointer ${
                   isDragActive 
                     ? 'border-emerald-500 bg-emerald-500/10' 
                     : 'border-white/10 hover:border-emerald-500/40 hover:bg-white/[0.02]'
                 }`}
               >
                 <input {...getInputProps()} />
-                <div className="w-20 h-20 bg-gradient-to-tr from-emerald-600/20 to-teal-500/20 border border-emerald-500/30 rounded-3xl mx-auto flex items-center justify-center mb-6 shadow-xl shadow-emerald-500/10">
-                  <UploadCloud size={36} className="text-emerald-400" />
+                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-tr from-emerald-600/20 to-teal-500/20 border border-emerald-500/30 rounded-2xl sm:rounded-3xl mx-auto flex items-center justify-center mb-4 sm:mb-6 shadow-xl shadow-emerald-500/10">
+                  <UploadCloud size={32} className="text-emerald-400" />
                 </div>
-                <h3 className="text-2xl font-bold text-white mb-2">
+                <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
                   {isDragActive ? 'Drop file to process' : 'Drag & Drop CSV, Excel, or JSON File'}
                 </h3>
-                <p className="text-neutral-400 text-sm mb-6 max-w-md mx-auto">
+                <p className="text-neutral-400 text-xs sm:text-sm mb-5 sm:mb-6 max-w-md mx-auto">
                   Automatically parses and maps <strong className="text-white">.csv</strong>, <strong className="text-white">.xlsx</strong>, <strong className="text-white">.xls</strong>, and <strong className="text-white">.json</strong> bank or ledger statements.
                 </p>
                 <button 
                   type="button" 
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-3 rounded-xl font-bold text-sm transition-all shadow-lg shadow-emerald-600/20 border border-emerald-500/30"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 sm:px-8 py-3 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-lg shadow-emerald-600/20 border border-emerald-500/30 min-h-[44px]"
                 >
                   Browse Files
                 </button>

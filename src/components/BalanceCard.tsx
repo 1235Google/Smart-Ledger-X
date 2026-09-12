@@ -101,7 +101,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
       onMouseMove={handleMouseMove}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className={`relative p-6 sm:p-8 md:p-8 rounded-[28px] overflow-hidden backdrop-blur-3xl transition-all duration-300 ease-out group select-none ${
+      className={`relative p-4 sm:p-8 rounded-[24px] sm:rounded-[28px] overflow-hidden backdrop-blur-3xl transition-all duration-300 ease-out group select-none ${
         pulseState === 'increase'
           ? 'border-[#30d158]/50 bg-[#30d158]/[0.05] backdrop-blur-[20px] shadow-lg'
           : pulseState === 'decrease'
@@ -151,12 +151,12 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
         ))}
       </AnimatePresence>
 
-      <div className="relative z-20 flex flex-col justify-between gap-6">
+      <div className="relative z-20 flex flex-col justify-between gap-5 sm:gap-6">
         {/* Header Pill Row */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2 sm:gap-3 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
             <span
-              className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+              className={`w-2.5 h-2.5 rounded-full shrink-0 transition-all duration-300 ${
                 pulseState === 'increase'
                   ? 'bg-[#30d158] shadow-[0_0_16px_#30d158]'
                   : pulseState === 'decrease'
@@ -164,7 +164,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
                   : 'bg-[#0a84ff] shadow-[0_0_12px_rgba(10,132,255,0.9)] animate-pulse'
               }`}
             />
-            <span className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">
+            <span className="text-[11px] sm:text-xs font-semibold text-[#86868b] uppercase tracking-wider truncate">
               Total Available Balance
             </span>
           </div>
@@ -180,16 +180,16 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
             >
               {showBalance ? <Eye size={15} /> : <EyeOff size={15} />}
             </motion.button>
-            <div className="text-[11px] font-semibold px-3 py-1 rounded-full bg-white/[0.06] hover:bg-white/[0.1] text-[#a1a1a6] border border-white/[0.1] flex items-center gap-1.5 shadow-sm transition-colors backdrop-blur-md">
+            <div className="text-[10px] sm:text-[11px] font-semibold px-2 sm:px-3 py-1 rounded-full bg-white/[0.06] hover:bg-white/[0.1] text-[#a1a1a6] border border-white/[0.1] flex items-center gap-1 sm:gap-1.5 shadow-sm transition-colors backdrop-blur-md">
               <ShieldCheck size={13} className="text-[#30d158]" />
-              <span>Apple Secure</span>
+              <span className="hidden xs:inline sm:inline">Apple Secure</span>
             </div>
           </div>
         </div>
 
         {/* Primary Monetary Value */}
         <div>
-          <div className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-white mb-2 flex items-baseline gap-1 font-tabular">
+          <div className="text-2xl min-[360px]:text-3xl min-[400px]:text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-white mb-2 flex items-baseline gap-1 font-tabular break-words">
             {showBalance ? (
               <CountUp
                 value={currentBalance}
@@ -198,7 +198,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
                 className="text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.6)]"
               />
             ) : (
-              <span className="tracking-widest text-slate-400 font-mono text-3xl sm:text-4xl">••••••••</span>
+              <span className="tracking-widest text-slate-400 font-mono text-2xl sm:text-4xl">••••••••</span>
             )}
           </div>
           <p className="text-xs font-medium text-[#86868b]">Real-time liquid assets across all connected ledger vaults</p>

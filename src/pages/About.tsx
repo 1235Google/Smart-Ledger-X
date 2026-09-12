@@ -7,19 +7,19 @@ export default function About() {
   return (
     <div className="w-full space-y-8 max-w-4xl mx-auto pb-10">
       {/* Hero Banner - About Smart Ledger */}
-      <div className="relative rounded-3xl overflow-hidden border border-white/10 bg-gradient-to-br from-indigo-950/60 via-neutral-900 to-black p-8 sm:p-12 shadow-2xl">
+      <div className="relative rounded-3xl overflow-hidden border border-white/10 bg-gradient-to-br from-indigo-950/60 via-neutral-900 to-black p-6 sm:p-12 shadow-2xl">
         <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
         
-        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 relative z-10 text-center sm:text-left">
-          <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-indigo-500/30 border border-white/20 flex-shrink-0">
-            <Wallet size={40} className="text-white" />
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 sm:gap-6 relative z-10 text-center sm:text-left">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-indigo-500/30 border border-white/20 flex-shrink-0">
+            <Wallet size={32} className="text-white sm:w-10 sm:h-10" />
           </div>
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-xs font-semibold border border-indigo-500/30">
               <Sparkles size={14} />
               <span>Smart Ledger</span>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">About Smart Ledger</h1>
+            <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">About Smart Ledger</h1>
             <div className="text-slate-300 text-sm sm:text-base max-w-xl leading-relaxed space-y-3">
               <p>
                 Smart Ledger is a simple and easy-to-use digital ledger application designed to help users manage transactions, income, expenses, balances, and financial records in one place.
@@ -114,7 +114,7 @@ export default function About() {
           <Code className="text-slate-400" size={20} />
           Technology Stack
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 pt-2">
           <div className="p-4 rounded-2xl bg-black/20 border border-white/5">
             <span className="text-xs text-slate-400 block mb-1">Frontend Framework</span>
             <span className="text-sm font-semibold text-white flex items-center gap-1.5"><CheckCircle2 size={14} className="text-indigo-400"/> React 18 + Vite</span>

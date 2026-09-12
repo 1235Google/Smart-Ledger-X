@@ -294,14 +294,14 @@ export default function VaultPage() {
         <p className="text-slate-400 mt-1">Premium visual overview of your net worth</p>
       </header>
       
-      <div className="relative rounded-[2rem] overflow-hidden shadow-[0_0_80px_rgba(139,92,246,0.15)] border border-white/5 bg-[#05060a] min-h-[550px]">
+      <div className="relative rounded-2xl sm:rounded-[2rem] overflow-hidden shadow-[0_0_80px_rgba(139,92,246,0.15)] border border-white/5 bg-[#05060a] h-[340px] sm:h-[420px] xl:h-[680px]">
         {/* Dark luxury gradient background */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-indigo-950/30 via-[#0a0b10] to-[#05060a] z-0" />
 
         {/* Ambient background particles (UI layer) */}
         <div className="absolute inset-0 opacity-10 pointer-events-none mix-blend-screen" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%224%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }} />
 
-        <div className="absolute inset-0 z-0 pointer-events-auto flex items-center justify-center p-12">
+        <div className="absolute inset-0 z-0 pointer-events-auto flex items-center justify-center p-4 sm:p-12">
             <Suspense fallback={null}>
               <LuxuryVaultDisplay 
                 balance={displayBalance} 
@@ -314,21 +314,21 @@ export default function VaultPage() {
         </div>
         
         {/* Top Controls */}
-        <div className="absolute top-6 left-6 z-10 flex gap-4">
-           <div className="px-4 py-2 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 flex items-center gap-2">
-              <Shield size={16} className="text-indigo-400" />
-              <span className="text-xs text-slate-300 font-medium uppercase tracking-widest">Secured</span>
+        <div className="absolute top-4 sm:top-6 left-4 sm:left-6 z-10 flex gap-4">
+           <div className="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 flex items-center gap-2">
+              <Shield size={15} className="text-indigo-400" />
+              <span className="text-[11px] sm:text-xs text-slate-300 font-medium uppercase tracking-widest">Secured</span>
            </div>
         </div>
         
-        <div className="absolute top-6 right-6 z-10">
+        <div className="absolute top-4 sm:top-6 right-4 sm:right-6 z-10">
           <button 
              onClick={(e) => { e.stopPropagation(); handleReplay(); }} 
              disabled={isReplaying || !vaultLoaded}
-             className="flex items-center gap-2 bg-black/40 backdrop-blur-md hover:bg-white/10 text-slate-300 hover:text-white px-5 py-2.5 rounded-xl transition-all shadow-lg border border-white/10 disabled:opacity-50"
+             className="flex items-center gap-2 bg-black/40 backdrop-blur-md hover:bg-white/10 text-slate-300 hover:text-white px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl transition-all shadow-lg border border-white/10 disabled:opacity-50 min-h-[40px]"
           >
-             <Play size={16} className={isReplaying ? "animate-pulse text-indigo-400" : ""} />
-             <span className="text-sm font-medium tracking-wide">{isReplaying ? "Replaying..." : "Replay"}</span>
+             <Play size={15} className={isReplaying ? "animate-pulse text-indigo-400" : ""} />
+             <span className="text-xs sm:text-sm font-medium tracking-wide">{isReplaying ? "Replaying..." : "Replay"}</span>
           </button>
         </div>
 
@@ -342,7 +342,7 @@ export default function VaultPage() {
                 animate={{ opacity: 1, y: e.type === 'in' ? 0 : -50, scale: 1 }}
                 exit={{ opacity: 0, scale: 1.2 }}
                 transition={{ duration: 1 }}
-                className={`absolute text-4xl md:text-5xl font-light tracking-tight ${e.type === 'in' ? 'text-emerald-400' : 'text-red-400'}`}
+                className={`absolute text-3xl sm:text-4xl md:text-5xl font-light tracking-tight ${e.type === 'in' ? 'text-emerald-400' : 'text-red-400'}`}
                 style={{ textShadow: '0 4px 30px rgba(0,0,0,0.8)' }}
               >
                 {e.type === 'in' ? '+' : '-'}₹{e.amount.toLocaleString()}
@@ -351,7 +351,7 @@ export default function VaultPage() {
           </AnimatePresence>
         </div>
 
-        {/* Total Vault Value Card (Right) */}
+        {/* Total Vault Value Card (Desktop Right) */}
         <div className="absolute right-8 top-1/2 -translate-y-1/2 z-10 hidden xl:block">
            <div 
              onClick={() => setIsModalOpen(true)}
@@ -369,8 +369,8 @@ export default function VaultPage() {
            </div>
         </div>
 
-        {/* Bottom Cards */}
-        <div className="absolute bottom-6 left-6 right-6 z-10 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        {/* Bottom Cards (Desktop inside container) */}
+        <div className="hidden xl:grid absolute bottom-6 left-6 right-6 z-10 grid-cols-4 gap-4">
            {/* Income Card */}
            <div className="bg-[#0c0d12]/90 backdrop-blur-xl border border-white/5 rounded-2xl p-5 flex flex-col justify-between overflow-hidden relative shadow-lg">
               <div className="flex items-center gap-2 mb-3 relative z-10">
@@ -439,6 +439,92 @@ export default function VaultPage() {
 
       </div>
 
+      {/* Mobile/Tablet Total Vault Value Card & Metrics Grid */}
+      <div className="xl:hidden flex flex-col gap-4">
+        <div 
+          onClick={() => setIsModalOpen(true)}
+          className="bg-slate-950/80 backdrop-blur-3xl p-5 sm:p-6 rounded-2xl border border-white/10 shadow-xl cursor-pointer active:scale-[0.99] transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+        >
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400 font-semibold mb-1.5">Total Vault Value</p>
+            <h2 className="text-3xl sm:text-4xl font-light text-white tracking-tight">
+              <BalanceCounter value={displayBalance} />
+            </h2>
+          </div>
+          <div className="flex items-center gap-2 text-indigo-400 text-xs sm:text-sm font-medium">
+            <BarChart2 size={16} />
+            <span>Tap to view analytics</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Income Card */}
+          <div className="bg-[#0c0d12]/90 backdrop-blur-xl border border-white/5 rounded-2xl p-5 flex flex-col justify-between overflow-hidden relative shadow-lg">
+            <div className="flex items-center gap-2 mb-3 relative z-10">
+              <TrendingUp size={16} className="text-emerald-400" />
+              <span className="text-sm font-medium text-slate-300">Income</span>
+            </div>
+            <div className="mb-6 relative z-10">
+              <h3 className="text-2xl sm:text-3xl font-semibold text-white">₹{monthlyIncome.toLocaleString()}</h3>
+              <p className="text-xs text-slate-500 mt-1">This Month</p>
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 h-16">
+              <Sparkline color="#34d399" data={incomeData} />
+            </div>
+          </div>
+          
+          {/* Pending Due Card */}
+          <div className="bg-[#0c0d12]/90 backdrop-blur-xl border border-white/5 rounded-2xl p-5 flex flex-col justify-between overflow-hidden relative shadow-lg">
+            <div className="flex items-center gap-2 mb-3 relative z-10">
+              <TrendingDown size={16} className="text-amber-400" />
+              <span className="text-sm font-medium text-slate-300">Pending Dues</span>
+            </div>
+            <div className="mb-6 relative z-10">
+              <h3 className="text-2xl sm:text-3xl font-semibold text-white">₹{monthlyPending.toLocaleString()}</h3>
+              <p className="text-xs text-slate-500 mt-1">Due This Month</p>
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 h-16">
+              <Sparkline color="#fbbf24" data={pendingData} />
+            </div>
+          </div>
+          
+          {/* Savings Card */}
+          <div className="bg-[#0c0d12]/90 backdrop-blur-xl border border-white/5 rounded-2xl p-5 flex flex-col justify-between overflow-hidden relative shadow-lg">
+            <div className="flex items-center gap-2 mb-3 relative z-10">
+              <Shield size={16} className="text-blue-400" />
+              <span className="text-sm font-medium text-slate-300">Total Savings</span>
+            </div>
+            <div className="mb-6 relative z-10">
+              <h3 className="text-2xl sm:text-3xl font-semibold text-white">₹{totalSavings.toLocaleString()}</h3>
+              <p className="text-xs text-slate-500 mt-1">This Month</p>
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 h-16">
+              <Sparkline color="#60a5fa" data={savingsData} />
+            </div>
+          </div>
+          
+          {/* Health Score Card */}
+          <div className="bg-[#0c0d12]/90 backdrop-blur-xl border border-white/5 rounded-2xl p-5 flex items-center justify-between shadow-lg relative overflow-hidden">
+            <div className="absolute -right-4 -top-4 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl"></div>
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Heart size={16} className="text-purple-400" />
+                <span className="text-sm font-medium text-slate-300">Health Score</span>
+              </div>
+              <div className="flex items-baseline gap-1 mb-2">
+                <h3 className="text-2xl sm:text-3xl font-semibold text-white">{healthScore}</h3>
+                <span className="text-sm text-slate-500">/ 100</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-md w-fit">
+                <CheckCircle size={12} />
+                {healthScore >= 70 ? 'Excellent' : healthScore >= 40 ? 'Fair' : 'Needs Work'}
+              </div>
+            </div>
+            <CircularProgress value={healthScore} />
+          </div>
+        </div>
+      </div>
+
       {/* Vault Modal */}
       <AnimatePresence>
         {isModalOpen && (
@@ -455,27 +541,28 @@ export default function VaultPage() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-2xl bg-[#0a0b10] border border-white/10 rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+              className="relative w-full max-w-2xl bg-[#0a0b10] border border-white/10 rounded-2xl sm:rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[85dvh]"
             >
-              <div className="p-6 border-b border-white/5 flex items-center justify-between bg-white/5">
+              <div className="p-4 sm:p-6 border-b border-white/5 flex items-center justify-between bg-white/5">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-indigo-500/20 text-indigo-400 rounded-2xl flex items-center justify-center">
-                    <Shield size={24} />
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-indigo-500/20 text-indigo-400 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0">
+                    <Shield size={20} />
                   </div>
                   <div>
-                    <h2 className="text-xl font-light text-white tracking-wide">Vault Analytics</h2>
-                    <p className="text-sm text-slate-400">Detailed financial breakdown</p>
+                    <h2 className="text-lg sm:text-xl font-light text-white tracking-wide">Vault Analytics</h2>
+                    <p className="text-xs sm:text-sm text-slate-400">Detailed financial breakdown</p>
                   </div>
                 </div>
                 <button 
                   onClick={() => setIsModalOpen(false)}
-                  className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-full transition-colors"
+                  aria-label="Close modal"
+                  className="w-10 h-10 min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-full transition-colors"
                 >
                   <X size={20} />
                 </button>
               </div>
 
-              <div className="overflow-y-auto p-6 space-y-8 flex-1 custom-scrollbar">
+              <div className="overflow-y-auto p-4 sm:p-6 space-y-6 sm:space-y-8 flex-1 custom-scrollbar">
                 
                 {/* AI Insight & Savings Goal inside Modal */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

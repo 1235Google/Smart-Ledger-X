@@ -95,8 +95,6 @@ function LoginRoute({ children }: { children: React.ReactNode }) {
 }
 
 import ErrorBoundary from './components/ErrorBoundary';
-import MfaChallenge from './components/MfaChallenge';
-
 import { ToastProvider } from './context/ToastContext';
 import { NotificationProvider } from './context/NotificationContext';
 import ToastContainer from './components/ui/ToastContainer';
@@ -111,12 +109,6 @@ import { useLocation } from 'react-router-dom';
 
 function AppRoutes() {
   const location = useLocation();
-
-  const { requiresMfa } = useStore();
-  if (requiresMfa) {
-    return <MfaChallenge />;
-  }
-
   
   return (
     <Suspense fallback={<PageFallback />}>

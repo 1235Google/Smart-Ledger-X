@@ -145,7 +145,7 @@ export default function UserProfileDropdown({ onOpenNotifications }: UserProfile
             exit={{ opacity: 0, y: 8, scale: 0.96 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
             role="menu"
-            className="absolute right-0 top-full mt-2 w-80 sm:w-84 bg-neutral-900/95 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden z-50 divide-y divide-white/10 max-w-[calc(100vw-2rem)]"
+            className="fixed inset-x-3 top-[calc(4rem+env(safe-area-inset-top,0px))] sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 w-auto sm:w-84 bg-neutral-900/95 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl overflow-hidden z-50 divide-y divide-white/10 max-h-[75vh] sm:max-h-[85vh] overflow-y-auto"
           >
             {/* Header / User Info */}
             <div className="p-4 bg-gradient-to-b from-white/[0.04] to-transparent">

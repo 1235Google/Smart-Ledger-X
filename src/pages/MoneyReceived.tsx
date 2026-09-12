@@ -84,7 +84,7 @@ export default function MoneyReceived() {
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
           {/* Apple Style Form Section */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="vision-glass rounded-[24px] p-6 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] relative overflow-hidden">
+            <div className="vision-glass rounded-[22px] sm:rounded-[24px] p-4 sm:p-6 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] relative overflow-hidden">
               <div className="pointer-events-none absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/15 to-transparent" />
               
               <h2 className="text-base font-bold text-white mb-5 flex items-center gap-2">
@@ -143,7 +143,7 @@ export default function MoneyReceived() {
                 <div className="pt-2">
                   <button
                     type="submit"
-                    className="w-full py-3.5 px-6 rounded-full bg-[#30d158] hover:bg-[#30d158]/90 text-black font-bold text-sm transition-all shadow-lg shadow-[#30d158]/20 flex items-center justify-center gap-2 active:scale-[0.98]"
+                    className="w-full py-3.5 px-6 rounded-full bg-[#30d158] hover:bg-[#30d158]/90 text-black font-bold text-sm transition-all shadow-lg shadow-[#30d158]/20 flex items-center justify-center gap-2 active:scale-[0.98] min-h-[48px]"
                   >
                     <Plus size={18} />
                     <span>Save Received Money</span>
@@ -155,18 +155,18 @@ export default function MoneyReceived() {
 
           {/* List Section */}
           <div className="lg:col-span-3 space-y-4">
-            <div className="flex items-center justify-between gap-3 px-1">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
               <h2 className="text-base font-bold text-white">
                 Inflow Feed ({filteredTransactions.length})
               </h2>
-              <div className="relative w-48 sm:w-60">
+              <div className="relative w-full sm:w-60">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#86868b]" />
                 <input
                   type="text"
                   placeholder="Search received..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 rounded-full bg-[#171717] border border-white/[0.08] text-xs text-white placeholder-[#86868b] outline-none focus:border-[#0a84ff] focus:ring-2 focus:ring-[#0a84ff]/25 transition-all"
+                  className="w-full pl-8 pr-3 py-2 sm:py-1.5 rounded-full bg-[#171717] border border-white/[0.08] text-xs text-white placeholder-[#86868b] outline-none focus:border-[#0a84ff] focus:ring-2 focus:ring-[#0a84ff]/25 transition-all min-h-[40px] sm:min-h-[32px]"
                 />
               </div>
             </div>
@@ -187,7 +187,7 @@ export default function MoneyReceived() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.95 }}
                       transition={{ duration: 0.25, delay: idx * 0.02 }}
-                      className="bg-[#171717] hover:bg-[#1c1c1c] border border-white/[0.08] p-4 rounded-2xl flex items-center gap-4 transition-all duration-200 shadow-sm group"
+                      className="bg-[#171717] hover:bg-[#1c1c1c] border border-white/[0.08] p-3 sm:p-4 rounded-2xl flex items-center gap-3 sm:gap-4 transition-all duration-200 shadow-sm group"
                     >
                       <div className="w-10 h-10 bg-[#30d158]/15 text-[#30d158] rounded-xl flex items-center justify-center flex-shrink-0">
                         <ArrowDownLeft size={18} />
@@ -198,8 +198,8 @@ export default function MoneyReceived() {
                           {tx.purpose} {tx.invoiceNumber && `• #${tx.invoiceNumber}`} • {formatDate(tx.date, generalSettings?.timezone)}
                         </p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-base font-extrabold text-[#30d158] font-tabular">+ {formatCurrency(tx.amount)}</p>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm sm:text-base font-extrabold text-[#30d158] font-tabular whitespace-nowrap">+ {formatCurrency(tx.amount)}</p>
                         <p className="text-[10px] text-[#86868b] uppercase font-semibold">Cleared</p>
                       </div>
                     </motion.div>

@@ -220,8 +220,8 @@ export default function Settings() {
     <div className="w-full max-w-3xl mx-auto space-y-8">
             
             {/* Header */}
-            <div className="flex items-center justify-between mb-10">
-                <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+            <div className="flex items-center justify-between mb-6 sm:mb-10">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Settings</h1>
             </div>
 
             <div className="sticky top-4 z-10 mb-8">

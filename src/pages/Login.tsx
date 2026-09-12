@@ -321,7 +321,7 @@ export default function Login() {
             x: shake ? [-8, 8, -8, 8, -4, 4, 0] : 0 
           }}
           transition={{ duration: shake ? 0.4 : 0.25 }}
-          className="bg-[#171717] border border-white/[0.08] p-8 rounded-[24px] shadow-[0_4px_24px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] relative overflow-hidden"
+          className="bg-[#171717] border border-white/[0.08] p-5 sm:p-8 rounded-2xl sm:rounded-[24px] shadow-[0_4px_24px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] relative overflow-hidden"
         >
           {/* Top subtle sheen */}
           <div className="pointer-events-none absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/15 to-transparent" />
@@ -466,7 +466,7 @@ export default function Login() {
               transition={{ duration: 0.2 }}
               className="space-y-6"
             >
-              <div className="flex justify-center gap-3">
+              <div className="flex justify-center gap-2 sm:gap-3">
                 {pin.map((digit, i) => (
                   <input
                     key={i}
@@ -477,7 +477,7 @@ export default function Login() {
                     onChange={(e) => handlePinChange(i, e.target.value)}
                     onKeyDown={(e) => handlePinKeyDown(i, e)}
                     className={cn(
-                      'w-14 h-16 bg-[#1f1f1f] border rounded-2xl text-center text-2xl text-white font-mono focus:outline-none transition-all',
+                      'w-11 sm:w-14 h-13 sm:h-16 bg-[#1f1f1f] border rounded-xl sm:rounded-2xl text-center text-xl sm:text-2xl text-white font-mono focus:outline-none transition-all',
                       digit ? 'border-[#0a84ff] shadow-[0_0_15px_rgba(10,132,255,0.3)]' : 'border-white/[0.08] focus:border-[#0a84ff]'
                     )}
                   />

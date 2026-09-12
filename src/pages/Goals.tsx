@@ -69,7 +69,7 @@ export default function Goals() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         <div className="space-y-6 lg:col-span-1">
-          <div className="bg-[#0a0b10] border border-white/5 rounded-2xl p-6">
+          <div className="bg-[#0a0b10] border border-white/5 rounded-2xl p-4 sm:p-6">
             <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-6">
               <Plus size={20} className="text-indigo-400" />
               Add a New Goal
@@ -119,7 +119,7 @@ export default function Goals() {
         <div className="lg:col-span-2 space-y-4">
           <h2 className="text-lg font-bold text-white mb-4">Your Goals</h2>
           {goals.length === 0 ? (
-            <div className="bg-[#0a0b10] border border-white/5 rounded-2xl p-8 text-center flex flex-col items-center">
+            <div className="bg-[#0a0b10] border border-white/5 rounded-2xl p-6 sm:p-8 text-center flex flex-col items-center">
               <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center text-slate-400 mb-4">
                 <Target size={32} />
               </div>
@@ -134,20 +134,24 @@ export default function Goals() {
                   key={goal.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="bg-[#0a0b10] border border-white/5 rounded-2xl p-6"
+                  className="bg-[#0a0b10] border border-white/5 rounded-2xl p-4 sm:p-6"
                 >
                   <div className="flex justify-between items-start mb-4">
                     <div>
-                      <h3 className="font-bold text-white text-lg">{goal.name}</h3>
-                      <p className="text-sm text-slate-400 mt-1">Target: {formatCurrency(goal.targetAmount)}</p>
+                      <h3 className="font-bold text-white text-base sm:text-lg">{goal.name}</h3>
+                      <p className="text-xs sm:text-sm text-slate-400 mt-1">Target: {formatCurrency(goal.targetAmount)}</p>
                     </div>
-                    <button onClick={() => deleteGoal(goal.id)} className="text-slate-500 hover:text-red-400 transition-colors p-2">
+                    <button 
+                      onClick={() => deleteGoal(goal.id)} 
+                      aria-label="Delete goal"
+                      className="text-slate-500 hover:text-red-400 transition-colors p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                    >
                       <Trash2 size={18} />
                     </button>
                   </div>
                   
                   <div className="space-y-2 mt-4">
-                    <div className="flex justify-between text-sm">
+                    <div className="flex justify-between text-xs sm:text-sm">
                       <span className="text-indigo-400 font-medium">{formatCurrency(goal.currentAmount)}</span>
                       <span className="text-slate-400">{progress}%</span>
                     </div>
@@ -156,11 +160,17 @@ export default function Goals() {
                     </div>
                   </div>
 
-                  <div className="mt-4 pt-4 border-t border-white/5 flex gap-2">
-                    <button onClick={() => updateProgress(goal.id, 1000)} className="px-3 py-1.5 text-xs font-medium bg-white/5 hover:bg-white/10 rounded-lg text-slate-300 transition-colors">
+                  <div className="mt-4 pt-4 border-t border-white/5 flex flex-wrap gap-2">
+                    <button 
+                      onClick={() => updateProgress(goal.id, 1000)} 
+                      className="px-3.5 py-2 min-h-[38px] text-xs font-medium bg-white/5 hover:bg-white/10 active:scale-95 rounded-lg text-slate-300 transition-all flex items-center justify-center"
+                    >
                       + ₹1,000
                     </button>
-                    <button onClick={() => updateProgress(goal.id, 5000)} className="px-3 py-1.5 text-xs font-medium bg-white/5 hover:bg-white/10 rounded-lg text-slate-300 transition-colors">
+                    <button 
+                      onClick={() => updateProgress(goal.id, 5000)} 
+                      className="px-3.5 py-2 min-h-[38px] text-xs font-medium bg-white/5 hover:bg-white/10 active:scale-95 rounded-lg text-slate-300 transition-all flex items-center justify-center"
+                    >
                       + ₹5,000
                     </button>
                   </div>

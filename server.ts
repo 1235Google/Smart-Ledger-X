@@ -4,7 +4,6 @@ import { setupMfa, confirmMfa, verifyMfa, disableMfa, checkMfaStatus } from './s
 
 
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import * as dotenv from "dotenv";
 import cron from "node-cron";
 import { Resend } from "resend";
@@ -80,10 +79,8 @@ const AUTHORIZED_ADMIN_EMAILS = [
   "admin@smartledgerx.io"
 ];
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
-
+const app = express();
+  
   // Accurately resolve client IP behind Google Cloud Run / Nginx reverse proxies
   app.set("trust proxy", true);
 
@@ -1820,11 +1817,7 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
+    (async () => { const { createServer: createViteServer } = await import("vite"); const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa", }); app.use(vite.middlewares); })();
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
@@ -1833,9 +1826,11 @@ async function startServer() {
     });
   }
 
-  httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
-}
+  const PORT = 3000;
+  if (process.env.VERCEL !== '1') {
+    httpServer.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
 
-startServer();
+export default app;

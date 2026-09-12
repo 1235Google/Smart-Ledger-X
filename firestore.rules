@@ -7,7 +7,9 @@ service cloud.firestore {
     // =========================================================================
 
     function isSignedIn() {
-      return request.auth != null;
+      let isAuth = request.auth != null;
+      let mfaOk = !('totp_required' in request.auth.token) || request.auth.token.totp_required != true || request.auth.token.mfa_verified == true;
+      return isAuth && mfaOk;
     }
 
     function isOwner(userId) {

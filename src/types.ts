@@ -42,9 +42,13 @@ export interface PendingMoney {
   nextReminderDate: string;
   reminderStatus: 'active' | 'paused';
   penaltyEnabled?: boolean;
-  penaltyType?: 'fixed' | 'percent_day' | 'percent_week' | 'percent_month';
+  penaltyType?: 'fixed' | 'percentage' | 'percent_day' | 'percent_week' | 'percent_month';
+  penaltyFrequency?: 'one_time' | 'daily' | 'weekly' | 'monthly';
   penaltyValue?: number;
   gracePeriod?: number; // in days
+  penaltyMaxCap?: number;
+  penaltyEffectiveDate?: string;
+  penaltyIncluded?: boolean;
   aiTone?: 'friendly' | 'professional' | 'strict' | 'formal';
   customReminderMessage?: string;
   deleted?: boolean;
@@ -75,6 +79,7 @@ export interface SecuritySettings {
   autoLogoutEnabled?: boolean;
   registeredDevices: RegisteredDevice[];
   adminPasswordHash?: string;
+  hasPasskey?: boolean;
   fallbackPassword?: string;
   appCheckEnabled?: boolean;
 }

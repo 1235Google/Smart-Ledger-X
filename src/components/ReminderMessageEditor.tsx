@@ -11,13 +11,33 @@ interface Props {
 }
 
 export function generateSmartDefaultReminder(tx: PendingMoney, timezone: string, totalDue: number): string {
-  const reasonText = (tx.reason && tx.reason.trim()) ? ` for {{reason}}` : '';
+  const penaltyAmount = totalDue - tx.amount;
   
-  return `Hi {{customerName}},
-Just a friendly reminder that ₹{{amount}} is pending${reasonText}.
-The payment is due on {{dueDate}}.
-Please complete the payment at your earliest convenience.
-Thank you!`;
+  if (penaltyAmount > 0) {
+    return `Payment Reminder
+
+Dear {{customerName}},
+
+This is a reminder that your payment is overdue.
+
+Original Amount: ₹{{originalAmount}}
+Late Penalty: ₹{{penaltyAmount}}
+Total Amount Due: ₹{{amount}}
+Due Date: {{dueDate}}
+
+Please arrange payment at the earliest.`;
+  }
+  
+  const reasonText = (tx.reason && tx.reason.trim()) ? ` for {{reason}}` : '';
+  return `Payment Reminder
+
+Dear {{customerName}},
+
+This is a friendly reminder that ₹{{amount}} is pending${reasonText}.
+
+Due Date: {{dueDate}}
+
+Please complete the payment at your earliest convenience.`;
 }
 
 export default function ReminderMessageEditor({ tx, totalDue }: Props) {
@@ -163,7 +183,7 @@ export default function ReminderMessageEditor({ tx, totalDue }: Props) {
 
             <div className="flex flex-wrap items-center gap-2 mb-2">
               <span className="text-[11px] text-slate-400 font-semibold mr-1">Insert Variable:</span>
-              {['{{customerName}}', '{{amount}}', '{{dueDate}}', '{{reason}}', '{{overdueDays}}'].map(v => (
+              {['{{customerName}}', '{{amount}}', '{{originalAmount}}', '{{penaltyAmount}}', '{{dueDate}}', '{{reason}}'].map(v => (
                 <button
                   key={v}
                   type="button"

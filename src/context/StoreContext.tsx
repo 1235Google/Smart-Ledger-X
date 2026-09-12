@@ -119,10 +119,14 @@ interface StoreContextType extends AppState {
   isLocked: boolean;
   unlockApp: (pin: string) => boolean;
   lockApp: () => void;
+
   loginWithPin: (pin: string) => boolean;
   currentUser: User | null;
   isAuthenticated: boolean;
+  requiresMfa?: boolean;
+  setRequiresMfa?: (val: boolean) => void;
   logout: () => Promise<void>;
+
   systemConfig: SystemConfig;
   setSystemMode: (mode: SystemMode, reason?: string, expectedEndAt?: string | null, autoRestore?: boolean) => Promise<{ success: boolean; message: string; config: SystemConfig }>;
   refreshSystemMode: () => Promise<SystemConfig>;
@@ -244,6 +248,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [newlyUnlocked, setNewlyUnlocked] = useState<UnlockedAchievement | null>(null);
   const [isLocked, setIsLocked] = useState(false); // Initialized later based on settings
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [requiresMfa, setRequiresMfa] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
       return localStorage.getItem('smartledger_authenticated') === 'true';
@@ -371,10 +376,35 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         activeUnsubscribeRef.current = null;
       }
       
+
       if (user) {
+        const token = await user.getIdTokenResult();
+        // Check MFA status manually since we can't use custom claims in AI Studio environment
+        try {
+          const res = await fetch('/api/security/2fa/status', {
+            headers: { 'Authorization': `Bearer ${token.token}` }
+          });
+          const status = await res.json();
+          const isVerifiedLocally = sessionStorage.getItem(`mfa_verified_${user.uid}`) === 'true';
+          
+          if (status.enabled && !isVerifiedLocally) {
+            setRequiresMfa(true);
+            setCurrentUser(user);
+            setIsAuthenticated(false);
+            setIsAuthReady(true);
+            return;
+          } else {
+            setRequiresMfa(false);
+          }
+        } catch (e) {
+          console.error('[MFA Check Error]', e);
+          setRequiresMfa(false);
+        }
+        
         setCurrentUser(user);
         setIsAuthenticated(true);
         setIsAuthReady(true);
+
         try {
           localStorage.setItem('smartledger_authenticated', 'true');
         } catch (e) {}

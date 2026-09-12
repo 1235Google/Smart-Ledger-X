@@ -1,13 +1,12 @@
+import sys
 
+code = """
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useStore } from '../context/StoreContext';
-import { auth } from '../lib/firebase';
-import TotpSetupModal from '../components/TotpSetupModal';
-
 import { io } from 'socket.io-client';
 import { 
-  Shield, Smartphone, Lock, KeyRound, Clock, LogOut, History, MapPin, 
+  Shield, Smartphone, Lock, KeyRound, Clock, LogOut, History, 
   Laptop, Globe, CheckCircle2, XCircle, Trash2, ShieldAlert,
   AlertTriangle, Fingerprint, Activity, Terminal
 } from 'lucide-react';
@@ -19,13 +18,12 @@ import {
 import { LoginHistoryEntry, UserDevice } from '../types';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
-import { createNotification } from '../lib/notificationService';
 import { startRegistration } from '@simplewebauthn/browser';
 
 type TabType = 'overview' | 'session' | 'devices' | 'history' | 'audit' | 'passkeys';
 
 export default function SecurityCenter() {
-  const { currentUser, securitySettings, updateSecuritySettings, logout } = useStore();
+  const { currentUser, securitySettings, updateSecuritySettings, createNotification, logout } = useStore();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
 
   // Real-time Firestore & local state
@@ -38,29 +36,7 @@ export default function SecurityCenter() {
   const [showRevokeAllModal, setShowRevokeAllModal] = useState(false);
   const [showLockdownModal, setShowLockdownModal] = useState(false);
   
-
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isMfaEnabled, setIsMfaEnabled] = useState(false);
-  const [showTotpModal, setShowTotpModal] = useState(false);
-
-  useEffect(() => {
-    const fetchMfaStatus = async () => {
-      try {
-        const token = await auth.currentUser?.getIdToken();
-        const res = await fetch('/api/security/2fa/status', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const data = await res.json();
-        if (data && typeof data.enabled === 'boolean') {
-          setIsMfaEnabled(data.enabled);
-        }
-      } catch (err) {
-        console.error("Failed to fetch MFA status:", err);
-      }
-    };
-    fetchMfaStatus();
-  }, [showTotpModal]);
-
 
   const activeUserEmail = currentUser?.email || 'Authorized Local User';
   const activeUserUid = currentUser?.uid || 'local_session_user';
@@ -205,32 +181,16 @@ export default function SecurityCenter() {
     setIsProcessing(false);
   };
 
-
-  // Local more robust score calculation aligned with actual security posture
-  const calculateRealScore = () => {
-    let score = 30; // base score
-    const recommendations = [];
-    if (securitySettings.hasPasskey) score += 40;
-    else recommendations.push("Add a Passkey for phishing-resistant passwordless login.");
-    
-    if (securitySettings.pinEnabled) score += 10;
-    
-    if (devices.length > 3) {
-      score -= 10;
-      recommendations.push("You have many active devices. Consider reviewing and signing out old ones.");
-    } else {
-      score += 10;
-    }
-    
-    if (window.location.protocol === 'https:') score += 10;
-    
-    score = Math.max(0, Math.min(100, score));
-    const level = score >= 80 ? 'Excellent' : score >= 50 ? 'Good' : 'Needs Attention';
-    const color = score >= 80 ? '#34d399' : score >= 50 ? '#fbbf24' : '#ef4444';
-    return { score, level, color, recommendations };
+  const scoreParams = {
+    hasPin: securitySettings.pinEnabled || false,
+    hasBiometrics: securitySettings.biometricEnabled || false,
+    activeDevicesCount: devices.filter(d => d.status === 'active').length,
+    lastPasswordChange: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+    isEmailVerified: true,
+    hasPasskey: securitySettings.hasPasskey || false
   };
-  const scoreResult = calculateRealScore();
-
+  
+  const scoreResult = calculateSecurityScore(scoreParams);
 
   // Helper to render icon for device
   const getDeviceIcon = (type: string) => {
@@ -263,7 +223,7 @@ export default function SecurityCenter() {
           { id: 'devices', icon: Smartphone, label: 'Active Devices' },
           { id: 'passkeys', icon: Fingerprint, label: 'Passkeys & 2FA' },
           { id: 'audit', icon: Terminal, label: 'Audit Log' },
-          { id: 'history', icon: History, MapPin, label: 'Sign-in History' },
+          { id: 'history', icon: History, label: 'Sign-in History' },
         ].map(tab => (
           <button
             key={tab.id}
@@ -364,7 +324,7 @@ export default function SecurityCenter() {
                       {device.isCurrent && <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-xs rounded-full uppercase font-bold tracking-wider">This Device</span>}
                     </h4>
                     <p className="text-sm text-slate-400 mt-1 flex items-center gap-4">
-                      <span className="flex items-center gap-1"><MapPin size={14}/> {device.city || 'Unknown Location'}</span>
+                      <span className="flex items-center gap-1"><MapPin size={14}/> {device.location?.city || 'Unknown Location'}</span>
                       <span className="flex items-center gap-1"><Globe size={14}/> IP: {device.ip || 'Unknown'}</span>
                     </p>
                     <p className="text-xs text-slate-500 mt-1">
@@ -419,74 +379,13 @@ export default function SecurityCenter() {
               </div>
             </div>
             
-            <div className="bg-[#1a1b23] border border-white/10 rounded-3xl p-6">
-               <h3 className="text-lg font-bold text-white mb-2 uppercase tracking-wide text-xs text-slate-400">Two-Factor Authentication</h3>
-               
-               {!isMfaEnabled ? (
-                 <>
-                   <p className="text-slate-400 text-sm mb-4">Not configured</p>
-                   <button
-                      onClick={() => setShowTotpModal(true)}
-                     className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl transition-all uppercase tracking-wider text-sm"
-                   >
-                      SETUP 2FA
-                   </button>
-                 </>
-               ) : (
-                 <>
-                   <div className="flex items-center gap-2 mb-2">
-                     <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-                     <span className="text-emerald-400 font-bold tracking-widest uppercase text-sm">ENABLED</span>
-                   </div>
-                   <p className="text-white font-medium mb-1">Authenticator App</p>
-                   <p className="text-slate-400 text-sm mb-4">Protected with TOTP</p>
-                   <button
-                     onClick={async () => {
-                        const code = window.prompt("To disable 2FA, please enter a valid authenticator code:");
-                        if (!code) return;
-                        setIsProcessing(true);
-                        try {
-                           const token = await auth.currentUser?.getIdToken();
-                           const res = await fetch('/api/security/2fa/disable', {
-                             method: 'POST',
-                             headers: {
-                               'Content-Type': 'application/json',
-                               'Authorization': `Bearer ${token}`
-                             },
-                             body: JSON.stringify({ code })
-                           });
-                           const data = await res.json();
-                           if (data.success) {
-                             setIsMfaEnabled(false);
-                             alert("Two-Factor Authentication disabled.");
-                           } else {
-                             alert("Failed to disable 2FA: " + (data.error || 'Invalid code'));
-                           }
-                        } catch (err: any) {
-                           alert("Error disabling 2FA: " + err.message);
-                        } finally {
-                           setIsProcessing(false);
-                        }
-                     }}
-                     className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl transition-all uppercase tracking-wider text-sm"
-                   >
-                     MANAGE 2FA
-                   </button>
-                 </>
-               )}
+            <div className="bg-[#1a1b23] border border-white/10 rounded-3xl p-6 opacity-60">
+               <h3 className="text-lg font-bold text-white mb-2">Two-Factor Authentication (TOTP)</h3>
+               <p className="text-slate-400 text-sm mb-4">Use an authenticator app like Google Authenticator.</p>
+               <button disabled className="px-4 py-2 bg-white/5 text-slate-500 font-bold rounded-xl cursor-not-allowed">
+                  Setup 2FA (Requires Identity Platform)
+               </button>
             </div>
-            
-            <AnimatePresence>
-              {showTotpModal && (
-                <TotpSetupModal 
-                  onClose={() => setShowTotpModal(false)}
-                  onComplete={() => {
-                    setShowTotpModal(false);
-                    setIsMfaEnabled(true);
-                  }}
-                />
-              )}
-            </AnimatePresence>
           </motion.div>
         )}
 
@@ -548,13 +447,13 @@ export default function SecurityCenter() {
               loginLogs.map(log => (
                 <div key={log.id} className="bg-[#1a1b23] border border-white/10 p-4 rounded-2xl flex items-center justify-between">
                   <div>
-                    <h4 className="text-white font-bold">{log.deviceName} • {log.browser}</h4>
-                    <p className="text-sm text-slate-400">{log.city}, {log.country} • {log.ip}</p>
+                    <h4 className="text-white font-bold">{log.device} • {log.browser}</h4>
+                    <p className="text-sm text-slate-400">{log.location?.city}, {log.location?.country} • {log.ip}</p>
                     <p className="text-xs text-slate-500 mt-1">{format(new Date(log.timestamp), 'MMM d, yyyy h:mm a')}</p>
                   </div>
                   <div className={cn(
                     "px-3 py-1 rounded-lg text-xs font-bold uppercase",
-                    log.status === 'Success' ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"
+                    log.status === 'success' ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"
                   )}>
                     {log.status}
                   </div>
@@ -614,3 +513,9 @@ export default function SecurityCenter() {
     </div>
   );
 }
+"""
+
+with open('src/pages/SecurityCenter.tsx', 'w') as f:
+    f.write(code)
+
+print("done")

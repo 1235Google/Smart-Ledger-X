@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Clock, Plus, User, Calendar, FileText, CheckCircle2, Phone, MessageCircle, Trash, AlertTriangle, Loader2, ClipboardList, Coins, Wallet, Brain, MoreVertical, Edit2, Play, Pause, Copy, Share2, Download, Archive, Bell } from 'lucide-react';
 import { formatCurrency, formatDate, formatName, getDaysDiff, calculateReminderDetails, formatReminderMessage } from '../lib/utils';
 import { PendingMoney } from '../types';
+import LatePenaltyModal from '../components/LatePenaltyModal';
 import ReminderMessageEditor, { generateSmartDefaultReminder } from "../components/ReminderMessageEditor";
 import DataStateGuard from '../components/ui/DataStateGuard';
 
@@ -21,8 +22,14 @@ const getProbability = (id: string, amount: number, dueDate: string) => {
   return Math.max(10, Math.min(99, baseProb + (charCode % 15)));
 };
 
-const getPenaltyAmount = (tx: PendingMoney, daysDiff: number) => {
-  if (!tx.penaltyEnabled || !tx.penaltyValue || daysDiff >= 0) return 0;
+const getPenaltyAmount = (tx: PendingMoney, defaultDaysDiff: number) => {
+  if (!tx.penaltyEnabled || !tx.penaltyValue || tx.status === 'completed') return 0;
+  
+  // Use effectiveDate if present, otherwise default due date
+  const effectiveDate = tx.penaltyEffectiveDate || tx.dueDate;
+  const daysDiff = getDaysDiff(effectiveDate);
+  
+  if (daysDiff >= 0) return 0; // Not overdue yet based on effective date
   
   const overdueDays = Math.abs(daysDiff);
   const gracePeriod = tx.gracePeriod || 0;
@@ -30,19 +37,40 @@ const getPenaltyAmount = (tx: PendingMoney, daysDiff: number) => {
   if (overdueDays <= gracePeriod) return 0;
   
   const penaltyDays = overdueDays - gracePeriod;
+  let penalty = 0;
   
-  switch (tx.penaltyType) {
-    case 'fixed':
-      return tx.penaltyValue;
-    case 'percent_day':
-      return (tx.amount * (tx.penaltyValue / 100)) * penaltyDays;
-    case 'percent_week':
-      return (tx.amount * (tx.penaltyValue / 100)) * Math.ceil(penaltyDays / 7);
-    case 'percent_month':
-      return (tx.amount * (tx.penaltyValue / 100)) * Math.ceil(penaltyDays / 30);
+  const value = tx.penaltyValue;
+  const isPercent = tx.penaltyType === 'percentage' || tx.penaltyType?.startsWith('percent');
+  const rate = isPercent ? (tx.amount * (value / 100)) : value;
+  
+  // Backwards compatibility and new logic
+  const freq = tx.penaltyFrequency || 
+    (tx.penaltyType === 'percent_day' ? 'daily' : 
+     tx.penaltyType === 'percent_week' ? 'weekly' : 
+     tx.penaltyType === 'percent_month' ? 'monthly' : 'one_time');
+
+  switch (freq) {
+    case 'one_time':
+      penalty = rate;
+      break;
+    case 'daily':
+      penalty = rate * penaltyDays;
+      break;
+    case 'weekly':
+      penalty = rate * Math.ceil(penaltyDays / 7);
+      break;
+    case 'monthly':
+      penalty = rate * Math.ceil(penaltyDays / 30);
+      break;
     default:
-      return 0;
+      penalty = rate;
   }
+  
+  if (tx.penaltyMaxCap && tx.penaltyMaxCap > 0) {
+    penalty = Math.min(penalty, tx.penaltyMaxCap);
+  }
+  
+  return penalty;
 };
 
 function AnimatedCounter({ value, isCurrency = false }: { value: number, isCurrency?: boolean }) {
@@ -88,7 +116,8 @@ function PaymentCard({
   setReminderConfirmId,
   onConfirmWhatsApp,
   onRemind,
-  isGeneratingAiMessage
+  isGeneratingAiMessage,
+  onEditPenalty
 }: { 
   tx: PendingMoney, 
   idx: number,
@@ -102,7 +131,8 @@ function PaymentCard({
   setReminderConfirmId: (id: string | null) => void,
   onConfirmWhatsApp: (tx: PendingMoney) => void,
   onRemind: (tx: PendingMoney) => void,
-  isGeneratingAiMessage?: boolean
+  isGeneratingAiMessage?: boolean,
+  onEditPenalty: (tx: PendingMoney) => void
 }) {
   const daysDiff = getDaysDiff(tx.dueDate);
   const isOverdue = daysDiff < 0;
@@ -155,24 +185,43 @@ function PaymentCard({
         </div>
         
         <div className="text-right flex flex-col items-end">
-          <span className="text-2xl font-bold text-white tracking-tight">{formatCurrency(totalDue)}</span>
+          {tx.penaltyEnabled && penaltyAmount > 0 && !isPaid ? (
+            <div className="flex flex-col items-end mb-1">
+              <span className="text-sm text-slate-400 line-through mr-1">{formatCurrency(tx.amount)}</span>
+              <span className="text-2xl font-bold text-white tracking-tight">{formatCurrency(totalDue)}</span>
+            </div>
+          ) : (
+            <span className="text-2xl font-bold text-white tracking-tight">{formatCurrency(totalDue)}</span>
+          )}
           {!isPaid && (
             <span className={`text-xs font-semibold mt-1 ${isOverdue ? 'text-red-400' : 'text-slate-400'}`}>
               {isOverdue ? `Overdue by ${Math.abs(daysDiff)} Days` : (daysDiff === 0 ? 'Due Today' : `Due in ${daysDiff} Days`)}
             </span>
           )}
+          
+          {/* Late Penalty Button */}
+          {!isPaid && (
+            <button 
+              onClick={() => onEditPenalty(tx)}
+              className={`mt-2.5 px-3 py-1.5 rounded-full text-[10px] font-bold tracking-wide uppercase border flex items-center gap-1.5 transition-all ${
+                tx.penaltyEnabled && penaltyAmount > 0
+                  ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20'
+                  : tx.penaltyEnabled
+                  ? 'bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20'
+                  : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10 hover:text-white'
+              }`}
+            >
+              {tx.penaltyEnabled && penaltyAmount > 0 ? (
+                <>⚡ Penalty: {formatCurrency(penaltyAmount)} <Edit2 size={10} className="ml-0.5" /></>
+              ) : tx.penaltyEnabled ? (
+                <>⚡ Scheduled Penalty <Edit2 size={10} className="ml-0.5" /></>
+              ) : (
+                <><Plus size={12} /> Late Penalty</>
+              )}
+            </button>
+          )}
         </div>
       </div>
-
-      {penaltyAmount > 0 && !isPaid && (
-         <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex justify-between items-center mt-1">
-            <div className="flex flex-col">
-               <span className="text-xs text-red-400 font-semibold">Late Penalty</span>
-               <span className="text-[10px] text-slate-400 font-medium">{tx.penaltyType === 'fixed' ? 'Fixed Charge' : 'Percentage Based'}</span>
-            </div>
-            <span className="text-sm font-bold text-red-400">+{formatCurrency(penaltyAmount)}</span>
-         </div>
-      )}
 
       {!isPaid && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
@@ -367,7 +416,8 @@ function PaymentCard({
 
 export default function PendingPayments() {
   const { 
-    addPendingMoney, 
+    addPendingMoney,
+    updateTransaction, 
     markAsReceived, 
     toggleReminderStatus, 
     advanceReminderDate, 
@@ -484,23 +534,24 @@ export default function PendingPayments() {
   };
 
   const [isGeneratingAiMessage, setIsGeneratingAiMessage] = useState(false);
+  const [editingPenaltyTx, setEditingPenaltyTx] = useState<PendingMoney | null>(null);
+
+  const handleSavePenalty = (id: string, updates: Partial<PendingMoney>) => {
+    updateTransaction(id, updates);
+    setToastMessage("Late penalty settings updated successfully.");
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   const handleSendReminder = async (tx: PendingMoney) => {
     setIsGeneratingAiMessage(true);
-    let message = '';
     
     const daysDiff = getDaysDiff(tx.dueDate);
     const penalty = getPenaltyAmount(tx, daysDiff);
     const totalDue = tx.amount + penalty;
-    const formattedAmount = formatCurrency(tx.amount);
-      const formattedPenalty = formatCurrency(penalty);
-      const formattedTotal = formatCurrency(totalDue);
-      
-      if (penalty > 0) {
-        message = `👋 Hi ${tx.personName},\n\nHope you're doing well!\n\nJust a friendly reminder regarding the payment for *${tx.reason}*.\n\n*Amount:* ${formattedAmount}\n*Current Penalty:* ${formattedPenalty}\n*Total Payable:* ${formattedTotal}\n\nWhenever you're free, please complete the payment.\n\nIf you've already paid, please ignore this message.\n\nThank you! 😊`;
-      } else {
-        message = `👋 Hi ${tx.personName},\n\nHope you're doing well!\n\nThis is a friendly reminder about the payment for *${tx.reason}*.\n\n*Amount:* ${formattedAmount}\n\nWhenever you get a chance, please complete the payment.\n\nIf you've already paid, you can ignore this message.\n\nThank you! 😊`;
-      }
+
+    const timezone = generalSettings?.timezone || 'Asia/Kolkata';
+    const template = tx.customReminderMessage || generateSmartDefaultReminder(tx, timezone, totalDue);
+    const message = formatReminderMessage(template, tx, timezone, totalDue);
     
     setIsGeneratingAiMessage(false);
     
@@ -910,6 +961,7 @@ export default function PendingPayments() {
                     onConfirmWhatsApp={handleSendReminder}
                     onRemind={handleRemind}
                     isGeneratingAiMessage={isGeneratingAiMessage && reminderConfirmId === tx.id}
+                    onEditPenalty={setEditingPenaltyTx}
                   />
                 ))}
               </AnimatePresence>
@@ -918,7 +970,10 @@ export default function PendingPayments() {
         </div>
       </div>
 
-      <AnimatePresence>
+    </motion.div>
+
+    {/* All Modals moved out of motion.div to prevent fixed position clipping */}
+    <AnimatePresence>
         {deleteConfirmId && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
             <motion.div
@@ -984,6 +1039,7 @@ export default function PendingPayments() {
         )}
       </AnimatePresence>
 
+
       <AnimatePresence>
         {toastMessage && (
           <motion.div
@@ -997,7 +1053,18 @@ export default function PendingPayments() {
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+
+    {editingPenaltyTx && (
+      <LatePenaltyModal
+        tx={editingPenaltyTx}
+        isOpen={!!editingPenaltyTx}
+        onClose={() => setEditingPenaltyTx(null)}
+        onSave={(id, updates) => {
+          handleSavePenalty(id, updates);
+          setEditingPenaltyTx(null);
+        }}
+      />
+    )}
     </DataStateGuard>
   );
 }

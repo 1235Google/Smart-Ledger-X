@@ -2,6 +2,7 @@
   "name": "Remix: Smart Ledger",
   "description": "Smart Ledger is a comprehensive financial ledger and cash flow management platform with automated backups, real-time background scheduled jobs monitoring, biometric security, and audit analytics.",
   "requestFramePermissions": [
+    "camera",
     "publickey-credentials-create",
     "publickey-credentials-get",
     "geolocation"

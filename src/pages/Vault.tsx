@@ -7,6 +7,7 @@ import { X, TrendingUp, TrendingDown, Target, Shield, CreditCard, Clock, Play, B
 import confetti from 'canvas-confetti';
 import { LuxuryVaultDisplay } from '../components/Vault3D';
 import DataStateGuard from '../components/ui/DataStateGuard';
+import FaceUnlock from '../components/FaceUnlock';
 
 interface CashEvent {
   id: number;
@@ -115,6 +116,7 @@ function CircularProgress({ value }: { value: number }) {
 export default function VaultPage() {
   const store = useStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isVaultLocked, setIsVaultLocked] = useState(true);
   const prefersReducedMotion = useReducedMotion() ?? false;
   
   const totalReceived = store.transactions
@@ -288,6 +290,13 @@ export default function VaultPage() {
       loadingMessage="Synchronizing vault data..."
       skeletonType="dashboard"
     >
+      {isVaultLocked && (
+        <FaceUnlock 
+          onUnlock={() => setIsVaultLocked(false)} 
+          onCancel={() => window.history.back()}
+          title="Secret Vault" 
+        />
+      )}
       <div className="w-full flex flex-col gap-6 relative">
         <header className="mb-2">
         <h1 className="text-3xl font-light text-white tracking-tight">Money Vault</h1>

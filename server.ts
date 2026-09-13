@@ -89,11 +89,11 @@ async function startServer() {
   app.use((req, res, next) => {
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://apis.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://smartledgerx.vercel.app https://ipwho.is https://api.bigdatacloud.net https://nominatim.openstreetmap.org https://api.ipify.org https://freeipapi.com ws: wss:; worker-src 'self' blob:; frame-src 'self' https://*.firebaseapp.com https://apis.google.com; frame-ancestors 'self' https://*.google.com https://*.run.app https://ai.studio; object-src 'none'; base-uri 'self'; form-action 'self';"
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://apis.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://smartledgerx.vercel.app https://ipwho.is https://api.bigdatacloud.net https://nominatim.openstreetmap.org https://api.ipify.org https://freeipapi.com https://raw.githubusercontent.com https://cdn.jsdelivr.net ws: wss:; worker-src 'self' blob:; frame-src 'self' https://*.firebaseapp.com https://apis.google.com; frame-ancestors 'self' https://*.google.com https://*.run.app https://ai.studio; object-src 'none'; base-uri 'self'; form-action 'self';"
     );
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-    res.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=(self), payment=(), usb=(), interest-cohort=()");
+    res.setHeader("Permissions-Policy", "camera=(self), microphone=(self), geolocation=(self), payment=(), usb=(), interest-cohort=()");
     res.setHeader("Accept-CH", "Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version, Sec-CH-UA-Model, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List");
     res.setHeader("Critical-CH", "Sec-CH-UA-Platform, Sec-CH-UA-Model");
     res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
@@ -1505,6 +1505,9 @@ async function startServer() {
     // For this environment, since we use local storage without a centralized database, the scheduled
     // logic is purely theoretical.
   });
+
+  // Explicitly serve /public assets (including /models)
+  app.use(express.static(path.join(process.cwd(), 'public')));
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

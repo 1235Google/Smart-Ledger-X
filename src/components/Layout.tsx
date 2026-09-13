@@ -434,6 +434,13 @@ export default function Layout() {
                         </span>
                       )}
 
+                      {/* Biometric Protection Badge for Secret Vault */}
+                      {!isCollapsed && item.path === '/vault' && (
+                        <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 shadow-sm">
+                          <Lock size={9} /> Locked
+                        </span>
+                      )}
+
                       {/* Floating Tooltip for Collapsed State */}
                       {isCollapsed && (
                         <div 

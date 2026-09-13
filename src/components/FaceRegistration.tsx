@@ -30,10 +30,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Camera, CheckCircle2, AlertTriangle, RefreshCw, X, Sparkles, Zap, Eye } from 'lucide-react';
+import { Camera, CheckCircle2, AlertTriangle, RefreshCw, X, Sparkles, Zap, Eye, Loader2 } from 'lucide-react';
 import * as faceapi from 'face-api.js';
 import { auth, db } from '../lib/firebase';
 import confetti from 'canvas-confetti';
+import { useCameraStream } from '../hooks/useCameraStream';
 
 interface FaceRegistrationProps {
   onComplete?: () => void;
@@ -72,7 +73,6 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
 
   // Camera & Face capture states
   const [cameraActive, setCameraActive] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState<PoseStep>(0);
   const [capturedDescriptors, setCapturedDescriptors] = useState<Float32Array[]>([]);
   const [isDetecting, setIsDetecting] = useState(false);
@@ -85,21 +85,33 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
   const [confidenceScore, setConfidenceScore] = useState<number | null>(null);
   const [showDevMetrics, setShowDevMetrics] = useState(true);
 
-  // Stop camera stream cleanly
-  const stopCamera = () => {
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current);
-      scanIntervalRef.current = null;
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    setCameraActive(false);
-  };
+  // Use robust useCameraStream hook
+  const {
+    stream: cameraStream,
+    isLoading: isCameraLoading,
+    error: cameraErrorDetails,
+    startCamera,
+    stopStream: stopCamera,
+  } = useCameraStream({
+    constraints: {
+      video: {
+        facingMode: "user",
+        width: { ideal: 320 },
+        height: { ideal: 240 },
+      },
+      audio: false,
+    },
+    onStreamReady: (stream) => {
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().catch(e => console.warn("Video play interrupted:", e));
+          setCameraActive(true);
+          setStatusMessage(`Pose 1/6: ${POSE_INSTRUCTIONS[0].title}`);
+        };
+      }
+    },
+  });
 
   /**
    * OPTIMIZATION 1: Load SSD MobileNet V1 for Maximum Registration Precision
@@ -160,65 +172,10 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
   }, [isOpen]);
 
   /**
-   * OPTIMIZATION 5: Mobile-Ready Video Constraints (320x240)
-   * Reduces memory overhead and avoids unnecessary canvas upscaling.
-   */
-  const startCamera = async () => {
-    stopCamera();
-    setCameraError(null);
-    setStatusMessage("Opening camera...");
-
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setCameraError("Camera not detected on this device. Using PIN instead.");
-      return;
-    }
-
-    const constraintsList = [
-      { video: { facingMode: "user", width: { ideal: 320 }, height: { ideal: 240 } }, audio: false },
-      { video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
-      { video: true, audio: false }
-    ];
-
-    let stream: MediaStream | null = null;
-    let lastError: any = null;
-
-    for (const constraints of constraintsList) {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-        if (stream) break;
-      } catch (err) {
-        lastError = err;
-      }
-    }
-
-    if (!stream) {
-      console.warn("Camera getUserMedia error across all tiers:", lastError);
-      if (lastError?.name === 'NotAllowedError' || lastError?.name === 'PermissionDeniedError') {
-        setCameraError("Camera access is required for Face Unlock. Please allow camera permission in browser settings.");
-      } else if (lastError?.name === 'NotFoundError' || lastError?.name === 'DevicesNotFoundError') {
-        setCameraError("Camera not detected on this device.");
-      } else {
-        setCameraError(lastError?.message || "Unable to access camera on this device.");
-      }
-      return;
-    }
-
-    streamRef.current = stream;
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.onloadedmetadata = () => {
-        videoRef.current?.play().catch(e => console.warn("Video play interrupted:", e));
-        setCameraActive(true);
-        setStatusMessage(`Pose 1/6: ${POSE_INSTRUCTIONS[0].title}`);
-      };
-    }
-  };
-
-  /**
    * OPTIMIZATION 1 & 3: SSD MobileNet Detection Loop with Strict Confidence (Score >= 0.7)
    */
   useEffect(() => {
-    if (!cameraActive || isComplete || isLoadingModels || loadError || cameraError) {
+    if (!cameraActive || isComplete || isLoadingModels || loadError || cameraErrorDetails) {
       if (scanIntervalRef.current) {
         clearInterval(scanIntervalRef.current);
         scanIntervalRef.current = null;
@@ -275,7 +232,7 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
         scanIntervalRef.current = null;
       }
     };
-  }, [cameraActive, currentStep, capturedDescriptors, isComplete, isLoadingModels, loadError, cameraError]);
+  }, [cameraActive, currentStep, capturedDescriptors, isComplete, isLoadingModels, loadError, cameraErrorDetails]);
 
   /**
    * OPTIMIZATION 2: Capture 6 Angles Progressively
@@ -436,18 +393,43 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
               Fetching high-accuracy neural weights from <code className="text-blue-300 font-mono">/models</code>
             </p>
           </div>
-        ) : cameraError ? (
+        ) : isCameraLoading ? (
+          <div className="w-64 h-64 sm:w-72 sm:h-72 rounded-full border border-white/10 bg-black/40 flex flex-col items-center justify-center p-6 mb-6">
+            <Loader2 size={36} className="text-blue-400 animate-spin mb-4" />
+            <p className="text-sm font-semibold text-white mb-1">Opening Camera...</p>
+            <p className="text-[11px] text-slate-400 text-center px-4">
+              Running pre-flight checks and requesting camera stream with timeout...
+            </p>
+          </div>
+        ) : cameraErrorDetails ? (
           <div className="w-full max-w-sm bg-red-500/10 border border-red-500/20 rounded-3xl p-6 mb-6 flex flex-col items-center">
             <div className="w-14 h-14 rounded-2xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400 mb-3">
               <AlertTriangle size={28} />
             </div>
-            <p className="text-sm font-semibold text-white mb-1">Camera Issue</p>
-            <p className="text-xs text-red-300 text-center mb-4 leading-relaxed">
-              {cameraError}
+            <p className="text-sm font-semibold text-white mb-1">
+              {cameraErrorDetails.type === 'INSECURE_CONTEXT'
+                ? 'Insecure Connection'
+                : cameraErrorDetails.type === 'BROWSER_NOT_SUPPORTED'
+                ? 'Browser Not Supported'
+                : cameraErrorDetails.type === 'NO_CAMERA_DETECTED'
+                ? 'No Camera Detected'
+                : cameraErrorDetails.type === 'PERMISSION_DENIED'
+                ? 'Permission Denied'
+                : cameraErrorDetails.type === 'CAMERA_BUSY'
+                ? 'Camera In Use'
+                : 'Camera Error'}
             </p>
+            <p className="text-xs text-red-200 font-medium text-center mb-2 leading-relaxed">
+              {cameraErrorDetails.message}
+            </p>
+            {cameraErrorDetails.instructions && (
+              <p className="text-[11px] text-red-300/90 text-center mb-4 bg-red-950/40 p-3 rounded-xl border border-red-500/20 leading-relaxed">
+                {cameraErrorDetails.instructions}
+              </p>
+            )}
             <div className="flex gap-2 w-full">
               <button
-                onClick={startCamera}
+                onClick={() => startCamera()}
                 className="flex-1 py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
               >
                 <RefreshCw size={14} /> Retry Camera

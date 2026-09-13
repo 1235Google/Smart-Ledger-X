@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { StoreProvider, useStore } from './context/StoreContext';
 import Layout from './components/Layout';
 import SecurityWrapper from './components/SecurityWrapper';
-import PageFallback from './components/ui/PageFallback';
+
 import MaintenanceScreen from './components/MaintenanceScreen';
 
 // Lazy load all page routes
@@ -111,7 +111,7 @@ function AppRoutes() {
   const location = useLocation();
   
   return (
-    <Suspense fallback={<PageFallback />}>
+    <Suspense fallback={null}>
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname.split('/')[1] || '/'}>
           <Route path="/admin" element={<AdminLogin />} />

@@ -155,6 +155,15 @@ export function useCameraStream({
     setError(null);
     stopStream();
 
+    // Diagnostic logging for production environment checks
+    console.log('Secure context:', window.isSecureContext);
+    console.log('Protocol:', window.location.protocol);
+    console.log('In iframe:', window.self !== window.top);
+    console.log('mediaDevices exists:', !!navigator.mediaDevices);
+    navigator.permissions?.query({ name: 'camera' as PermissionName })
+      .then(r => console.log('Permission state:', r.state))
+      .catch(e => console.log('Permission query failed:', e));
+
     if (loadingTimerRef.current) {
       clearTimeout(loadingTimerRef.current);
     }

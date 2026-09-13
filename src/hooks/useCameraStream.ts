@@ -9,6 +9,7 @@ export type CameraErrorType =
   | 'CAMERA_NOT_FOUND'
   | 'OVERCONSTRAINED'
   | 'ABORTED'
+  | 'SECURITY_ERROR'
   | 'UNKNOWN';
 
 export interface CameraErrorDetails {
@@ -18,32 +19,38 @@ export interface CameraErrorDetails {
   originalError?: any;
 }
 
+export interface MediaDeviceInfoItem {
+  deviceId: string;
+  label: string;
+  isVirtual: boolean;
+}
+
 interface UseCameraStreamOptions {
-  constraints?: MediaStreamConstraints;
   onStreamReady?: (stream: MediaStream) => void;
   onError?: (error: CameraErrorDetails) => void;
 }
 
 export function useCameraStream({
-  constraints = {
-    video: {
-      facingMode: 'user',
-      width: { ideal: 640 },
-      height: { ideal: 480 },
-    },
-    audio: false,
-  },
   onStreamReady,
   onError,
 }: UseCameraStreamOptions = {}) {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [loadingStatusText, setLoadingStatusText] = useState<string>('Opening camera...');
   const [error, setError] = useState<CameraErrorDetails | null>(null);
-  const [permissionState, setPermissionState] = useState<PermissionState | 'unknown'>('unknown');
+  const [devices, setDevices] = useState<MediaDeviceInfoItem[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>(() => {
+    try {
+      return localStorage.getItem('selectedCameraId') || '';
+    } catch {
+      return '';
+    }
+  });
 
   const streamRef = useRef<MediaStream | null>(null);
+  const loadingTimerRef = useRef<any>(null);
 
-  // Helper to detect browser and OS for targeted permission instructions
+  // Helper to detect browser and OS
   const getBrowserInfo = () => {
     const ua = navigator.userAgent;
     let browser = 'Unknown';
@@ -90,37 +97,81 @@ export function useCameraStream({
     setStream(null);
   }, []);
 
-  // Pre-flight permission query
-  const checkPermissions = useCallback(async () => {
-    if (navigator.permissions && navigator.permissions.query) {
-      try {
-        const result = await navigator.permissions.query({ name: 'camera' as PermissionName });
-        setPermissionState(result.state);
-        result.onchange = () => {
-          setPermissionState(result.state);
+  // Enumerate video devices and smart-select best non-virtual camera
+  const enumerateAndSelectDevices = useCallback(async (): Promise<MediaDeviceInfoItem[]> => {
+    if (!navigator.mediaDevices?.enumerateDevices) return [];
+    try {
+      const allDevices = await navigator.mediaDevices.enumerateDevices();
+      const videoInputs = allDevices.filter((d) => d.kind === 'videoinput');
+
+      const mapped: MediaDeviceInfoItem[] = videoInputs.map((d, index) => {
+        const label = d.label || `Camera ${index + 1}`;
+        const lowerLabel = label.toLowerCase();
+        const isVirtual = /obs|virtual|snap|manycam|droidcam|iriun|epoccam/i.test(lowerLabel);
+        return {
+          deviceId: d.deviceId,
+          label,
+          isVirtual,
         };
-      } catch (e) {
-        // Some browsers don't support querying 'camera' directly
-        setPermissionState('unknown');
+      });
+
+      setDevices(mapped);
+
+      // Determine default selected device if none or invalid
+      if (mapped.length > 0) {
+        const currentStored = localStorage.getItem('selectedCameraId');
+        const exists = mapped.some((m) => m.deviceId === currentStored);
+        if (exists && currentStored) {
+          setSelectedDeviceId(currentStored);
+        } else {
+          // Find first non-virtual camera if available, else first camera
+          const preferred = mapped.find((m) => !m.isVirtual) || mapped[0];
+          setSelectedDeviceId(preferred.deviceId);
+          try {
+            localStorage.setItem('selectedCameraId', preferred.deviceId);
+          } catch {}
+        }
       }
+
+      return mapped;
+    } catch (e) {
+      console.warn('[useCameraStream] Error enumerating devices:', e);
+      return [];
     }
   }, []);
 
-  // Execute getUserMedia with 10s Timeout & Transient Retry (max 3 attempts)
-  const startCamera = useCallback(async (customConstraints?: MediaStreamConstraints) => {
+  // Select a specific device ID
+  const selectDevice = useCallback((deviceId: string) => {
+    setSelectedDeviceId(deviceId);
+    try {
+      localStorage.setItem('selectedCameraId', deviceId);
+    } catch {}
+  }, []);
+
+  // Main camera request function with pre-flight checks, timeout, fallback chain & retries
+  const startCamera = useCallback(async (overrideDeviceId?: string) => {
     setIsLoading(true);
+    setLoadingStatusText('Opening camera...');
     setError(null);
     stopStream();
 
-    const activeConstraints = customConstraints || constraints;
+    if (loadingTimerRef.current) {
+      clearTimeout(loadingTimerRef.current);
+    }
+    // Update loading text after 2 seconds for slow USB webcams
+    loadingTimerRef.current = setTimeout(() => {
+      setLoadingStatusText('Initializing camera... this may take a few seconds');
+    }, 2000);
+
     const { browser, isIOS } = getBrowserInfo();
 
     // 1. PRE-FLIGHT CHECK: Secure Context
     if (window.isSecureContext === false) {
+      clearTimeout(loadingTimerRef.current);
       const errDetails: CameraErrorDetails = {
         type: 'INSECURE_CONTEXT',
-        message: 'Insecure Connection: Camera access requires a secure context (HTTPS or localhost).',
-        instructions: 'Please access this application via HTTPS or localhost to enable biometric features.',
+        message: 'Camera access blocked due to an insecure connection (HTTP). Please use HTTPS.',
+        instructions: 'Biometric security features require a secure context (HTTPS or localhost).',
       };
       setError(errDetails);
       setIsLoading(false);
@@ -131,6 +182,7 @@ export function useCameraStream({
 
     // 2. PRE-FLIGHT CHECK: MediaDevices API existence
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      clearTimeout(loadingTimerRef.current);
       const errDetails: CameraErrorDetails = {
         type: 'BROWSER_NOT_SUPPORTED',
         message: 'Browser Not Supported: MediaDevices API is not available in this browser.',
@@ -143,81 +195,110 @@ export function useCameraStream({
       return null;
     }
 
-    // 3. PRE-FLIGHT CHECK: Videoinput device enumeration
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices.filter((d) => d.kind === 'videoinput');
-      if (videoDevices.length === 0) {
-        const errDetails: CameraErrorDetails = {
-          type: 'NO_CAMERA_DETECTED',
-          message: 'No Camera Detected: No video input devices were found on this device.',
-          instructions: 'Please verify your webcam is connected or enable camera access.',
-        };
-        setError(errDetails);
-        setIsLoading(false);
-        onError?.(errDetails);
-        console.warn('[CameraStream] Pre-flight warning: No videoinput devices enumerated');
-      }
-    } catch (enumErr) {
-      console.warn('[CameraStream] Device enumeration error:', enumErr);
-    }
-
-    // Check pre-flight permission state if already denied
-    if (permissionState === 'denied') {
+    // 3. ENUMERATE DEVICES PRE-FLIGHT
+    const videoDevices = await enumerateAndSelectDevices();
+    if (videoDevices.length === 0) {
+      clearTimeout(loadingTimerRef.current);
       const errDetails: CameraErrorDetails = {
-        type: 'PERMISSION_DENIED',
-        message: 'Camera Permission Denied.',
-        instructions: getPermissionInstructions(browser, isIOS),
+        type: 'NO_CAMERA_DETECTED',
+        message: 'No camera detected. Please connect a webcam and click Retry.',
+        instructions: 'Check your USB webcam connection or ensure your laptop camera driver is enabled.',
       };
       setError(errDetails);
       setIsLoading(false);
       onError?.(errDetails);
+      console.warn('[CameraStream] Pre-flight warning: 0 video input devices found');
       return null;
     }
 
-    // getUserMedia with 10s Timeout & Transient Retry (max 3 attempts)
-    let attempts = 0;
-    const maxAttempts = 3;
+    const targetDeviceId = overrideDeviceId || selectedDeviceId || videoDevices[0]?.deviceId;
+
+    // Construct fallback constraint chain
+    const constraintChain: MediaStreamConstraints[] = [];
+    if (targetDeviceId) {
+      constraintChain.push({
+        video: { deviceId: { exact: targetDeviceId }, width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      });
+      constraintChain.push({
+        video: { deviceId: { ideal: targetDeviceId } },
+        audio: false,
+      });
+    }
+    constraintChain.push({
+      video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+      audio: false,
+    });
+    constraintChain.push({
+      video: true,
+      audio: false,
+    });
+
     let acquiredStream: MediaStream | null = null;
     let lastErr: any = null;
+    let attempts = 0;
+    const maxAttempts = 3;
 
+    // Transient busy retry loop (NotReadableError / TrackStartError) with exponential backoff (1s, 2s, 4s)
     while (attempts < maxAttempts && !acquiredStream) {
       attempts++;
-      try {
-        const getUserMediaPromise = navigator.mediaDevices.getUserMedia(activeConstraints);
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Camera request timed out after 10 seconds.')), 10000)
-        );
 
-        acquiredStream = await Promise.race([getUserMediaPromise, timeoutPromise]);
-      } catch (err: any) {
-        lastErr = err;
-        console.warn(`[CameraStream] Attempt ${attempts} failed:`, err.name, err.message);
+      for (const constraints of constraintChain) {
+        try {
+          const getUserMediaPromise = navigator.mediaDevices.getUserMedia(constraints);
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Camera request timed out after 10 seconds.')), 10000)
+          );
 
-        // If NotReadableError / TrackStartError (camera busy), retry with backoff
-        if ((err.name === 'NotReadableError' || err.name === 'TrackStartError') && attempts < maxAttempts) {
-          await new Promise((res) => setTimeout(res, 1000 * attempts));
-          continue;
-        }
+          acquiredStream = await Promise.race([getUserMediaPromise, timeoutPromise]);
+          if (acquiredStream) break;
+        } catch (err: any) {
+          lastErr = err;
+          console.warn(`[CameraStream] Constraint attempt failed (${err.name}):`, err.message);
 
-        // If OverconstrainedError, try relaxed fallback once
-        if (err.name === 'OverconstrainedError' && attempts === 1) {
-          console.warn('[CameraStream] Overconstrained error encountered. Retrying with relaxed video: true constraints.');
-          try {
-            acquiredStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          // If OverconstrainedError, try next in chain
+          if (err.name === 'OverconstrainedError') {
+            continue;
+          }
+
+          // If NotReadableError / TrackStartError, break to outer while for backoff retry
+          if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
             break;
-          } catch (relaxedErr: any) {
-            lastErr = relaxedErr;
+          }
+
+          // For permission denied or not found, break immediately without unnecessary retries
+          if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.name === 'NotFoundError') {
+            break;
           }
         }
-        break;
       }
+
+      if (!acquiredStream && lastErr) {
+        if ((lastErr.name === 'NotReadableError' || lastErr.name === 'TrackStartError') && attempts < maxAttempts) {
+          const backoffMs = Math.pow(2, attempts - 1) * 1000; // 1s, 2s
+          console.warn(`[CameraStream] Camera busy (NotReadableError). Retrying in ${backoffMs}ms (Attempt ${attempts}/${maxAttempts})...`);
+          await new Promise((res) => setTimeout(res, backoffMs));
+          continue;
+        }
+      }
+      break;
     }
+
+    clearTimeout(loadingTimerRef.current);
+    setIsLoading(false);
 
     if (!acquiredStream) {
       const errName = lastErr?.name || 'UnknownError';
       const errMsg = lastErr?.message || 'Unable to access camera.';
-      console.error('[CameraStream] Fatal camera error:', { name: errName, message: errMsg, browser, userAgent: navigator.userAgent });
+
+      // Detailed logging for analytics / monitoring
+      console.error('[CameraStream] Fatal Camera Error:', {
+        name: errName,
+        message: errMsg,
+        userAgent: navigator.userAgent,
+        deviceCount: videoDevices.length,
+        selectedDeviceId: targetDeviceId,
+      });
 
       let type: CameraErrorType = 'UNKNOWN';
       let message = errMsg;
@@ -225,33 +306,32 @@ export function useCameraStream({
 
       if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
         type = 'PERMISSION_DENIED';
-        message = 'Camera access was denied.';
+        message = "Camera permission denied. Click the camera icon in your browser's address bar and allow access, then retry.";
         instructions = getPermissionInstructions(browser, isIOS);
       } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
         type = 'CAMERA_NOT_FOUND';
-        message = 'No camera found on this device.';
-        instructions = 'Please connect an external webcam or ensure your device camera is enabled.';
+        message = 'No camera detected. Please connect a webcam and click Retry.';
+        instructions = 'Check your USB connection or ensure your webcam is securely plugged in.';
       } else if (errName === 'NotReadableError' || errName === 'TrackStartError') {
         type = 'CAMERA_BUSY';
-        message = 'Camera is currently in use by another application or browser tab.';
-        instructions = 'Please close other apps using the camera (Zoom, Teams, other browser tabs) and retry.';
+        message = 'Your camera is busy or blocked. Please close other apps using it (Zoom, Teams, OBS, Skype) and click Retry.';
+        instructions = 'Windows: Settings → Privacy & Security → Camera → enable "Let desktop apps access your camera".';
       } else if (errName === 'OverconstrainedError') {
         type = 'OVERCONSTRAINED';
-        message = 'Camera does not support requested resolution or facing mode.';
-        instructions = 'Try switching cameras or updating your browser.';
+        message = 'Camera does not support requested resolution.';
+        instructions = 'Try switching cameras using the dropdown above.';
       } else if (errName === 'AbortError') {
         type = 'ABORTED';
-        message = 'Camera access request was aborted.';
-        instructions = 'Please retry camera connection.';
+        message = 'Camera access was interrupted. Please click Retry.';
+        instructions = 'Retry connecting to your camera.';
       } else if (errName === 'SecurityError') {
-        type = 'INSECURE_CONTEXT';
-        message = 'Camera access blocked due to security restrictions.';
-        instructions = 'Ensure your connection is secure (HTTPS).';
+        type = 'SECURITY_ERROR';
+        message = 'Camera blocked due to an insecure connection (HTTP). Please use HTTPS.';
+        instructions = 'Switch to HTTPS or localhost.';
       }
 
       const finalError: CameraErrorDetails = { type, message, instructions, originalError: lastErr };
       setError(finalError);
-      setIsLoading(false);
       onError?.(finalError);
       return null;
     }
@@ -259,27 +339,48 @@ export function useCameraStream({
     // Success
     streamRef.current = acquiredStream;
     setStream(acquiredStream);
-    setIsLoading(false);
     setError(null);
     onStreamReady?.(acquiredStream);
     return acquiredStream;
-  }, [constraints, permissionState, onStreamReady, onError, stopStream]);
+  }, [selectedDeviceId, enumerateAndSelectDevices, onStreamReady, onError, stopStream]);
 
-  // Initial permission check on mount
+  // Retry wrapper
+  const retry = useCallback(() => {
+    return startCamera();
+  }, [startCamera]);
+
+  // Listen to device changes mid-session (plug/unplug USB webcam)
   useEffect(() => {
-    checkPermissions();
-    return () => {
-      stopStream();
+    const handleDeviceChange = () => {
+      console.log('[CameraStream] Hardware device change detected. Re-enumerating...');
+      enumerateAndSelectDevices();
     };
-  }, [checkPermissions, stopStream]);
+
+    if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+      navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+    }
+    return () => {
+      if (navigator.mediaDevices && navigator.mediaDevices.removeEventListener) {
+        navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+      }
+      stopStream();
+      if (loadingTimerRef.current) {
+        clearTimeout(loadingTimerRef.current);
+      }
+    };
+  }, [enumerateAndSelectDevices, stopStream]);
 
   return {
     stream,
-    isLoading,
     error,
-    permissionState,
+    isLoading,
+    loadingStatusText,
+    devices,
+    selectedDeviceId,
+    selectDevice,
+    retry,
+    stop: stopStream,
     startCamera,
-    stopStream,
-    checkPermissions,
+    enumerateAndSelectDevices,
   };
 }

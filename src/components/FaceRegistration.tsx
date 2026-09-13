@@ -1,40 +1,16 @@
 /**
- * FaceRegistration Component - Optimized for Accuracy & Robust Enrollment
- * 
- * KEY ACCURACY & PERFORMANCE OPTIMIZATIONS IMPLEMENTED:
- * -------------------------------------------------------------
- * 1. HIGH-ACCURACY DETECTOR (SSD MobileNet v1):
- *    - Uses faceapi.SsdMobilenetv1Options() instead of TinyFaceDetector for enrollment,
- *      ensuring maximum feature extraction fidelity since registration is a one-time operation.
- *    - Loads faceapi.nets.ssdMobilenetv1 alongside landmarks and recognition nets.
- * 
- * 2. 6-ANGLE MULTI-POSE ENROLLMENT:
- *    - Expands capture samples from 3 to 6 distinct facial angles:
- *      (1) "Look straight", (2) "Turn slightly left", (3) "Turn slightly right",
- *      (4) "Tilt up slightly", (5) "Tilt down slightly", (6) "Move closer".
- *    - Provides real-time visual prompts and step-by-step progress tracking.
- * 
- * 3. STRICT CONFIDENCE VALIDATION (Score >= 0.7):
- *    - Validates detection confidence (detection.detection.score) before accepting each sample.
- *    - Rejects frames with score < 0.7 and prompts: "Face not clear, please retry this angle."
- * 
- * 4. ELEMENT-WISE MEAN NORMALIZATION:
- *    - Computes the element-wise arithmetic average of all 6 128-dimensional vectors
- *      into a single robust reference descriptor before saving to localStorage and Firestore.
- * 
- * 5. MOBILE & RESOURCE OPTIMIZATION:
- *    - Video element configured with playsInline, muted, and autoPlay to prevent mobile stalls.
- *    - Video constraints set to 320x240 for optimal tensor memory footprint.
- *    - Real-time Dev Latency/FPS indicator to verify speed and hardware performance.
+ * FaceRegistration Component - Optimized for Accuracy & Robust Enrollments across All Devices
  */
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Camera, CheckCircle2, AlertTriangle, RefreshCw, X, Sparkles, Zap, Eye, Loader2 } from 'lucide-react';
+import { Camera, CheckCircle2, AlertTriangle, RefreshCw, X, Sparkles, Zap, Eye, Loader2, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
 import * as faceapi from 'face-api.js';
 import { auth, db } from '../lib/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 import confetti from 'canvas-confetti';
 import { useCameraStream } from '../hooks/useCameraStream';
+import CameraDeviceSelector from './CameraDeviceSelector';
 
 interface FaceRegistrationProps {
   onComplete?: () => void;
@@ -42,31 +18,21 @@ interface FaceRegistrationProps {
   isOpen?: boolean;
 }
 
-// 6 Discrete Pose Steps for High-Accuracy Registration
-export type PoseStep = 0 | 1 | 2 | 3 | 4 | 5;
+type PoseStep = 0 | 1 | 2 | 3 | 4 | 5;
 
-export interface PoseInstruction {
-  step: number;
-  title: string;
-  desc: string;
-  icon: string;
-}
-
-export const POSE_INSTRUCTIONS: PoseInstruction[] = [
-  { step: 1, title: "Look straight", desc: "Look directly into the camera", icon: "👤" },
-  { step: 2, title: "Turn slightly left", desc: "Tilt your head slightly to your left", icon: "👈" },
-  { step: 3, title: "Turn slightly right", desc: "Tilt your head slightly to your right", icon: "👉" },
-  { step: 4, title: "Tilt up slightly", desc: "Tilt your chin upwards slightly", icon: "👆" },
-  { step: 5, title: "Tilt down slightly", desc: "Tilt your chin downwards slightly", icon: "👇" },
-  { step: 6, title: "Move closer", desc: "Bring your face slightly closer to the frame", icon: "🔍" },
+const POSE_INSTRUCTIONS: { title: string; desc: string; icon: string }[] = [
+  { title: "Look Straight", desc: "Keep head upright and look directly into the camera", icon: "👤" },
+  { title: "Turn Slightly Left", desc: "Slowly rotate your head 15-20 degrees to your left", icon: "👤" },
+  { title: "Turn Slightly Right", desc: "Slowly rotate your head 15-20 degrees to your right", icon: "👤" },
+  { title: "Tilt Head Up", desc: "Gently raise your chin upward", icon: "👤" },
+  { title: "Tilt Head Down", desc: "Gently lower your chin downward", icon: "👤" },
+  { title: "Expressive / Natural", desc: "Relax and give a natural neutral expression", icon: "✨" },
 ];
 
 export default function FaceRegistration({ onComplete, onCancel, isOpen = true }: FaceRegistrationProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const scanIntervalRef = useRef<any>(null);
 
-  // Model loading & error states
   const [modelsLoaded, setModelsLoaded] = useState<boolean>(false);
   const [isLoadingModels, setIsLoadingModels] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -80,6 +46,9 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
   const [isComplete, setIsComplete] = useState(false);
   const [stepFlash, setStepFlash] = useState(false);
 
+  // Troubleshooting accordion state
+  const [showTroubleshooting, setShowTroubleshooting] = useState(false);
+
   // Performance & Accuracy monitoring states
   const [detectionLatency, setDetectionLatency] = useState<number | null>(null);
   const [confidenceScore, setConfidenceScore] = useState<number | null>(null);
@@ -89,18 +58,15 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
   const {
     stream: cameraStream,
     isLoading: isCameraLoading,
+    loadingStatusText,
     error: cameraErrorDetails,
+    devices,
+    selectedDeviceId,
+    selectDevice,
+    retry: retryCamera,
+    stop: stopCamera,
     startCamera,
-    stopStream: stopCamera,
   } = useCameraStream({
-    constraints: {
-      video: {
-        facingMode: "user",
-        width: { ideal: 320 },
-        height: { ideal: 240 },
-      },
-      audio: false,
-    },
     onStreamReady: (stream) => {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -114,54 +80,40 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
   });
 
   /**
-   * OPTIMIZATION 1: Load SSD MobileNet V1 for Maximum Registration Precision
-   * Pre-verifies manifest reachability and sets a 15-second timeout.
+   * Load SSD MobileNet V1 for Maximum Registration Precision
    */
   async function loadModelsWithTimeout() {
     setIsLoadingModels(true);
     setLoadError(null);
 
-    console.log("Attempting to load high-accuracy registration models from:", window.location.origin + "/models");
-
     const loadModels = async () => {
       const MODEL_URL = '/models';
-
-      // Pre-flight check: Verify SSD MobileNet V1 manifest is reachable
       const testFetch = await fetch(`${MODEL_URL}/ssd_mobilenetv1_model-weights_manifest.json`);
-      console.log("SSD MobileNet manifest fetch status:", testFetch.status);
       if (!testFetch.ok) {
         throw new Error(`SSD MobileNet manifest not reachable, status: ${testFetch.status}`);
       }
 
-      // Load SSD MobileNet v1 for high accuracy face capture during registration
       await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-      console.log("SSD MobileNet V1 model loaded successfully");
-
-      // Load 68-point landmarks and 128-d recognition neural networks
       await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-      console.log("Face landmark model loaded successfully");
-
       await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-      console.log("Face recognition model loaded successfully");
 
       setModelsLoaded(true);
+      setIsLoadingModels(false);
     };
 
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Model loading timed out after 15 seconds")), 15000)
-    );
-
     try {
-      await Promise.race([loadModels(), timeout]);
-      setIsLoadingModels(false);
-      startCamera();
-    } catch (error: any) {
-      console.error("Registration model loading failed with error:", error);
-      setLoadError(error.message || "Failed to load SSD MobileNet detection models");
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Model load timeout after 20 seconds")), 20000)
+      );
+      await Promise.race([loadModels(), timeoutPromise]);
+    } catch (err: any) {
+      console.error("Model loading error:", err);
+      setLoadError(err.message || "Failed to load face recognition models.");
       setIsLoadingModels(false);
     }
   }
 
+  // Load models on mount
   useEffect(() => {
     if (isOpen) {
       loadModelsWithTimeout();
@@ -171,8 +123,15 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
     };
   }, [isOpen]);
 
+  // Start camera once models are loaded
+  useEffect(() => {
+    if (modelsLoaded && isOpen && !cameraActive && !cameraErrorDetails && !isCameraLoading) {
+      startCamera();
+    }
+  }, [modelsLoaded, isOpen, cameraActive, cameraErrorDetails, isCameraLoading, startCamera]);
+
   /**
-   * OPTIMIZATION 1 & 3: SSD MobileNet Detection Loop with Strict Confidence (Score >= 0.7)
+   * SSD MobileNet Detection Loop with Strict Confidence (Score >= 0.7)
    */
   useEffect(() => {
     if (!cameraActive || isComplete || isLoadingModels || loadError || cameraErrorDetails) {
@@ -183,20 +142,18 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
       return;
     }
 
-    // High accuracy SSD MobileNet options (minConfidence: 0.5)
-    const ssdOptions = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 });
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
 
     scanIntervalRef.current = setInterval(async () => {
-      if (!videoRef.current || videoRef.current.paused || videoRef.current.ended) return;
-      if (isDetecting) return;
+      if (isDetecting || !videoEl || videoEl.paused || videoEl.ended || !cameraActive) return;
 
       setIsDetecting(true);
       const startTime = performance.now();
 
       try {
-        // High-accuracy face detection + landmarks + descriptor extraction using SSD MobileNet
         const detection = await faceapi
-          .detectSingleFace(videoRef.current, ssdOptions)
+          .detectSingleFace(videoEl, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.7 }))
           .withFaceLandmarks()
           .withFaceDescriptor();
 
@@ -204,27 +161,42 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
         setDetectionLatency(latency);
 
         if (detection) {
-          const score = detection.detection.score;
-          setConfidenceScore(Math.round(score * 100));
+          const score = Math.round(detection.detection.score * 100);
+          setConfidenceScore(score);
 
-          // STRICT CHECK: Reject frames with confidence below 0.7
-          if (score < 0.7) {
-            setStatusMessage("Face not clear, please retry this angle.");
-            return;
+          if (score >= 70) {
+            setStatusMessage(`Hold still! Capturing Angle ${currentStep + 1}/6...`);
+            
+            // Capture descriptor
+            const descriptor = detection.descriptor;
+            setCapturedDescriptors(prev => {
+              const updated = [...prev, descriptor];
+              if (updated.length >= 6) {
+                // All 6 captured!
+                handleEnrollmentSuccess(updated);
+              } else {
+                // Next pose step
+                const nextStep = (currentStep + 1) as PoseStep;
+                setCurrentStep(nextStep);
+                setStepFlash(true);
+                setTimeout(() => setStepFlash(false), 400);
+                setStatusMessage(`Pose ${nextStep + 1}/6: ${POSE_INSTRUCTIONS[nextStep].title}`);
+              }
+              return updated;
+            });
+          } else {
+            setStatusMessage(`Face detected (${score}%), please move closer or improve lighting`);
           }
-
-          // Confident detection (score >= 0.7) -> Capture sample!
-          handleSampleCaptured(detection.descriptor, score);
         } else {
           setConfidenceScore(null);
-          setStatusMessage(`Please adjust: ${POSE_INSTRUCTIONS[currentStep].title}`);
+          setStatusMessage(`Position your face in the circular frame (${currentStep + 1}/6)`);
         }
       } catch (err) {
-        console.warn("SSD MobileNet detection error:", err);
+        console.warn("Face detection frame error:", err);
       } finally {
         setIsDetecting(false);
       }
-    }, 450);
+    }, 800);
 
     return () => {
       if (scanIntervalRef.current) {
@@ -235,75 +207,51 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
   }, [cameraActive, currentStep, capturedDescriptors, isComplete, isLoadingModels, loadError, cameraErrorDetails]);
 
   /**
-   * OPTIMIZATION 2: Capture 6 Angles Progressively
+   * Enrollment Success Handler
    */
-  const handleSampleCaptured = (descriptor: Float32Array, score: number) => {
-    // Visual flash confirmation
-    setStepFlash(true);
-    setTimeout(() => setStepFlash(false), 300);
-
-    const updated = [...capturedDescriptors, descriptor];
-    setCapturedDescriptors(updated);
-
-    const nextStep = (currentStep + 1) as PoseStep;
-    if (nextStep < 6) {
-      setCurrentStep(nextStep);
-      setStatusMessage(`Captured (${updated.length}/6) ✅ ${POSE_INSTRUCTIONS[nextStep].title}`);
-    } else {
-      // All 6 captured successfully!
-      finishRegistration(updated);
-    }
-  };
-
-  /**
-   * OPTIMIZATION 4: Element-Wise Mean Reference Descriptor
-   * Averages all 6 descriptors element-by-element into a single 128-d reference embedding.
-   */
-  const finishRegistration = async (descriptors: Float32Array[]) => {
-    if (descriptors.length < 6) return;
-    setStatusMessage("Registration complete! Averaging all 6 facial angles...");
+  const handleEnrollmentSuccess = async (allDescriptors: Float32Array[]) => {
     setIsComplete(true);
+    setStatusMessage("Enrollment complete! Saving biometric signature...");
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
+    }
     stopCamera();
 
-    // Compute element-wise arithmetic mean across 6 vectors of 128 dimensions each
-    const averaged = new Float32Array(128);
+    // Average the 6 float32 arrays into one 128-d reference descriptor
+    const averagedDescriptor = new Float32Array(128);
     for (let i = 0; i < 128; i++) {
       let sum = 0;
-      for (let s = 0; s < 6; s++) {
-        sum += descriptors[s][i];
+      for (let d = 0; d < allDescriptors.length; d++) {
+        sum += allDescriptors[d][i];
       }
-      averaged[i] = sum / 6;
+      averagedDescriptor[i] = sum / allDescriptors.length;
     }
 
-    const finalDescriptorArray = Array.from(averaged);
+    const finalDescriptorArray = Array.from(averagedDescriptor);
 
-    // Save to localStorage for instant client-side biometric validation
+    // Save to localStorage
     try {
       localStorage.setItem('faceDescriptor', JSON.stringify(finalDescriptorArray));
-      localStorage.setItem('faceUnlockEnabled', 'true');
-      localStorage.setItem('faceEnrolledAt', new Date().toISOString());
-      localStorage.setItem('faceEnrolledModel', 'ssd_mobilenetv1_6angles');
-    } catch (storageErr) {
-      console.error("LocalStorage write error:", storageErr);
+    } catch (e) {
+      console.warn("Failed to save faceDescriptor to localStorage", e);
     }
 
-    // Synchronize to Firestore if user session is active
-    if (auth?.currentUser?.uid && db) {
+    // Save to Firestore if user is authenticated
+    const currentUser = auth.currentUser;
+    if (currentUser) {
       try {
-        const { doc, setDoc } = await import('firebase/firestore');
-        const userRef = doc(db, 'users', auth.currentUser.uid);
-        await setDoc(userRef, {
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        await setDoc(userDocRef, {
           faceDescriptor: finalDescriptorArray,
-          faceUnlockEnabled: true,
           faceEnrolledAt: new Date().toISOString(),
-          faceEnrolledModel: 'ssd_mobilenetv1_6angles',
+          biometricsEnabled: true,
         }, { merge: true });
       } catch (firestoreErr) {
         console.warn("Firestore sync error (non-fatal):", firestoreErr);
       }
     }
 
-    // Celebration confetti
     try {
       confetti({
         particleCount: 75,
@@ -321,12 +269,12 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-2xl p-4 select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-2xl p-4 select-none overflow-y-auto">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="relative w-full max-w-lg bg-neutral-900/95 border border-white/10 rounded-[2.5rem] p-6 sm:p-8 shadow-[0_24px_80px_rgba(0,0,0,0.85)] flex flex-col items-center text-center overflow-hidden"
+        className="relative w-full max-w-lg bg-neutral-900/95 border border-white/10 rounded-[2.5rem] p-6 sm:p-8 shadow-[0_24px_80px_rgba(0,0,0,0.85)] flex flex-col items-center text-center my-auto"
       >
         {/* Ambient Glow */}
         <div className="absolute -top-32 -left-32 w-64 h-64 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
@@ -353,13 +301,25 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
         <h2 className="text-2xl font-bold text-white tracking-tight mb-1">
           Enroll 6 Face Angles
         </h2>
-        <p className="text-xs text-slate-400 mb-5 max-w-sm">
+        <p className="text-xs text-slate-400 mb-4 max-w-sm">
           Uses high-precision SSD MobileNet neural matching with 6 distinct angles for maximum unlock accuracy.
         </p>
 
+        {/* Camera Device Selector Dropdown if 2+ devices */}
+        {!loadError && !isLoadingModels && !isCameraLoading && !cameraErrorDetails && !isComplete && (
+          <CameraDeviceSelector
+            devices={devices}
+            selectedDeviceId={selectedDeviceId}
+            onSelectDevice={(id) => {
+              selectDevice(id);
+              startCamera(id);
+            }}
+          />
+        )}
+
         {/* Model Loading Error UI */}
         {loadError ? (
-          <div className="w-full max-w-sm bg-red-500/10 border border-red-500/25 rounded-3xl p-6 mb-6 flex flex-col items-center">
+          <div className="w-full max-w-sm bg-red-500/10 border border-red-500/25 rounded-3xl p-6 mb-4 flex flex-col items-center">
             <div className="w-14 h-14 rounded-2xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400 mb-3 shadow-lg">
               <AlertTriangle size={28} />
             </div>
@@ -386,7 +346,7 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
             </div>
           </div>
         ) : isLoadingModels ? (
-          <div className="w-64 h-64 sm:w-72 sm:h-72 rounded-full border border-white/10 bg-black/40 flex flex-col items-center justify-center p-6 mb-6">
+          <div className="w-64 h-64 sm:w-72 sm:h-72 rounded-full border border-white/10 bg-black/40 flex flex-col items-center justify-center p-6 mb-4">
             <RefreshCw size={36} className="text-blue-400 animate-spin mb-4" />
             <p className="text-sm font-semibold text-white mb-1">Loading SSD MobileNet...</p>
             <p className="text-[11px] text-slate-400 text-center">
@@ -394,15 +354,15 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
             </p>
           </div>
         ) : isCameraLoading ? (
-          <div className="w-64 h-64 sm:w-72 sm:h-72 rounded-full border border-white/10 bg-black/40 flex flex-col items-center justify-center p-6 mb-6">
+          <div className="w-64 h-64 sm:w-72 sm:h-72 rounded-full border border-white/10 bg-black/40 flex flex-col items-center justify-center p-6 mb-4">
             <Loader2 size={36} className="text-blue-400 animate-spin mb-4" />
             <p className="text-sm font-semibold text-white mb-1">Opening Camera...</p>
             <p className="text-[11px] text-slate-400 text-center px-4">
-              Running pre-flight checks and requesting camera stream with timeout...
+              {loadingStatusText}
             </p>
           </div>
         ) : cameraErrorDetails ? (
-          <div className="w-full max-w-sm bg-red-500/10 border border-red-500/20 rounded-3xl p-6 mb-6 flex flex-col items-center">
+          <div className="w-full max-w-sm bg-red-500/10 border border-red-500/20 rounded-3xl p-6 mb-4 flex flex-col items-center">
             <div className="w-14 h-14 rounded-2xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400 mb-3">
               <AlertTriangle size={28} />
             </div>
@@ -423,13 +383,51 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
               {cameraErrorDetails.message}
             </p>
             {cameraErrorDetails.instructions && (
-              <p className="text-[11px] text-red-300/90 text-center mb-4 bg-red-950/40 p-3 rounded-xl border border-red-500/20 leading-relaxed">
+              <p className="text-[11px] text-red-300/90 text-center mb-4 bg-red-950/40 p-3 rounded-xl border border-red-500/20 leading-relaxed whitespace-pre-line">
                 {cameraErrorDetails.instructions}
               </p>
             )}
+
+            {/* Collapsible Troubleshooting Accordion */}
+            <div className="w-full mb-4">
+              <button
+                onClick={() => setShowTroubleshooting(!showTroubleshooting)}
+                className="w-full py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-medium flex items-center justify-between transition-colors border border-white/5"
+              >
+                <span className="flex items-center gap-1.5">
+                  <HelpCircle size={14} className="text-blue-400" /> Having trouble? OS Settings Help
+                </span>
+                {showTroubleshooting ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
+
+              <AnimatePresence>
+                {showTroubleshooting && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="text-left text-[11px] text-slate-300 bg-neutral-950/80 p-3 rounded-xl border border-white/10 mt-2 space-y-2 overflow-hidden"
+                  >
+                    <div>
+                      <strong className="text-white block mb-0.5">Windows 10/11:</strong>
+                      <p className="text-slate-400">Settings → Privacy & Security → Camera → Enable "Let desktop apps access your camera".</p>
+                    </div>
+                    <div>
+                      <strong className="text-white block mb-0.5">macOS:</strong>
+                      <p className="text-slate-400">System Settings → Privacy & Security → Camera → Ensure your browser is toggled ON.</p>
+                    </div>
+                    <div>
+                      <strong className="text-white block mb-0.5">External USB Webcam:</strong>
+                      <p className="text-slate-400">Unplug and replug the USB cable, close Zoom/Teams/OBS completely, then click Retry.</p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
             <div className="flex gap-2 w-full">
               <button
-                onClick={() => startCamera()}
+                onClick={() => retryCamera()}
                 className="flex-1 py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
               >
                 <RefreshCw size={14} /> Retry Camera
@@ -446,7 +444,7 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
             </div>
           </div>
         ) : isComplete ? (
-          <div className="w-64 h-64 sm:w-72 sm:h-72 rounded-full border-2 border-emerald-500/50 bg-emerald-500/10 flex flex-col items-center justify-center p-6 mb-6 animate-pulse">
+          <div className="w-64 h-64 sm:w-72 sm:h-72 rounded-full border-2 border-emerald-500/50 bg-emerald-500/10 flex flex-col items-center justify-center p-6 mb-4 animate-pulse">
             <div className="w-20 h-20 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-3">
               <CheckCircle2 size={42} />
             </div>
@@ -455,7 +453,7 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
           </div>
         ) : (
           /* Live Camera View with Circular Frame */
-          <div className="relative mb-5">
+          <div className="relative mb-4">
             {/* Pulsing Scan Ring */}
             <div className="absolute -inset-2 rounded-full border-2 border-blue-500/40 animate-pulse pointer-events-none" />
 
@@ -494,7 +492,7 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
         )}
 
         {/* 6 Step Progress Indicators */}
-        <div className="flex items-center gap-1.5 mb-3">
+        <div className="flex items-center gap-1.5 mb-2.5">
           {[0, 1, 2, 3, 4, 5].map((idx) => {
             const isDone = capturedDescriptors.length > idx;
             const isCurrent = currentStep === idx && !isComplete;
@@ -528,7 +526,7 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
 
         {/* Dev-Friendly Performance & Confidence Indicator */}
         {showDevMetrics && cameraActive && !isComplete && (
-          <div className="mb-4 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-mono text-slate-400">
+          <div className="mb-3 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-mono text-slate-400">
             <Zap size={11} className="text-amber-400" />
             <span>SSD Latency: {detectionLatency !== null ? `${detectionLatency}ms` : 'Measuring...'}</span>
             {confidenceScore !== null && (

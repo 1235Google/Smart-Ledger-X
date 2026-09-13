@@ -173,34 +173,44 @@ export default function FaceRegistration({ onComplete, onCancel, isOpen = true }
       return;
     }
 
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "user",
-          width: { ideal: 320 },
-          height: { ideal: 240 },
-        },
-        audio: false,
-      });
+    const constraintsList = [
+      { video: { facingMode: "user", width: { ideal: 320 }, height: { ideal: 240 } }, audio: false },
+      { video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
+      { video: true, audio: false }
+    ];
 
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play();
-          setCameraActive(true);
-          setStatusMessage(`Pose 1/6: ${POSE_INSTRUCTIONS[0].title}`);
-        };
+    let stream: MediaStream | null = null;
+    let lastError: any = null;
+
+    for (const constraints of constraintsList) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (stream) break;
+      } catch (err) {
+        lastError = err;
       }
-    } catch (err: any) {
-      console.warn("Camera getUserMedia error:", err);
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+    }
+
+    if (!stream) {
+      console.warn("Camera getUserMedia error across all tiers:", lastError);
+      if (lastError?.name === 'NotAllowedError' || lastError?.name === 'PermissionDeniedError') {
         setCameraError("Camera access is required for Face Unlock. Please allow camera permission in browser settings.");
-      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+      } else if (lastError?.name === 'NotFoundError' || lastError?.name === 'DevicesNotFoundError') {
         setCameraError("Camera not detected on this device.");
       } else {
-        setCameraError(err.message || "Unable to access camera.");
+        setCameraError(lastError?.message || "Unable to access camera on this device.");
       }
+      return;
+    }
+
+    streamRef.current = stream;
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.onloadedmetadata = () => {
+        videoRef.current?.play().catch(e => console.warn("Video play interrupted:", e));
+        setCameraActive(true);
+        setStatusMessage(`Pose 1/6: ${POSE_INSTRUCTIONS[0].title}`);
+      };
     }
   };
 

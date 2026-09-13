@@ -282,29 +282,27 @@ export default function FaceUnlock({
       return;
     }
 
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: 320,
-          height: 240,
-          facingMode: "user",
-        },
-        audio: false,
-      });
+    const constraintsList = [
+      { video: { facingMode: "user", width: { ideal: 320 }, height: { ideal: 240 } }, audio: false },
+      { video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
+      { video: true, audio: false }
+    ];
 
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play().catch(e => console.warn("Video play interrupted:", e));
-          setCameraActive(true);
-          setStatusText("Scanning...");
-          startScanningLoop();
-        };
+    let stream: MediaStream | null = null;
+    let lastError: any = null;
+
+    for (const constraints of constraintsList) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (stream) break;
+      } catch (err) {
+        lastError = err;
       }
-    } catch (err: any) {
-      console.warn("FaceUnlock camera access error:", err);
-      const isDenied = err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError';
+    }
+
+    if (!stream) {
+      console.warn("FaceUnlock camera access error across all tiers:", lastError);
+      const isDenied = lastError?.name === 'NotAllowedError' || lastError?.name === 'PermissionDeniedError';
       const msg = isDenied 
         ? "Camera access denied, please enter PIN" 
         : "Camera unavailable, please enter PIN";
@@ -316,6 +314,18 @@ export default function FaceUnlock({
       } else {
         setShowPinFallback(true);
       }
+      return;
+    }
+
+    streamRef.current = stream;
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.onloadedmetadata = () => {
+        videoRef.current?.play().catch(e => console.warn("Video play interrupted:", e));
+        setCameraActive(true);
+        setStatusText("Scanning...");
+        startScanningLoop();
+      };
     }
   };
 

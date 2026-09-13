@@ -1,11 +1,14 @@
 {
-  "builds": [
-    { "src": "server.ts", "use": "@vercel/node" },
-    { "src": "package.json", "use": "@vercel/static-build", "config": { "distDir": "dist" } }
-  ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "server.ts" },
-    { "src": "/(.*)", "dest": "/index.html" }
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/((?!api/|assets/|favicon|site\\.webmanifest|robots\\.txt|sitemap\\.xml|sw\\.js|apple-touch-icon|web-app-manifest).*)",
+      "destination": "/index.html"
+    }
   ],
   "crons": [
     {
@@ -14,6 +17,28 @@
     }
   ],
   "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/site.webmanifest",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/manifest+json; charset=UTF-8"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400"
+        }
+      ]
+    },
     {
       "source": "/robots.txt",
       "headers": [

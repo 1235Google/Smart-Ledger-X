@@ -1,6 +1,5 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import * as dotenv from "dotenv";
 import cron from "node-cron";
 import { Resend } from "resend";
@@ -1622,26 +1621,6 @@ startScheduledReportsWorker();
     // logic is purely theoretical.
   });
 
-  // Explicitly serve /public assets (including /models)
-  app.use(express.static(path.join(process.cwd(), 'public')));
-
-  // Vite middleware for development
-  (async () => {
-    if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
-      const vite = await createViteServer({
-        server: { middlewareMode: true },
-        appType: "spa",
-      });
-      app.use(vite.middlewares);
-    } else {
-      const distPath = path.join(process.cwd(), 'dist');
-      app.use(express.static(distPath));
-      app.use((req, res) => {
-        res.sendFile(path.join(distPath, 'index.html'));
-      });
-    }
-  })();
-
   io.on('connection', (socket) => {
     socket.on('join_user_room', (userId) => {
       if (userId) socket.join(`user_${userId}`);
@@ -1821,9 +1800,29 @@ startScheduledReportsWorker();
   });
 
 if (!process.env.VERCEL) {
-  httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  (async () => {
+    // Explicitly serve /public assets (including /models)
+    app.use(express.static(path.join(process.cwd(), 'public')));
+
+    if (process.env.NODE_ENV !== "production") {
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } else {
+      const distPath = path.join(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.use((req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
+
+    httpServer.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  })();
 }
 
 export default app;

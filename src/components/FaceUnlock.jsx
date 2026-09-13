@@ -1,5 +1,5 @@
 /**
- * FaceUnlock.jsx - Optimized for Speed, Accuracy, and Efficiency
+ * FaceUnlock.jsx - Optimized for Speed, Accuracy, and Seamless Priority Auth
  * 
  * KEY SPEED & ACCURACY OPTIMIZATIONS:
  * -----------------------------------------------------------------------------
@@ -31,11 +31,28 @@
  *    - Video element has playsInline and muted attributes to prevent iOS/Android full-screen takeovers.
  *    - Video element explicit dimensions width={320} height={240} to prevent canvas re-scaling.
  *    - Dev-friendly real-time detection latency (ms) and effective scan rate indicator badge.
+ * 
+ * 7. PRIORITY AUTHENTICATION INTEGRATION:
+ *    - Immediate fallback to PIN when camera is unavailable or denied.
+ *    - 10-second scan timeout automatic fallback to PIN with contextual feedback.
+ *    - Dedicated "Use PIN instead" link.
+ *    - Embedded and standalone rendering support with matching card container styling.
  */
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ScanFace, Lock, KeyRound, AlertTriangle, RefreshCw, X, CheckCircle2, Zap } from 'lucide-react';
+import { 
+  ScanFace, 
+  Lock, 
+  KeyRound, 
+  AlertTriangle, 
+  RefreshCw, 
+  X, 
+  CheckCircle2, 
+  Zap, 
+  Clock, 
+  ShieldCheck 
+} from 'lucide-react';
 import * as faceapi from 'face-api.js';
 import { cn } from '../lib/utils';
 
@@ -61,7 +78,10 @@ async function sha256(message) {
 export default function FaceUnlock({
   onUnlock,
   onCancel,
-  title = "Secret Vault",
+  onUsePin,
+  onFallbackToPin,
+  embedded = false,
+  title = "Face Unlock",
   matchThreshold = MATCH_THRESHOLD,
 }) {
   const videoRef = useRef(null);
@@ -90,7 +110,7 @@ export default function FaceUnlock({
   const [detectionLatency, setDetectionLatency] = useState(null);
   const [isFaceDetected, setIsFaceDetected] = useState(false);
 
-  // PIN Fallback States
+  // PIN Fallback States (for standalone mode)
   const [showPinFallback, setShowPinFallback] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(null);
@@ -110,7 +130,9 @@ export default function FaceUnlock({
       scanTimeoutRef.current = null;
     }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
+      try {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      } catch (e) {}
       streamRef.current = null;
     }
     if (videoRef.current) {
@@ -130,74 +152,105 @@ export default function FaceUnlock({
           setStoredDescriptor(new Float32Array(parsed));
           setHasStoredDescriptor(true);
         } else {
-          setShowPinFallback(true);
+          handleFallback("Saved face profile is corrupted, please enter PIN");
         }
       } else {
-        setShowPinFallback(true);
+        handleFallback("No face registered, please enter PIN");
       }
-    } catch (e) {
-      console.warn("Failed to parse faceDescriptor:", e);
-      setShowPinFallback(true);
+    } catch (err) {
+      console.warn("Error reading face descriptor from localStorage:", err);
+      handleFallback("Error reading face profile, please enter PIN");
     }
   }, []);
 
+  const handleFallback = (reason) => {
+    if (onFallbackToPin) {
+      onFallbackToPin(reason);
+    } else {
+      setShowPinFallback(true);
+    }
+  };
+
+  // 2. Load Face-API models once storedDescriptor is verified
+  useEffect(() => {
+    if (!hasStoredDescriptor) return;
+
+    let isMounted = true;
+    loadModelsWithTimeout(isMounted);
+
+    return () => {
+      isMounted = false;
+      stopCamera();
+    };
+  }, [hasStoredDescriptor]);
+
   /**
-   * Model Loader with URL logging, manifest pre-check, and 15s timeout
+   * Load required neural models with manifest validation and timeout protection
    */
-  async function loadModelsWithTimeout() {
+  const loadModelsWithTimeout = async (isMounted = true) => {
     setIsLoadingModels(true);
     setLoadError(null);
 
-    console.log("Attempting to load models from:", window.location.origin + "/models");
+    const MODEL_URL = '/models';
 
-    const loadModels = async () => {
-      const MODEL_URL = '/models';
-
-      const testFetch = await fetch(`${MODEL_URL}/tiny_face_detector_model-weights_manifest.json`);
-      console.log("Manifest fetch status:", testFetch.status);
-      if (!testFetch.ok) {
-        throw new Error(`Manifest file not reachable, status: ${testFetch.status}`);
-      }
-
-      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-      console.log("Tiny face detector loaded");
-      await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-      console.log("Face landmark model loaded");
-      await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-      console.log("Face recognition model loaded");
-
-      setModelsLoaded(true);
-    };
-
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Model loading timed out after 15 seconds")), 15000)
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Model loading timed out after 12s. Check neural network files.")), 12000)
     );
 
+    const loadPromise = (async () => {
+      try {
+        const testFetch = await fetch(`${MODEL_URL}/tiny_face_detector_model-weights_manifest.json`);
+        if (!testFetch.ok) {
+          throw new Error(`Manifest unreachable at ${MODEL_URL} (HTTP ${testFetch.status})`);
+        }
+      } catch (networkErr) {
+        throw new Error(`Cannot reach /models directory: ${networkErr.message}`);
+      }
+
+      if (!faceapi.nets.tinyFaceDetector.isLoaded) {
+        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+      }
+      if (!faceapi.nets.faceLandmark68Net.isLoaded) {
+        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+      }
+      if (!faceapi.nets.faceRecognitionNet.isLoaded) {
+        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+      }
+    })();
+
     try {
-      await Promise.race([loadModels(), timeout]);
-      setIsLoadingModels(false);
-      startCamera();
-    } catch (error) {
-      console.error("Model loading failed with error:", error);
-      setLoadError(error?.message || "Failed to load face detection models");
-      setIsLoadingModels(false);
+      await Promise.race([loadPromise, timeoutPromise]);
+      if (isMounted) {
+        setModelsLoaded(true);
+        setIsLoadingModels(false);
+      }
+    } catch (err) {
+      console.error("FaceUnlock model load failure:", err);
+      if (isMounted) {
+        setLoadError(err.message || "Failed to load face recognition neural nets.");
+        setIsLoadingModels(false);
+        if (onFallbackToPin) {
+          setTimeout(() => {
+            onFallbackToPin("Face detector unavailable, please enter PIN");
+          }, 1500);
+        }
+      }
     }
-  }
+  };
 
-  // 2. Trigger model load when face descriptor is found
+  // 3. Start camera feed automatically once models are loaded and profile is ready
   useEffect(() => {
-    if (!hasStoredDescriptor || showPinFallback) return;
-
-    loadModelsWithTimeout();
+    if (modelsLoaded && hasStoredDescriptor && !showPinFallback) {
+      startCamera();
+    }
 
     return () => {
       stopCamera();
     };
-  }, [hasStoredDescriptor, showPinFallback]);
+  }, [modelsLoaded, hasStoredDescriptor, showPinFallback]);
 
   /**
    * OPTIMIZATION 2: Reduced Camera Resolution (320x240) with facingMode: "user"
-   * Provides rapid frame processing with low memory consumption.
    */
   const startCamera = async () => {
     stopCamera();
@@ -206,8 +259,13 @@ export default function FaceUnlock({
     setStatusText("Position your face in the frame");
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setCameraError("Camera not detected on this device, using PIN instead.");
-      setShowPinFallback(true);
+      const msg = "Camera not detected, please enter PIN";
+      setCameraError(msg);
+      if (onFallbackToPin) {
+        onFallbackToPin(msg);
+      } else {
+        setShowPinFallback(true);
+      }
       return;
     }
 
@@ -225,22 +283,26 @@ export default function FaceUnlock({
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play();
+          videoRef.current?.play().catch(e => console.warn("Video play interrupted:", e));
           setCameraActive(true);
           setStatusText("Scanning...");
           startScanningLoop();
         };
       }
     } catch (err) {
-      console.warn("FaceUnlock camera error:", err);
-      if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
-        setCameraError("Camera access is required for Face Unlock. Please allow camera permission or use PIN.");
-      } else if (err?.name === 'NotFoundError' || err?.name === 'DevicesNotFoundError') {
-        setCameraError("Camera not detected, using PIN instead.");
+      console.warn("FaceUnlock camera access error:", err);
+      const isDenied = err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError';
+      const msg = isDenied 
+        ? "Camera access denied, please enter PIN" 
+        : "Camera unavailable, please enter PIN";
+      setCameraError(msg);
+      
+      // Immediate fallback to PIN when camera is denied or not found
+      if (onFallbackToPin) {
+        onFallbackToPin(msg);
       } else {
-        setCameraError(err?.message || "Camera access failed.");
+        setShowPinFallback(true);
       }
-      setShowPinFallback(true);
     }
   };
 
@@ -250,15 +312,21 @@ export default function FaceUnlock({
   const startScanningLoop = () => {
     if (!storedDescriptor) return;
 
-    // 10-second fail-safe timeout before offering PIN fallback
+    // 10-second fail-safe timeout before offering or triggering PIN fallback
     if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
     scanTimeoutRef.current = setTimeout(() => {
       stopCamera();
       setScanFailed(true);
-      setStatusText("Face not recognized ❌ — try again or use PIN");
-      setTimeout(() => {
-        setShowPinFallback(true);
-      }, 1500);
+      setStatusText("Face not recognized ❌ — switching to PIN");
+      if (onFallbackToPin) {
+        setTimeout(() => {
+          onFallbackToPin("Face not recognized, please enter PIN");
+        }, 800);
+      } else {
+        setTimeout(() => {
+          setShowPinFallback(true);
+        }, 1200);
+      }
     }, 10000);
 
     // OPTIMIZATION 3: TinyFaceDetector options with inputSize: 224 and scoreThreshold: 0.5
@@ -287,7 +355,6 @@ export default function FaceUnlock({
         const stage1Face = await faceapi.detectSingleFace(videoRef.current, detectorOptions);
 
         if (!stage1Face || stage1Face.score <= 0.6) {
-          // Face absent or below confidence threshold (>0.6)
           setIsFaceDetected(false);
           setStatusText("Position your face in the frame");
           setSimilarityScore(null);
@@ -307,28 +374,28 @@ export default function FaceUnlock({
           const liveDescriptor = stage2FullDetection.descriptor;
           const distance = faceapi.euclideanDistance(storedDescriptor, liveDescriptor);
 
-          // OPTIMIZATION 1: Log computed distance and threshold for testing and tuning
           console.log("Face match distance:", distance, "Threshold:", matchThreshold);
 
-          // Calculate normalized similarity percentage: (1 - distance) clamped between 0 and 100%
           const similarity = Math.max(0, Math.min(100, Math.round((1 - distance) * 100)));
           setSimilarityScore(similarity);
 
-          // Check if Euclidean distance satisfies the matching threshold
           if (distance < matchThreshold) {
             // MATCH CONFIRMED!
             stopCamera();
             setIsMatch(true);
             setStatusText("Face matched ✅");
 
-            // Vault opening animation sequence
+            try {
+              sessionStorage.setItem('isUnlocked', 'true');
+            } catch (e) {}
+
             setTimeout(() => {
               setIsDoorOpening(true);
-            }, 500);
+            }, 400);
 
             setTimeout(() => {
               onUnlock();
-            }, 1200);
+            }, 1000);
           } else {
             setStatusText("Scanning...");
           }
@@ -342,11 +409,9 @@ export default function FaceUnlock({
       }
     };
 
-    /**
-     * OPTIMIZATION 4: requestAnimationFrame loop with 300ms throttling
-     * Eliminates frame drops and keeps the UI thread free.
-     */
     const scanLoop = (timestamp) => {
+      if (isMatch) return;
+
       if (!lastScanTimestampRef.current) {
         lastScanTimestampRef.current = timestamp;
       }
@@ -364,13 +429,22 @@ export default function FaceUnlock({
     animationFrameIdRef.current = requestAnimationFrame(scanLoop);
   };
 
-  // Shake animation helper for invalid PIN
   const triggerShake = () => {
     setShake(true);
     setTimeout(() => setShake(false), 500);
   };
 
-  // PIN Form Submit Handler
+  const handleUsePinClick = () => {
+    stopCamera();
+    if (onUsePin) {
+      onUsePin();
+    } else if (onFallbackToPin) {
+      onFallbackToPin();
+    } else {
+      setShowPinFallback(true);
+    }
+  };
+
   const handlePinSubmit = async (e) => {
     e.preventDefault();
     if (pinInput.length < 4) {
@@ -385,6 +459,9 @@ export default function FaceUnlock({
 
       if (enteredHash === storedPinHash) {
         setPinError(null);
+        try {
+          sessionStorage.setItem('isUnlocked', 'true');
+        } catch (e) {}
         setIsDoorOpening(true);
         setTimeout(() => {
           onUnlock();
@@ -409,50 +486,256 @@ export default function FaceUnlock({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-3xl p-4 select-none">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{
-          opacity: isDoorOpening ? 0 : 1,
-          scale: isDoorOpening ? 1.15 : 1,
-          rotateY: isDoorOpening ? -15 : 0,
-          x: shake ? [-10, 10, -10, 10, 0] : 0,
-        }}
-        transition={{ duration: isDoorOpening ? 0.6 : 0.2, ease: "easeInOut" }}
-        className="relative w-full max-w-md bg-neutral-900/90 border border-white/10 rounded-[2.5rem] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.85)] flex flex-col items-center text-center overflow-hidden"
-      >
-        {/* Ambient Glows */}
-        <div className="absolute -top-24 -left-24 w-48 h-48 bg-blue-500/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-purple-500/15 rounded-full blur-3xl pointer-events-none" />
-
-        {/* Top Cancel / Back Button */}
-        <button
-          onClick={handleCancel}
-          className="absolute top-6 right-6 p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors border border-white/5"
-          title="Cancel"
+  // ==========================================================================
+  // VIEW: EMBEDDED MODE (Inside Parent LockScreen Card)
+  // ==========================================================================
+  if (embedded) {
+    return (
+      <div className="w-full flex flex-col items-center select-none font-sans">
+        {/* M3 Expressive ScanFace Icon Container */}
+        <motion.div 
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 400, damping: 26, delay: 0.05 }}
+          className="flex flex-col items-center mb-4"
         >
-          <X size={18} />
-        </button>
+          <div className="relative mb-3.5 group">
+            <div className="absolute -inset-1.5 rounded-[24px] bg-[#a8c7fa]/20 blur-md pointer-events-none transition-all duration-300 group-hover:bg-[#a8c7fa]/35" />
+            <div className="relative w-16 h-16 bg-[#252830] border border-[#3a3d47] rounded-[22px] flex items-center justify-center shadow-lg text-[#a8c7fa]">
+              <ScanFace className="w-8 h-8 transition-transform duration-300 group-hover:scale-105" />
+            </div>
+          </div>
 
-        {/* Vault Icon Header */}
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-medium mb-3">
-          <Lock size={12} />
-          <span>Biometric Protection</span>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#e2e2e9] text-center">
+            {title}
+          </h1>
+          <p className="text-[#90909a] text-xs sm:text-sm mt-1 text-center font-medium max-w-[280px]">
+            Position your face in the frame to unlock
+          </p>
+
+          {/* M3 Encrypted Session Pill */}
+          <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#24262c] text-[#a5a7b0] text-[11px] font-medium border border-[#32353c]">
+            <Clock size={12} className="text-[#a8c7fa]" />
+            <span>Encrypted Session</span>
+          </div>
+        </motion.div>
+
+        {/* Circular Camera Scanner Container */}
+        <div className="flex flex-col items-center mb-2 w-full">
+          {loadError ? (
+            <div className="w-full max-w-sm bg-red-500/10 border border-red-500/25 rounded-3xl p-5 mb-4 flex flex-col items-center">
+              <div className="w-12 h-12 rounded-2xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400 mb-2.5">
+                <AlertTriangle size={24} />
+              </div>
+              <p className="text-sm font-semibold text-white mb-1">Model Loading Error</p>
+              <div className="w-full p-2.5 rounded-xl bg-red-950/40 border border-red-500/20 text-xs text-red-300 font-mono text-center mb-3 break-words">
+                {loadError}
+              </div>
+              <div className="flex gap-2 w-full">
+                <button
+                  type="button"
+                  onClick={() => loadModelsWithTimeout()}
+                  className="flex-1 py-2 px-3 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <RefreshCw size={13} /> Retry
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUsePinClick}
+                  className="flex-1 py-2 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1"
+                >
+                  <KeyRound size={13} /> Use PIN
+                </button>
+              </div>
+            </div>
+          ) : isLoadingModels ? (
+            <div className="w-56 h-56 rounded-full border border-[#2d2f36] bg-[#14151a] flex flex-col items-center justify-center p-4 my-2">
+              <RefreshCw size={28} className="text-[#a8c7fa] animate-spin mb-2" />
+              <p className="text-xs font-semibold text-white">Starting Face Scanner...</p>
+              <p className="text-[10px] text-[#90909a] mt-1">Loading 224px neural weights</p>
+            </div>
+          ) : (
+            <div className="relative my-2">
+              {/* Outer Pulsing Aura Ring */}
+              <div
+                className={cn(
+                  "absolute -inset-3 rounded-full border-2 transition-all duration-500 pointer-events-none",
+                  isMatch
+                    ? "border-emerald-400 scale-105 shadow-[0_0_36px_rgba(52,211,153,0.5)]"
+                    : scanFailed
+                    ? "border-red-500/80 animate-pulse shadow-[0_0_28px_rgba(239,68,68,0.4)]"
+                    : isFaceDetected
+                    ? "border-[#a8c7fa]/80 shadow-[0_0_30px_rgba(168,199,250,0.45)]"
+                    : "border-[#a8c7fa]/30 shadow-[0_0_18px_rgba(168,199,250,0.15)] animate-pulse"
+                )}
+              />
+
+              {/* Circular Video Feed with explicit 320x240 dimensions & mobile attributes */}
+              <div
+                className={cn(
+                  "w-56 h-56 rounded-full overflow-hidden border-4 relative bg-black flex items-center justify-center shadow-2xl transition-colors duration-500",
+                  isMatch
+                    ? "border-emerald-400"
+                    : scanFailed
+                    ? "border-red-500"
+                    : isFaceDetected
+                    ? "border-[#a8c7fa]"
+                    : "border-[#2d2f36]"
+                )}
+              >
+                <video
+                  ref={videoRef}
+                  playsInline
+                  muted
+                  autoPlay
+                  width={320}
+                  height={240}
+                  className="w-full h-full object-cover transform scale-x-[-1]"
+                />
+
+                {/* Face Guide Silhouette */}
+                <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                  <div
+                    className={cn(
+                      "w-36 h-48 rounded-[50%] border-2 border-dashed transition-colors duration-300",
+                      isFaceDetected ? "border-[#a8c7fa]/70" : "border-white/25"
+                    )}
+                  />
+                </div>
+
+                {/* Success Overlay Checkmark */}
+                {isMatch && (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="absolute inset-0 bg-emerald-950/70 backdrop-blur-sm flex flex-col items-center justify-center text-emerald-400"
+                  >
+                    <CheckCircle2 size={48} className="drop-shadow-lg" />
+                    <span className="text-xs font-bold text-white mt-1.5">Unlocked</span>
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Live Confidence Badge */}
+              {similarityScore !== null && !isMatch && !scanFailed && (
+                <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full bg-[#1a1b20] border border-[#343740] text-[10px] font-mono text-[#c4c6d0] whitespace-nowrap shadow-md">
+                  Match: {similarityScore}%
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Dynamic Status Text */}
+          <p
+            className={cn(
+              "text-xs font-medium transition-colors duration-300 mt-2 min-h-[18px]",
+              isMatch
+                ? "text-emerald-400 font-bold"
+                : scanFailed
+                ? "text-red-400 font-semibold"
+                : isFaceDetected
+                ? "text-[#a8c7fa] font-semibold"
+                : "text-[#90909a]"
+            )}
+          >
+            {statusText}
+          </p>
+
+          {/* Dev Performance & Latency Badge */}
+          {cameraActive && !isMatch && (
+            <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#252830] border border-[#343740] text-[#a5a7b0] text-[10px] font-mono">
+              <Zap size={10} className="text-emerald-400" />
+              <span>
+                {detectionLatency !== null ? `${detectionLatency}ms` : '300ms loop'} &bull; ~3.3 scans/s
+              </span>
+            </div>
+          )}
+
+          {/* Direct "Use PIN instead" link */}
+          <button
+            type="button"
+            onClick={handleUsePinClick}
+            className="mt-5 text-xs text-[#a8c7fa] hover:text-[#c2e7ff] font-medium hover:underline transition-colors py-1.5 px-3 rounded-lg flex items-center gap-1.5"
+          >
+            <KeyRound size={13} />
+            <span>Use PIN instead</span>
+          </button>
         </div>
 
-        <h2 className="text-xl font-bold text-white tracking-tight mb-1">
+        {/* Security Footer Badge */}
+        <div className="mt-6 pt-4 border-t border-[#2d2f36] w-full flex items-center justify-center gap-1.5 text-[11px] text-[#767882]">
+          <ShieldCheck size={14} className="text-[#a8c7fa]" />
+          <span>Protected with encrypted local storage</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================================================
+  // VIEW: STANDALONE MODE (Modal Surface with Full Backdrop)
+  // ==========================================================================
+  return (
+    <div 
+      className="fixed inset-0 z-50 bg-[#0d0e12] text-[#e2e2e9] flex flex-col items-center justify-center p-4 sm:p-6 overflow-y-auto select-none font-sans"
+      role="region"
+      aria-label="Face Unlock Screen"
+    >
+      {/* Material 3 Dynamic Atmospheric Background */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-[10%] left-[15%] w-[420px] h-[420px] rounded-full bg-[#294270]/20 blur-[130px]" />
+        <div className="absolute bottom-[10%] right-[15%] w-[460px] h-[460px] rounded-full bg-[#1b3459]/25 blur-[140px]" />
+        <div className="absolute top-[50%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-[340px] h-[340px] rounded-full bg-[#a8c7fa]/5 blur-[100px]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_transparent_0%,_#0d0e12_85%)]" />
+      </div>
+
+      <motion.div
+        initial={{ scale: 0.94, opacity: 0, y: 16 }}
+        animate={{
+          scale: isDoorOpening ? 1.05 : 1,
+          opacity: isDoorOpening ? 0 : 1,
+          y: 0,
+          x: shake ? [-10, 10, -10, 10, 0] : 0,
+        }}
+        transition={{ duration: isDoorOpening ? 0.5 : 0.4, ease: [0.16, 1, 0.3, 1] }}
+        className="relative z-10 flex flex-col items-center max-w-[400px] w-full bg-[#1a1b20] border border-[#2d2f36] rounded-[28px] sm:rounded-[32px] p-4 sm:p-8 shadow-[0_24px_64px_rgba(0,0,0,0.65)]"
+      >
+        {/* Top Cancel / Back Button */}
+        {onCancel && (
+          <button
+            onClick={handleCancel}
+            className="absolute top-6 right-6 p-2 rounded-full bg-[#252830] hover:bg-[#31343d] text-[#a5a7b0] hover:text-white transition-colors border border-[#343740]"
+            title="Cancel"
+          >
+            <X size={18} />
+          </button>
+        )}
+
+        {/* Expressive Header Icon */}
+        <div className="relative mb-3.5 group">
+          <div className="absolute -inset-1.5 rounded-[24px] bg-[#a8c7fa]/20 blur-md pointer-events-none transition-all duration-300 group-hover:bg-[#a8c7fa]/35" />
+          <div className="relative w-16 h-16 bg-[#252830] border border-[#3a3d47] rounded-[22px] flex items-center justify-center shadow-lg text-[#a8c7fa]">
+            <ScanFace className="w-8 h-8 transition-transform duration-300 group-hover:scale-105" />
+          </div>
+        </div>
+
+        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#e2e2e9] text-center mb-1">
           {title}
         </h2>
-        <p className="text-xs text-slate-400 mb-6 max-w-xs">
+        <p className="text-[#90909a] text-xs sm:text-sm mb-4 text-center font-medium max-w-[280px]">
           {hasStoredDescriptor && !showPinFallback
-            ? "Looking for your face profile to unlock encrypted records..."
+            ? "Position your face in the frame to unlock"
             : "Enter your 4-digit security PIN to unlock this vault."}
         </p>
 
+        {/* Encrypted Session Pill */}
+        <div className="mb-5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#24262c] text-[#a5a7b0] text-[11px] font-medium border border-[#32353c]">
+          <Clock size={12} className="text-[#a8c7fa]" />
+          <span>Encrypted Session</span>
+        </div>
+
         {/* Live Camera Scanner View */}
         {hasStoredDescriptor && !showPinFallback && (
-          <div className="flex flex-col items-center mb-6 w-full">
+          <div className="flex flex-col items-center mb-4 w-full">
             {loadError ? (
               <div className="w-full max-w-sm bg-red-500/10 border border-red-500/25 rounded-3xl p-5 mb-4 flex flex-col items-center">
                 <div className="w-12 h-12 rounded-2xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400 mb-2.5">
@@ -464,13 +747,13 @@ export default function FaceUnlock({
                 </div>
                 <div className="flex gap-2 w-full">
                   <button
-                    onClick={loadModelsWithTimeout}
+                    onClick={() => loadModelsWithTimeout()}
                     className="flex-1 py-2 px-3 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
                   >
                     <RefreshCw size={13} /> Retry
                   </button>
                   <button
-                    onClick={() => setShowPinFallback(true)}
+                    onClick={handleUsePinClick}
                     className="flex-1 py-2 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1"
                   >
                     <KeyRound size={13} /> Use PIN
@@ -478,10 +761,10 @@ export default function FaceUnlock({
                 </div>
               </div>
             ) : isLoadingModels ? (
-              <div className="w-56 h-56 rounded-full border border-white/10 bg-black/40 flex flex-col items-center justify-center p-4 mb-4">
-                <RefreshCw size={32} className="text-blue-400 animate-spin mb-3" />
-                <p className="text-xs font-semibold text-white">Loading Fast Detector...</p>
-                <p className="text-[10px] text-slate-400 mt-1">Readying 224px neural weights</p>
+              <div className="w-56 h-56 rounded-full border border-[#2d2f36] bg-[#14151a] flex flex-col items-center justify-center p-4 mb-4">
+                <RefreshCw size={28} className="text-[#a8c7fa] animate-spin mb-2" />
+                <p className="text-xs font-semibold text-white">Starting Face Scanner...</p>
+                <p className="text-[10px] text-[#90909a] mt-1">Loading 224px neural weights</p>
               </div>
             ) : (
               <div className="relative mb-4">
@@ -490,16 +773,16 @@ export default function FaceUnlock({
                   className={cn(
                     "absolute -inset-3 rounded-full border-2 transition-all duration-500 pointer-events-none",
                     isMatch
-                      ? "border-emerald-400 scale-105 shadow-[0_0_40px_rgba(52,211,153,0.5)]"
+                      ? "border-emerald-400 scale-105 shadow-[0_0_36px_rgba(52,211,153,0.5)]"
                       : scanFailed
-                      ? "border-red-500/80 animate-pulse shadow-[0_0_30px_rgba(239,68,68,0.4)]"
+                      ? "border-red-500/80 animate-pulse shadow-[0_0_28px_rgba(239,68,68,0.4)]"
                       : isFaceDetected
-                      ? "border-blue-400/80 shadow-[0_0_35px_rgba(59,130,246,0.45)]"
-                      : "border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.2)]"
+                      ? "border-[#a8c7fa]/80 shadow-[0_0_30px_rgba(168,199,250,0.45)]"
+                      : "border-[#a8c7fa]/30 shadow-[0_0_18px_rgba(168,199,250,0.15)] animate-pulse"
                   )}
                 />
 
-                {/* Circular Video Feed with explicit 320x240 dimensions & mobile attributes */}
+                {/* Circular Video Feed */}
                 <div
                   className={cn(
                     "w-56 h-56 rounded-full overflow-hidden border-4 relative bg-black flex items-center justify-center shadow-2xl transition-colors duration-500",
@@ -508,8 +791,8 @@ export default function FaceUnlock({
                       : scanFailed
                       ? "border-red-500"
                       : isFaceDetected
-                      ? "border-blue-400"
-                      : "border-white/20"
+                      ? "border-[#a8c7fa]"
+                      : "border-[#2d2f36]"
                   )}
                 >
                   <video
@@ -526,7 +809,7 @@ export default function FaceUnlock({
                   <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
                     <div className={cn(
                       "w-36 h-48 rounded-[50%] border-2 border-dashed transition-colors duration-300",
-                      isFaceDetected ? "border-blue-400/70" : "border-white/30"
+                      isFaceDetected ? "border-[#a8c7fa]/70" : "border-white/25"
                     )} />
                   </div>
 
@@ -535,18 +818,18 @@ export default function FaceUnlock({
                     <motion.div
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
-                      className="absolute inset-0 bg-emerald-950/60 backdrop-blur-sm flex flex-col items-center justify-center text-emerald-400"
+                      className="absolute inset-0 bg-emerald-950/70 backdrop-blur-sm flex flex-col items-center justify-center text-emerald-400"
                     >
                       <CheckCircle2 size={48} className="drop-shadow-lg" />
-                      <span className="text-xs font-bold text-white mt-1">Unlocked</span>
+                      <span className="text-xs font-bold text-white mt-1.5">Unlocked</span>
                     </motion.div>
                   )}
                 </div>
 
                 {/* Live Confidence Badge */}
                 {similarityScore !== null && !isMatch && !scanFailed && (
-                  <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full bg-neutral-900/95 border border-white/20 text-[10px] font-mono text-slate-300 whitespace-nowrap shadow-md">
-                    Match: {similarityScore}% (Thresh: {matchThreshold})
+                  <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full bg-[#1a1b20] border border-[#343740] text-[10px] font-mono text-[#c4c6d0] whitespace-nowrap shadow-md">
+                    Match: {similarityScore}%
                   </div>
                 )}
               </div>
@@ -561,16 +844,16 @@ export default function FaceUnlock({
                   : scanFailed
                   ? "text-red-400 font-semibold"
                   : isFaceDetected
-                  ? "text-blue-300 font-semibold"
-                  : "text-slate-300"
+                  ? "text-[#a8c7fa] font-semibold"
+                  : "text-[#90909a]"
               )}
             >
               {statusText}
             </p>
 
-            {/* OPTIMIZATION 6: Dev Performance & Latency Badge */}
+            {/* Dev Performance & Latency Badge */}
             {cameraActive && !isMatch && (
-              <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-slate-400 text-[10px] font-mono">
+              <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#252830] border border-[#343740] text-[#a5a7b0] text-[10px] font-mono">
                 <Zap size={10} className="text-emerald-400" />
                 <span>
                   {detectionLatency !== null ? `${detectionLatency}ms` : '300ms loop'} &bull; ~3.3 scans/s
@@ -581,19 +864,16 @@ export default function FaceUnlock({
             {/* Switch to PIN Fallback Button */}
             <button
               type="button"
-              onClick={() => {
-                stopCamera();
-                setShowPinFallback(true);
-              }}
-              className="mt-4 text-xs text-slate-400 hover:text-white transition-colors underline underline-offset-4 flex items-center gap-1.5"
+              onClick={handleUsePinClick}
+              className="mt-5 text-xs text-[#a8c7fa] hover:text-[#c2e7ff] font-medium hover:underline transition-colors py-1.5 px-3 rounded-lg flex items-center gap-1.5"
             >
               <KeyRound size={13} />
-              <span>Use 4-digit PIN instead</span>
+              <span>Use PIN instead</span>
             </button>
           </div>
         )}
 
-        {/* PIN Fallback Form */}
+        {/* PIN Fallback Form (for standalone mode) */}
         {showPinFallback && (
           <form onSubmit={handlePinSubmit} className="w-full space-y-4">
             {cameraError && (
@@ -610,21 +890,27 @@ export default function FaceUnlock({
               </div>
             )}
 
-            <div className="relative">
-              <input
-                type="password"
-                maxLength={4}
-                value={pinInput}
-                onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
-                placeholder="••••"
-                autoFocus
-                className="w-full bg-black/40 border border-white/10 rounded-2xl py-3.5 px-4 text-center text-2xl font-mono tracking-widest text-white placeholder-slate-600 outline-none focus:border-blue-500 transition-colors"
-              />
+            <div>
+              <label className="block text-xs font-semibold text-[#c4c6d0] mb-2 text-left">
+                Enter Master Vault PIN
+              </label>
+              <div className="relative">
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={pinInput}
+                  onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+                  placeholder="••••"
+                  className="w-full h-14 bg-[#252830] border border-[#3a3d47] rounded-2xl px-4 text-center text-2xl font-mono tracking-widest text-white focus:outline-none focus:border-[#a8c7fa] transition-colors"
+                  autoFocus
+                />
+              </div>
             </div>
 
             <button
               type="submit"
-              className="w-full py-3.5 px-4 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-semibold text-sm border border-white/10 shadow-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+              className="w-full h-12 rounded-2xl bg-[#a8c7fa] hover:bg-[#c2e7ff] text-[#042e6f] text-sm font-bold transition-all shadow-md flex items-center justify-center gap-2"
             >
               <KeyRound size={16} />
               <span>Unlock Vault</span>
@@ -635,30 +921,21 @@ export default function FaceUnlock({
                 type="button"
                 onClick={() => {
                   setShowPinFallback(false);
-                  loadModelsWithTimeout();
+                  startCamera();
                 }}
-                className="text-xs text-blue-400 hover:text-blue-300 transition-colors py-1 flex items-center justify-center gap-1 w-full"
+                className="w-full text-xs text-[#a5a7b0] hover:text-white transition-colors py-2 flex items-center justify-center gap-1.5"
               >
                 <ScanFace size={14} />
-                <span>Switch back to Face Recognition</span>
+                <span>Try Face Unlock again</span>
               </button>
             )}
-
-            <div className="text-[11px] text-slate-500 pt-1">
-              Default demo PIN is <code className="text-slate-300 font-mono">1234</code>
-            </div>
           </form>
         )}
 
-        {/* Cancel Button */}
-        <div className="w-full mt-4">
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="w-full py-2.5 rounded-xl bg-transparent hover:bg-white/5 text-slate-400 hover:text-slate-200 text-xs transition-colors"
-          >
-            Cancel and Return
-          </button>
+        {/* Security Footer Badge */}
+        <div className="mt-6 pt-4 border-t border-[#2d2f36] w-full flex items-center justify-center gap-1.5 text-[11px] text-[#767882]">
+          <ShieldCheck size={14} className="text-[#a8c7fa]" />
+          <span>Protected with encrypted local storage</span>
         </div>
       </motion.div>
     </div>

@@ -1,3 +1,21 @@
+/**
+ * LockScreen Component - Priority Authentication Flow:
+ * 
+ * PRIORITY 1: Face Unlock (if faceDescriptor exists in localStorage)
+ * PRIORITY 2: PIN entry (only if Face is NOT configured, OR as a manual fallback)
+ * 
+ * FEATURES:
+ * - On app load, checks localStorage for saved "faceDescriptor":
+ *   - If exists -> Shows Face Unlock scanning first (reusing FaceUnlock component)
+ *   - If not -> Shows "Welcome Back" PIN screen directly
+ * - Automatic 10-second timeout fallback to PIN with contextual feedback
+ * - Immediate fallback to PIN if camera access is denied or unavailable
+ * - "Use PIN instead" link on Face Unlock screen
+ * - Persistent session handling (sessionStorage "isUnlocked")
+ * - Seamless container transition between Face Unlock and PIN keypad
+ * - Preserves existing PIN keypad, recovery modal, WebAuthn, and haptics
+ */
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../context/StoreContext';
 import { motion, AnimatePresence } from 'motion/react';
@@ -16,13 +34,15 @@ import {
   Clock,
   Sparkles,
   Loader2,
-  Check
+  Check,
+  AlertTriangle
 } from 'lucide-react';
 import { cn, formatDate } from '../lib/utils';
 import { startAuthentication } from '@simplewebauthn/browser';
 import { createNotification } from '../lib/notificationService';
 import CryptoJS from 'crypto-js';
 import { recordLoginActivity } from '../lib/securityService';
+import FaceUnlock from './FaceUnlock';
 
 interface LockScreenProps {
   onUnlock: () => void;
@@ -34,8 +54,30 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     updateSecuritySettings, 
     unlockApp,
     userProfile,
-    currentUser
+    currentUser 
   } = useStore();
+
+  // ---------------------------------------------------------------------------
+  // STATE MANAGEMENT: Priority Flow ('face' | 'pin')
+  // Checks localStorage for saved "faceDescriptor" on mount
+  // ---------------------------------------------------------------------------
+  const [unlockMethod, setUnlockMethod] = useState<'face' | 'pin'>(() => {
+    try {
+      const raw = localStorage.getItem('faceDescriptor');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length === 128) {
+          return 'face';
+        }
+      }
+    } catch (e) {
+      console.warn("Error reading faceDescriptor on mount:", e);
+    }
+    return 'pin';
+  });
+
+  // Dynamic feedback notice when falling back from Face Unlock to PIN
+  const [pinNotice, setPinNotice] = useState<string | null>(null);
 
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -63,12 +105,12 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
   
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus hidden input for physical keyboard entry
+  // Focus hidden input for physical keyboard entry only when on PIN screen
   useEffect(() => {
-    if (securitySettings.pinEnabled && !showBiometric && !showForgotModal) {
+    if (unlockMethod === 'pin' && securitySettings.pinEnabled && !showBiometric && !showForgotModal) {
       setTimeout(() => inputRef.current?.focus(), 100);
     }
-  }, [securitySettings.pinEnabled, showBiometric, showForgotModal]);
+  }, [unlockMethod, securitySettings.pinEnabled, showBiometric, showForgotModal]);
 
   // Lockout countdown timer
   useEffect(() => {
@@ -90,7 +132,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
         try {
           const available = await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
           setIsBiometricSupported(available);
-          if (available && showBiometric && !isAuthenticating && !biometricError && securitySettings.registeredDevices?.length > 0) {
+          if (available && showBiometric && !isAuthenticating && !biometricError && (securitySettings.registeredDevices?.length ?? 0) > 0) {
             handleBiometricAuth();
           }
         } catch (e) {
@@ -111,6 +153,34 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     } catch (e) {}
   };
 
+  // ---------------------------------------------------------------------------
+  // FACE UNLOCK HANDLERS
+  // ---------------------------------------------------------------------------
+  const handleFaceUnlockSuccess = () => {
+    try {
+      sessionStorage.setItem('isUnlocked', 'true');
+    } catch (e) {}
+    unlockApp(); // Unlocks app in store context & records login
+    setIsUnlocking(true);
+    triggerHaptic();
+    setTimeout(onUnlock, 400);
+  };
+
+  const handleFallbackToPin = (reason?: string) => {
+    if (reason) {
+      setPinNotice(reason);
+    }
+    setUnlockMethod('pin');
+  };
+
+  const handleUsePinManual = () => {
+    setPinNotice(null);
+    setUnlockMethod('pin');
+  };
+
+  // ---------------------------------------------------------------------------
+  // WEBAUTHN BIOMETRIC AUTH HANDLER
+  // ---------------------------------------------------------------------------
   const handleBiometricAuth = async () => {
     if (isAuthenticating || lockoutTime > 0) return;
     setIsAuthenticating(true);
@@ -176,6 +246,9 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
           userName: currentUser?.displayName || userProfile?.fullName || '',
           userAvatar: currentUser?.photoURL || userProfile?.profilePhoto || ''
         });
+        try {
+          sessionStorage.setItem('isUnlocked', 'true');
+        } catch (e) {}
         setIsUnlocking(true);
         triggerHaptic();
         setTimeout(onUnlock, 400);
@@ -200,6 +273,9 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // PIN VERIFICATION HANDLERS
+  // ---------------------------------------------------------------------------
   const verifyAndUnlock = (pinToVerify: string) => {
     if (lockoutTime > 0 || pinToVerify.length !== pinLength || isVerifying) return;
 
@@ -209,6 +285,9 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     setTimeout(() => {
       const success = unlockApp(pinToVerify);
       if (success) {
+        try {
+          sessionStorage.setItem('isUnlocked', 'true');
+        } catch (e) {}
         setFailedAttempts(0);
         setIsUnlocking(true);
         setIsVerifying(false);
@@ -319,10 +398,13 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     setFallbackInput('');
     setNewPin('');
     setConfirmNewPin('');
+    try {
+      sessionStorage.setItem('isUnlocked', 'true');
+    } catch (e) {}
     onUnlock();
   };
 
-  // Biometric fallback screen
+  // Biometric fallback modal screen
   if (showBiometric) {
     return (
       <motion.div 
@@ -360,29 +442,27 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
             </motion.p>
           )}
 
-          <div className="flex flex-col gap-3.5 w-full">
-            <button 
-              onClick={handleBiometricAuth}
-              disabled={!isBiometricSupported || isAuthenticating}
-              className="w-full h-13 rounded-full bg-[#a8c7fa] hover:bg-[#c2e7ff] text-[#042e6f] font-semibold text-sm transition-all duration-200 shadow-md active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          <div className="w-full flex flex-col gap-3">
+            {isBiometricSupported && (
+              <button
+                type="button"
+                disabled={isAuthenticating}
+                onClick={handleBiometricAuth}
+                className="w-full py-3.5 bg-[#a8c7fa] text-[#042e6f] hover:bg-[#c2e7ff] font-bold rounded-2xl transition-all shadow-md active:scale-98 disabled:opacity-50"
+              >
+                {isAuthenticating ? 'Authenticating...' : 'Try Again'}
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowBiometric(false);
+                setUnlockMethod('pin');
+              }}
+              className="w-full py-3.5 bg-transparent hover:bg-white/5 text-[#a8c7fa] font-semibold text-sm rounded-2xl transition-colors border border-[#33353a]"
             >
-              {isAuthenticating ? (
-                <>
-                  <Loader2 size={18} className="animate-spin" />
-                  <span>Authenticating...</span>
-                </>
-              ) : (
-                <>
-                  {securitySettings.faceUnlockEnabled ? <ScanFace size={18} /> : <Fingerprint size={18} />}
-                  <span>Verify Identity</span>
-                </>
-              )}
-            </button>
-            <button 
-              onClick={() => setShowBiometric(false)}
-              className="w-full h-13 rounded-full bg-[#2b2c32] hover:bg-[#36383e] text-[#e2e2e9] font-medium text-sm transition-all duration-200 active:scale-[0.98]"
-            >
-              Use PIN Instead
+              Use PIN Code Instead
             </button>
           </div>
         </div>
@@ -390,17 +470,18 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // MAIN RENDER SURFACE (Seamless Container swapping between Face and PIN)
+  // ---------------------------------------------------------------------------
   return (
     <motion.div 
       initial={{ opacity: 0 }}
-      animate={{ 
-        scale: isUnlocking ? 1.04 : 1, 
-        opacity: isUnlocking ? 0 : 1 
-      }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
       transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
       className="fixed inset-0 z-50 bg-[#0d0e12] text-[#e2e2e9] flex flex-col items-center justify-center p-4 sm:p-6 overflow-y-auto select-none font-sans"
       role="region"
-      aria-label="PIN Unlock Screen"
+      aria-label="Security Lock Screen"
     >
       {/* Material 3 Dynamic Atmospheric Background */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -413,271 +494,318 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_transparent_0%,_#0d0e12_85%)]" />
       </div>
 
-      {/* Main Material 3 Surface Container */}
+      {/* Main Material 3 Surface Container (Shared seamlessly across Face and PIN) */}
       <motion.div 
         initial={{ scale: 0.94, opacity: 0, y: 16 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
         className="relative z-10 flex flex-col items-center max-w-[400px] w-full bg-[#1a1b20] border border-[#2d2f36] rounded-[28px] sm:rounded-[32px] p-4 sm:p-8 shadow-[0_24px_64px_rgba(0,0,0,0.65)]"
       >
-        {/* Brand & Entrance Animation */}
-        <motion.div 
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 400, damping: 26, delay: 0.05 }}
-          className="flex flex-col items-center mb-6"
-        >
-          {/* M3 Expressive Pixel Icon Container */}
-          <div className="relative mb-3.5 group">
-            <div className="absolute -inset-1.5 rounded-[24px] bg-[#a8c7fa]/20 blur-md pointer-events-none transition-all duration-300 group-hover:bg-[#a8c7fa]/35" />
-            <div className="relative w-16 h-16 bg-[#252830] border border-[#3a3d47] rounded-[22px] flex items-center justify-center shadow-lg text-[#a8c7fa]">
-              <Lock className="w-8 h-8 transition-transform duration-300 group-hover:scale-105" />
-            </div>
-          </div>
-
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#e2e2e9] text-center">
-            Welcome Back
-          </h1>
-          <p className="text-[#90909a] text-xs sm:text-sm mt-1 text-center font-medium max-w-[280px]">
-            {securitySettings.pinEnabled 
-              ? 'Enter your PIN to securely access your ledger' 
-              : 'Security lock active. Tap below to proceed'}
-          </p>
-
-          {/* Last Login Info Pill */}
-          <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#24262c] text-[#a5a7b0] text-[11px] font-medium border border-[#32353c]">
-            <Clock size={12} className="text-[#a8c7fa]" />
-            <span>Encrypted Session</span>
-          </div>
-        </motion.div>
-        
-        {securitySettings.pinEnabled && (
-          <>
-            {/* Hidden Input for Keyboard Typing */}
-            <input
-              ref={inputRef}
-              type="text"
-              inputMode="none"
-              value={pinInput}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              className="opacity-0 absolute inset-0 w-full h-full z-10 cursor-default text-transparent caret-transparent pointer-events-none"
-              aria-label="Enter 4-digit PIN"
-              autoComplete="off"
-              maxLength={pinLength}
-            />
-
-            {/* M3 Pill & Circle PIN Indicators */}
-            <motion.div 
-              key={shakeKey}
-              animate={error ? { x: [-12, 12, -8, 8, -4, 4, 0] } : { x: 0 }}
-              transition={{ duration: 0.4 }}
-              className="w-full mb-6 flex flex-col items-center"
-              onClick={() => inputRef.current?.focus()}
+        <AnimatePresence mode="wait">
+          {unlockMethod === 'face' ? (
+            /* ===============================================================
+             * PRIORITY 1: FACE UNLOCK SCANNING SCREEN
+             * =============================================================== */
+            <motion.div
+              key="face-unlock-view"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2 }}
+              className="w-full flex flex-col items-center"
             >
-              <div className="flex items-center justify-center gap-4 py-2">
-                {Array.from({ length: pinLength }).map((_, i) => {
-                  const isFilled = i < pinInput.length;
-                  const isCurrent = i === pinInput.length && !error;
-
-                  return (
-                    <motion.div
-                      key={i}
-                      animate={{
-                        scale: isFilled ? 1.15 : isCurrent ? 1.05 : 1,
-                      }}
-                      transition={{ type: "spring", stiffness: 500, damping: 28 }}
-                      className={cn(
-                        "relative flex items-center justify-center rounded-full transition-all duration-200",
-                        // Base size: 18px circle, pill-shaped
-                        "w-5 h-5",
-                        error
-                          ? "bg-[#ffb4ab] border-2 border-[#ba1a1a] shadow-[0_0_12px_rgba(255,180,171,0.5)]"
-                          : isUnlocking
-                          ? "bg-[#a8c7fa] border-2 border-[#a8c7fa] shadow-[0_0_14px_rgba(168,199,250,0.8)]"
-                          : isFilled
-                          ? "bg-[#a8c7fa] border-2 border-[#a8c7fa] shadow-[0_0_10px_rgba(168,199,250,0.4)]"
-                          : isCurrent
-                          ? "bg-[#252830] border-2 border-[#a8c7fa]/70 ring-2 ring-[#a8c7fa]/20"
-                          : "bg-[#252830] border-2 border-[#41434b]"
-                      )}
-                    >
-                      {/* Inner Dot Animation */}
-                      <AnimatePresence>
-                        {isFilled && (
-                          <motion.div
-                            initial={{ scale: 0, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0, opacity: 0 }}
-                            transition={{ duration: 0.15 }}
-                            className="w-2.5 h-2.5 rounded-full bg-[#042e6f]"
-                          />
-                        )}
-                      </AnimatePresence>
-                    </motion.div>
-                  );
-                })}
-              </div>
-
-              {/* Status / Lockout / Error Message Bar */}
-              <div className="h-6 mt-2 flex items-center justify-center text-center">
-                {lockoutTime > 0 ? (
-                  <motion.p 
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="text-[#ffb4ab] text-xs font-semibold flex items-center gap-1.5 bg-[#93000a]/25 px-3 py-1 rounded-full border border-[#ffb4ab]/30"
-                  >
-                    <Lock size={13} /> Try again in {lockoutTime}s
-                  </motion.p>
-                ) : error ? (
-                  <motion.p 
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="text-[#ffb4ab] text-xs font-semibold flex items-center gap-1.5"
-                  >
-                    <XCircle size={14} /> Incorrect PIN. Please try again.
-                  </motion.p>
-                ) : isVerifying ? (
-                  <motion.p 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="text-[#a8c7fa] text-xs font-medium flex items-center gap-1.5"
-                  >
-                    <Loader2 size={13} className="animate-spin" /> Verifying PIN...
-                  </motion.p>
-                ) : (
-                  <span className="text-[11px] text-[#767882]">{pinLength}-digit secure code</span>
-                )}
-              </div>
+              <FaceUnlock
+                embedded={true}
+                onUnlock={handleFaceUnlockSuccess}
+                onUsePin={handleUsePinManual}
+                onFallbackToPin={handleFallbackToPin}
+                title="Face Unlock"
+              />
             </motion.div>
-
-            {/* M3 Expressive Number Pad: 56px-72px Circular Buttons */}
-            <div className="w-full mb-6">
-              <div className="grid grid-cols-3 gap-y-3 sm:gap-y-3.5 gap-x-3 sm:gap-x-4 place-items-center w-full max-w-[280px] mx-auto">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-                  <motion.button
-                    key={num}
-                    type="button"
-                    disabled={lockoutTime > 0 || isVerifying || isUnlocking}
-                    onClick={() => handlePinInput(num.toString())}
-                    whileHover={{ scale: 1.04 }}
-                    whileTap={{ scale: 0.92 }}
-                    transition={{ type: "spring", stiffness: 450, damping: 25 }}
-                    aria-label={`Digit ${num}`}
-                    className="w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-full flex flex-col items-center justify-center bg-[#252830] hover:bg-[#31343d] active:bg-[#3e424d] text-[#e2e2e9] transition-colors border border-[#343740] shadow-sm select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa] disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <span className="text-xl sm:text-2xl font-bold font-mono leading-none tracking-tight">{num}</span>
-                  </motion.button>
-                ))}
-
-                {/* Bottom Row: Biometric Shortcut / Blank, 0, and Delete Outlined Button */}
-                {securitySettings.biometricEnabled && isBiometricSupported ? (
-                  <motion.button
-                    type="button"
-                    disabled={lockoutTime > 0 || isVerifying || isUnlocking}
-                    onClick={() => setShowBiometric(true)}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.92 }}
-                    aria-label="Use Biometrics"
-                    title="Unlock with Biometrics"
-                    className="w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-full flex items-center justify-center bg-[#20232b] hover:bg-[#2c303a] text-[#a8c7fa] border border-[#343740] transition-colors select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa]"
-                  >
-                    {securitySettings.faceUnlockEnabled ? <ScanFace size={22} /> : <Fingerprint size={22} />}
-                  </motion.button>
-                ) : (
-                  <div className="w-14 h-14 sm:w-[72px] sm:h-[72px]" />
-                )}
-
-                <motion.button
-                  type="button"
-                  disabled={lockoutTime > 0 || isVerifying || isUnlocking}
-                  onClick={() => handlePinInput('0')}
-                  whileHover={{ scale: 1.04 }}
-                  whileTap={{ scale: 0.92 }}
-                  transition={{ type: "spring", stiffness: 450, damping: 25 }}
-                  aria-label="Digit 0"
-                  className="w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-full flex flex-col items-center justify-center bg-[#252830] hover:bg-[#31343d] active:bg-[#3e424d] text-[#e2e2e9] transition-colors border border-[#343740] shadow-sm select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa] disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <span className="text-xl sm:text-2xl font-bold font-mono leading-none tracking-tight">0</span>
-                </motion.button>
-
-                <motion.button
-                  type="button"
-                  disabled={lockoutTime > 0 || pinInput.length === 0 || isVerifying || isUnlocking}
-                  onClick={handleDelete}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.92 }}
-                  aria-label="Delete last digit"
-                  className="w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-full flex items-center justify-center bg-[#252830]/60 hover:bg-[#31343d] text-[#a5a7b0] hover:text-[#e2e2e9] border border-[#343740] transition-colors select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa] disabled:opacity-25 disabled:cursor-not-allowed"
-                >
-                  <Delete size={20} />
-                </motion.button>
-              </div>
-            </div>
-
-            {/* M3 Unlock Button: Animated Transition from Disabled Tonal to Primary Filled */}
-            <motion.button
-              type="button"
-              disabled={pinInput.length !== pinLength || lockoutTime > 0 || isVerifying || isUnlocking}
-              onClick={() => verifyAndUnlock(pinInput)}
-              whileHover={pinInput.length === pinLength ? { scale: 1.02 } : {}}
-              whileTap={pinInput.length === pinLength ? { scale: 0.98 } : {}}
-              className={cn(
-                "w-full h-14 rounded-full font-bold text-sm sm:text-base transition-all duration-300 flex items-center justify-center gap-2.5 shadow-md",
-                pinInput.length === pinLength && !lockoutTime
-                  ? "bg-[#a8c7fa] text-[#042e6f] hover:bg-[#c2e7ff] shadow-[0_4px_20px_rgba(168,199,250,0.35)] cursor-pointer"
-                  : "bg-[#25272e] text-[#6b6e78] border border-[#343740] cursor-not-allowed opacity-75"
-              )}
+          ) : (
+            /* ===============================================================
+             * PRIORITY 2: "WELCOME BACK" PIN SCREEN
+             * =============================================================== */
+            <motion.div
+              key="pin-unlock-view"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2 }}
+              className="w-full flex flex-col items-center"
             >
-              {isVerifying ? (
+              {/* Brand & Entrance Animation */}
+              <motion.div 
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 400, damping: 26, delay: 0.05 }}
+                className="flex flex-col items-center mb-6"
+              >
+                {/* M3 Expressive Pixel Icon Container */}
+                <div className="relative mb-3.5 group">
+                  <div className="absolute -inset-1.5 rounded-[24px] bg-[#a8c7fa]/20 blur-md pointer-events-none transition-all duration-300 group-hover:bg-[#a8c7fa]/35" />
+                  <div className="relative w-16 h-16 bg-[#252830] border border-[#3a3d47] rounded-[22px] flex items-center justify-center shadow-lg text-[#a8c7fa]">
+                    <Lock className="w-8 h-8 transition-transform duration-300 group-hover:scale-105" />
+                  </div>
+                </div>
+
+                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#e2e2e9] text-center">
+                  Welcome Back
+                </h1>
+                <p className="text-[#90909a] text-xs sm:text-sm mt-1 text-center font-medium max-w-[280px]">
+                  {securitySettings.pinEnabled 
+                    ? 'Enter your PIN to securely access your ledger' 
+                    : 'Security lock active. Tap below to proceed'}
+                </p>
+
+                {/* Last Login Info Pill */}
+                <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#24262c] text-[#a5a7b0] text-[11px] font-medium border border-[#32353c]">
+                  <Clock size={12} className="text-[#a8c7fa]" />
+                  <span>Encrypted Session</span>
+                </div>
+              </motion.div>
+
+              {/* Notice Banner if automatically transitioned from Face Unlock */}
+              {pinNotice && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-4 px-3.5 py-1.5 rounded-full bg-[#93000a]/25 border border-[#ffb4ab]/30 text-[#ffb4ab] text-xs font-semibold flex items-center gap-1.5 text-center shadow-sm"
+                >
+                  <AlertTriangle size={13} className="shrink-0 text-[#ffb4ab]" />
+                  <span>{pinNotice}</span>
+                </motion.div>
+              )}
+              
+              {securitySettings.pinEnabled && (
                 <>
-                  <Loader2 size={20} className="animate-spin" />
-                  <span>Verifying...</span>
+                  {/* Hidden Input for Keyboard Typing */}
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    inputMode="none"
+                    value={pinInput}
+                    onChange={handleInputChange}
+                    onKeyDown={handleKeyDown}
+                    className="opacity-0 absolute inset-0 w-full h-full z-10 cursor-default text-transparent caret-transparent pointer-events-none"
+                    aria-label="Enter 4-digit PIN"
+                    autoComplete="off"
+                    maxLength={pinLength}
+                  />
+
+                  {/* M3 Pill & Circle PIN Indicators */}
+                  <motion.div 
+                    key={shakeKey}
+                    animate={error ? { x: [-12, 12, -8, 8, -4, 4, 0] } : { x: 0 }}
+                    transition={{ duration: 0.4 }}
+                    className="w-full mb-6 flex flex-col items-center"
+                    onClick={() => inputRef.current?.focus()}
+                  >
+                    <div className="flex items-center justify-center gap-4 py-2">
+                      {Array.from({ length: pinLength }).map((_, i) => {
+                        const isFilled = i < pinInput.length;
+                        const isCurrent = i === pinInput.length && !error;
+
+                        return (
+                          <motion.div
+                            key={i}
+                            animate={{
+                              scale: isFilled ? 1.15 : isCurrent ? 1.05 : 1,
+                            }}
+                            transition={{ type: "spring", stiffness: 500, damping: 28 }}
+                            className={cn(
+                              "relative flex items-center justify-center rounded-full transition-all duration-200",
+                              "w-5 h-5",
+                              error
+                                ? "bg-[#ffb4ab] border-2 border-[#ba1a1a] shadow-[0_0_12px_rgba(255,180,171,0.5)]"
+                                : isUnlocking
+                                ? "bg-[#a8c7fa] border-2 border-[#a8c7fa] shadow-[0_0_14px_rgba(168,199,250,0.8)]"
+                                : isFilled
+                                ? "bg-[#a8c7fa] border-2 border-[#a8c7fa] shadow-[0_0_10px_rgba(168,199,250,0.4)]"
+                                : isCurrent
+                                ? "bg-[#252830] border-2 border-[#a8c7fa]/70 ring-2 ring-[#a8c7fa]/20"
+                                : "bg-[#252830] border-2 border-[#41434b]"
+                            )}
+                          >
+                            {/* Inner Dot Animation */}
+                            <AnimatePresence>
+                              {isFilled && (
+                                <motion.div
+                                  initial={{ scale: 0, opacity: 0 }}
+                                  animate={{ scale: 1, opacity: 1 }}
+                                  exit={{ scale: 0, opacity: 0 }}
+                                  transition={{ duration: 0.15 }}
+                                  className="w-2.5 h-2.5 rounded-full bg-[#042e6f]"
+                                />
+                              )}
+                            </AnimatePresence>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Status / Lockout / Error Message Bar */}
+                    <div className="h-6 mt-2 flex items-center justify-center text-center">
+                      {lockoutTime > 0 ? (
+                        <motion.p 
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="text-[#ffb4ab] text-xs font-semibold flex items-center gap-1.5 bg-[#93000a]/25 px-3 py-1 rounded-full border border-[#ffb4ab]/30"
+                        >
+                          <Lock size={13} /> Try again in {lockoutTime}s
+                        </motion.p>
+                      ) : error ? (
+                        <motion.p 
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="text-[#ffb4ab] text-xs font-semibold flex items-center gap-1.5"
+                        >
+                          <XCircle size={14} /> Incorrect PIN. Please try again.
+                        </motion.p>
+                      ) : isVerifying ? (
+                        <motion.p 
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="text-[#a8c7fa] text-xs font-medium flex items-center gap-1.5"
+                        >
+                          <Loader2 size={13} className="animate-spin" /> Verifying PIN...
+                        </motion.p>
+                      ) : (
+                        <span className="text-[11px] text-[#767882]">{pinLength}-digit secure code</span>
+                      )}
+                    </div>
+                  </motion.div>
+
+                  {/* M3 Expressive Number Pad: 56px-72px Circular Buttons */}
+                  <div className="w-full mb-6">
+                    <div className="grid grid-cols-3 gap-y-3 sm:gap-y-3.5 gap-x-3 sm:gap-x-4 place-items-center w-full max-w-[280px] mx-auto">
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                        <motion.button
+                          key={num}
+                          type="button"
+                          disabled={lockoutTime > 0 || isVerifying || isUnlocking}
+                          onClick={() => handlePinInput(num.toString())}
+                          whileHover={{ scale: 1.04 }}
+                          whileTap={{ scale: 0.92 }}
+                          transition={{ type: "spring", stiffness: 450, damping: 25 }}
+                          aria-label={`Digit ${num}`}
+                          className="w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-full flex flex-col items-center justify-center bg-[#252830] hover:bg-[#31343d] active:bg-[#3e424d] text-[#e2e2e9] transition-colors border border-[#343740] shadow-sm select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa] disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <span className="text-xl sm:text-2xl font-bold font-mono leading-none tracking-tight">{num}</span>
+                        </motion.button>
+                      ))}
+
+                      {/* Bottom Row: Biometric Shortcut / Blank, 0, and Delete Button */}
+                      {securitySettings.biometricEnabled && isBiometricSupported ? (
+                        <motion.button
+                          type="button"
+                          disabled={lockoutTime > 0 || isVerifying || isUnlocking}
+                          onClick={() => setShowBiometric(true)}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.92 }}
+                          aria-label="Use Biometrics"
+                          title="Unlock with Biometrics"
+                          className="w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-full flex items-center justify-center bg-[#20232b] hover:bg-[#2c303a] text-[#a8c7fa] border border-[#343740] transition-colors select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa]"
+                        >
+                          {securitySettings.faceUnlockEnabled ? <ScanFace size={22} /> : <Fingerprint size={22} />}
+                        </motion.button>
+                      ) : (
+                        <div className="w-14 h-14 sm:w-[72px] sm:h-[72px]" />
+                      )}
+
+                      <motion.button
+                        type="button"
+                        disabled={lockoutTime > 0 || isVerifying || isUnlocking}
+                        onClick={() => handlePinInput('0')}
+                        whileHover={{ scale: 1.04 }}
+                        whileTap={{ scale: 0.92 }}
+                        transition={{ type: "spring", stiffness: 450, damping: 25 }}
+                        aria-label="Digit 0"
+                        className="w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-full flex flex-col items-center justify-center bg-[#252830] hover:bg-[#31343d] active:bg-[#3e424d] text-[#e2e2e9] transition-colors border border-[#343740] shadow-sm select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa] disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <span className="text-xl sm:text-2xl font-bold font-mono leading-none tracking-tight">0</span>
+                      </motion.button>
+
+                      <motion.button
+                        type="button"
+                        disabled={lockoutTime > 0 || pinInput.length === 0 || isVerifying || isUnlocking}
+                        onClick={handleDelete}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.92 }}
+                        aria-label="Delete last digit"
+                        className="w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-full flex items-center justify-center bg-[#252830]/60 hover:bg-[#31343d] text-[#a5a7b0] hover:text-[#e2e2e9] border border-[#343740] transition-colors select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa] disabled:opacity-25 disabled:cursor-not-allowed"
+                      >
+                        <Delete size={20} />
+                      </motion.button>
+                    </div>
+                  </div>
+
+                  {/* M3 Unlock Button: Animated Transition from Disabled Tonal to Primary Filled */}
+                  <motion.button
+                    type="button"
+                    disabled={pinInput.length !== pinLength || lockoutTime > 0 || isVerifying || isUnlocking}
+                    onClick={() => verifyAndUnlock(pinInput)}
+                    whileHover={pinInput.length === pinLength ? { scale: 1.02 } : {}}
+                    whileTap={pinInput.length === pinLength ? { scale: 0.98 } : {}}
+                    className={cn(
+                      "w-full h-14 rounded-full font-bold text-sm sm:text-base transition-all duration-300 flex items-center justify-center gap-2.5 shadow-md",
+                      pinInput.length === pinLength && !lockoutTime
+                        ? "bg-[#a8c7fa] text-[#042e6f] hover:bg-[#c2e7ff] shadow-[0_4px_20px_rgba(168,199,250,0.35)] cursor-pointer"
+                        : "bg-[#25272e] text-[#6b6e78] border border-[#343740] cursor-not-allowed opacity-75"
+                    )}
+                  >
+                    {isVerifying ? (
+                      <>
+                        <Loader2 size={20} className="animate-spin" />
+                        <span>Verifying...</span>
+                      </>
+                    ) : isUnlocking ? (
+                      <>
+                        <Check size={20} className="text-[#042e6f]" />
+                        <span>Unlocked</span>
+                      </>
+                    ) : (
+                      <>
+                        <KeyRound size={18} />
+                        <span>Unlock Smart Ledger</span>
+                      </>
+                    )}
+                  </motion.button>
+
+                  {/* Forgot PIN Link */}
+                  <div className="mt-4 flex items-center justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotModal(true)}
+                      className="text-xs text-[#a8c7fa] hover:text-[#c2e7ff] font-medium hover:underline transition-colors py-1 px-2 rounded-lg"
+                    >
+                      Forgot PIN?
+                    </button>
+                  </div>
                 </>
-              ) : isUnlocking ? (
-                <>
-                  <Check size={20} className="text-[#042e6f]" />
-                  <span>Unlocked</span>
-                </>
-              ) : (
-                <>
+              )}
+
+              {!securitySettings.pinEnabled && (
+                <motion.button
+                  type="button"
+                  onClick={onUnlock}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="w-full h-14 rounded-full bg-[#a8c7fa] hover:bg-[#c2e7ff] text-[#042e6f] font-bold text-base transition-all duration-200 shadow-md flex items-center justify-center gap-2 mt-4"
+                >
                   <KeyRound size={18} />
                   <span>Unlock Smart Ledger</span>
-                </>
+                </motion.button>
               )}
-            </motion.button>
 
-            {/* Forgot PIN Link */}
-            <div className="mt-4 flex items-center justify-center">
-              <button
-                type="button"
-                onClick={() => setShowForgotModal(true)}
-                className="text-xs text-[#a8c7fa] hover:text-[#c2e7ff] font-medium hover:underline transition-colors py-1 px-2 rounded-lg"
-              >
-                Forgot PIN?
-              </button>
-            </div>
-          </>
-        )}
-
-        {!securitySettings.pinEnabled && (
-          <motion.button
-            type="button"
-            onClick={onUnlock}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="w-full h-14 rounded-full bg-[#a8c7fa] hover:bg-[#c2e7ff] text-[#042e6f] font-bold text-base transition-all duration-200 shadow-md flex items-center justify-center gap-2 mt-4"
-          >
-            <KeyRound size={18} />
-            <span>Unlock Smart Ledger</span>
-          </motion.button>
-        )}
-
-        {/* Security Footer Badge */}
-        <div className="mt-6 pt-4 border-t border-[#2d2f36] w-full flex items-center justify-center gap-1.5 text-[11px] text-[#767882]">
-          <ShieldCheck size={14} className="text-[#a8c7fa]" />
-          <span>Protected with encrypted local storage</span>
-        </div>
+              {/* Security Footer Badge */}
+              <div className="mt-6 pt-4 border-t border-[#2d2f36] w-full flex items-center justify-center gap-1.5 text-[11px] text-[#767882]">
+                <ShieldCheck size={14} className="text-[#a8c7fa]" />
+                <span>Protected with encrypted local storage</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
 
       {/* Forgot PIN / Reset Modal */}

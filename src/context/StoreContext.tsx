@@ -4,7 +4,7 @@ import CryptoJS from 'crypto-js';
 import { calculateProgress, ACHIEVEMENTS } from '../lib/achievements';
 import { DEFAULT_REMINDER_TEMPLATE } from '../lib/utils';
 import { auth } from '../lib/firebase';
-import { onAuthStateChanged, User, signOut } from 'firebase/auth';
+import { onAuthStateChanged, User, signOut, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { subscribeToState, queueStateSync, migrateLocalDataToCloud, syncUserProfile, fetchUserState } from "../lib/cloudSync";
 import { createNotification } from '../lib/notificationService';
 import { systemModeService } from '../lib/systemModeService';
@@ -117,7 +117,8 @@ interface StoreContextType extends AppState {
   adminLogout: () => Promise<void>;
   updateAdminPassword: (currentPass: string, newPass: string) => Promise<{ success: boolean; error?: string }>;
   isLocked: boolean;
-  unlockApp: (pin: string) => boolean;
+  isUnlocked: boolean;
+  unlockApp: (pin?: string) => boolean;
   lockApp: () => void;
   loginWithPin: (pin: string) => boolean;
   currentUser: User | null;
@@ -242,7 +243,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [dataError, setDataError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [newlyUnlocked, setNewlyUnlocked] = useState<UnlockedAchievement | null>(null);
-  const [isLocked, setIsLocked] = useState(false); // Initialized later based on settings
+  const [isLocked, setIsLocked] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem('isUnlocked') !== 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // Ensure Firebase Auth browserLocalPersistence so session survives refresh & auto-lock
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setPersistence(auth, browserLocalPersistence).catch((err) => {
+        console.warn('[Firebase Auth] Persistence notice:', err);
+      });
+    }
+  }, []);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
@@ -375,6 +391,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setCurrentUser(user);
         setIsAuthenticated(true);
         setIsAuthReady(true);
+        try {
+          const unlocked = sessionStorage.getItem('isUnlocked') === 'true';
+          setIsLocked(!unlocked);
+        } catch (e) {}
         try {
           localStorage.setItem('smartledger_authenticated', 'true');
         } catch (e) {}
@@ -582,6 +602,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     try {
       localStorage.removeItem('smartledger_authenticated');
       localStorage.removeItem('smart-ledger-data');
+      sessionStorage.removeItem('isUnlocked');
     } catch (e) {}
     setState(defaultState);
     prevStateRef.current = defaultState;
@@ -676,18 +697,38 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (isInitialized && state.securitySettings.pinEnabled) {
-      setIsLocked(true);
-    }
-  }, [isInitialized, state.securitySettings.pinEnabled]);
+    try {
+      const unlocked = sessionStorage.getItem('isUnlocked') === 'true';
+      setIsLocked(!unlocked);
+    } catch (e) {}
+  }, [isInitialized]);
 
-  const unlockApp = (pin: string) => {
-    if (!pin || (pin.length !== 4 && pin.length !== 6)) return false;
+  const unlockApp = (pin?: string) => {
+    if (!pin) {
+      // Face / Biometric direct unlock
+      setIsLocked(false);
+      try {
+        sessionStorage.setItem('isUnlocked', 'true');
+      } catch (e) {}
+      recordLoginActivity(currentUser?.uid || 'local_user', {
+        method: 'Biometric',
+        status: 'Success',
+        email: currentUser?.email || state.userProfile?.email || '',
+        userName: currentUser?.displayName || state.userProfile?.fullName || '',
+        userAvatar: currentUser?.photoURL || state.userProfile?.profilePhoto || ''
+      });
+      return true;
+    }
+
+    if (pin.length !== 4 && pin.length !== 6) return false;
     const configuredPin = state.securitySettings.pin;
     
     if (configuredPin) {
       if (verifyPin(pin, configuredPin)) {
         setIsLocked(false);
+        try {
+          sessionStorage.setItem('isUnlocked', 'true');
+        } catch (e) {}
         recordLoginActivity(currentUser?.uid || 'local_user', {
           method: 'PIN',
           status: 'Success',
@@ -707,14 +748,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return false;
     } else {
       setIsLocked(false);
+      try {
+        sessionStorage.setItem('isUnlocked', 'true');
+      } catch (e) {}
       return true;
     }
   };
 
   const lockApp = () => {
-    if (state.securitySettings.pinEnabled) {
-      setIsLocked(true);
-    }
+    try {
+      sessionStorage.removeItem('isUnlocked');
+    } catch (e) {}
+    setIsLocked(true);
   };
 
   useEffect(() => {
@@ -1542,6 +1587,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       adminLogout,
       updateAdminPassword,
       isLocked,
+      isUnlocked: !isLocked,
       unlockApp,
       lockApp,
       loginWithPin,

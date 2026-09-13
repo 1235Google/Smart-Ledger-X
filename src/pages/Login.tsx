@@ -47,6 +47,9 @@ export default function Login() {
       try {
         const user = await checkRedirectResult();
         if (user && isMounted) {
+          try {
+            sessionStorage.setItem('isUnlocked', 'true');
+          } catch (e) {}
           console.log('[Auth] Detected successful Google redirect login for:', user.uid);
           navigate('/', { replace: true });
         }
@@ -90,6 +93,9 @@ export default function Login() {
       const result = await loginWithGoogle();
       console.log('[Auth Action] Google Sign-In successful for user:', result?.user?.uid);
       if (result?.user) {
+        try {
+          sessionStorage.setItem('isUnlocked', 'true');
+        } catch (e) {}
         await recordLoginActivity(result.user.uid, {
           method: 'Google',
           status: 'Success',
@@ -183,6 +189,9 @@ export default function Login() {
           updateUserProfile({ fullName: fullName.trim() });
         }
         if (cred.user) {
+          try {
+            sessionStorage.setItem('isUnlocked', 'true');
+          } catch (e) {}
           await recordLoginActivity(cred.user.uid, {
             method: 'Email',
             status: 'Success',
@@ -225,6 +234,9 @@ export default function Login() {
         }
 
         if (cred.user) {
+          try {
+            sessionStorage.setItem('isUnlocked', 'true');
+          } catch (e) {}
           await recordLoginActivity(cred.user.uid, {
             method: 'Email',
             status: 'Success',

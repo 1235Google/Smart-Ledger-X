@@ -726,13 +726,37 @@ export async function recordLoginActivity(
       console.log(`[Security] Login activity logged in cloud for ${userId} (${options.email}): ${options.method} -> ${options.status}`);
     }
 
-    // 4. If successful, also register/update device
+    // 4. If successful, also register/update device and send login notification email via Resend
     if (options.status === 'Success') {
       await registerOrUpdateDevice(userId, {
         email: options.email,
         userName: options.userName,
         userAvatar: options.userAvatar
       });
+
+      if (options.email) {
+        try {
+          const dedupeKey = 'smartledger_login_email_sent_' + options.email;
+          const lastSent = sessionStorage.getItem(dedupeKey);
+          const now = Date.now();
+          if (!lastSent || now - Number(lastSent) > 120000) {
+            sessionStorage.setItem(dedupeKey, String(now));
+            fetch('/api/security/notify-login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: options.email,
+                time: new Date().toLocaleString(),
+                device: dev.deviceName,
+                browser: dev.browser,
+                os: dev.os,
+                location: net.location,
+                ip: net.ip
+              })
+            }).catch(err => console.warn('[Security] Failed to dispatch login alert:', err?.message));
+          }
+        } catch (e) {}
+      }
     }
   } catch (err) {
     console.warn('[Security] Failed to record login activity:', err);

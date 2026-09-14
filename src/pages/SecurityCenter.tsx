@@ -89,6 +89,28 @@ export default function SecurityCenter() {
       ? 'Email & Password' 
       : 'Local Session';
 
+  // Test Email state
+  const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
+  const [testEmailResult, setTestEmailResult] = useState<{ success?: boolean; error?: string } | null>(null);
+
+  const handleSendTestEmail = async () => {
+    setIsSendingTestEmail(true);
+    setTestEmailResult(null);
+    try {
+      const res = await fetch('/api/security/test-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: activeUserEmail })
+      });
+      const data = await res.json();
+      setTestEmailResult(data);
+    } catch (e: any) {
+      setTestEmailResult({ success: false, error: e.message });
+    } finally {
+      setIsSendingTestEmail(false);
+    }
+  };
+
   // Subscriptions to Firestore and local telemetry
   useEffect(() => {
     setLoadingDevices(true);
@@ -438,6 +460,36 @@ export default function SecurityCenter() {
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
+            <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+              Email Security Alerts (Resend API)
+            </h3>
+            <p className="text-sm text-neutral-400 mb-4">
+              Automated notifications for successful logins, password changes, new device detection, and failed login attempt lockouts are active.
+            </p>
+            <div className="flex flex-wrap items-center gap-4">
+              <button
+                onClick={handleSendTestEmail}
+                disabled={isSendingTestEmail}
+                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow transition-all disabled:opacity-50 flex items-center gap-2"
+              >
+                {isSendingTestEmail ? 'Sending Test Email...' : 'Send Test Security Email'}
+              </button>
+              <span className="text-xs text-neutral-400">
+                Target: <strong className="text-white">{activeUserEmail}</strong> (via onboarding@resend.dev)
+              </span>
+            </div>
+            {testEmailResult && (
+              <div className={cn(
+                "mt-3 p-3 rounded-xl text-xs font-medium",
+                testEmailResult.success ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20" : "bg-rose-500/10 text-rose-300 border border-rose-500/20"
+              )}>
+                {testEmailResult.success ? '✓ Test security email sent successfully via Resend!' : `❌ Failed to send email: ${testEmailResult.error}`}
+              </div>
+            )}
           </div>
         </motion.div>
       )}

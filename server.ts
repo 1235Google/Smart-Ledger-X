@@ -37,6 +37,13 @@ import {
   AuthoritativeSecurityEvent
 } from "./src/server/security-service";
 import {
+  sendLoginSuccessEmail,
+  sendPasswordChangeEmail,
+  sendNewDeviceEmail,
+  sendFailedAttemptsEmail,
+  sendTestSecurityEmail
+} from "./src/server/resend-service";
+import {
   initJobsStorage,
   startAllScheduledJobsCron,
   getAllScheduledJobs,
@@ -1533,6 +1540,99 @@ startScheduledReportsWorker();
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message || 'Backup run failed' });
+    }
+  });
+
+  // =========================================================================
+  // RESEND EMAIL SECURITY NOTIFICATION ENDPOINTS
+  // =========================================================================
+
+  app.post('/api/security/test-email', async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ success: false, error: 'Email address is required' });
+      }
+      const result = await sendTestSecurityEmail(email);
+      return res.json(result);
+    } catch (e: any) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/security/notify-login', async (req, res) => {
+    try {
+      const { email, time, device, browser, os, location, ip } = req.body;
+      if (!email) return res.status(400).json({ success: false, error: 'Email required' });
+
+      console.log('Login successful');
+      console.log(`Sending login alert to: ${email}`);
+
+      const result = await sendLoginSuccessEmail(email, {
+        time: time || new Date().toLocaleString(),
+        device: device || 'Desktop',
+        browser: `${browser || 'Web Browser'}${os ? ` (${os})` : ''}`,
+        location: location || 'Online',
+        ip: ip || '127.0.0.1'
+      });
+
+      if (result.success) {
+        console.log('Login alert sent successfully');
+      } else {
+        console.log(`Login alert failed: ${result.error || 'Unknown Resend error'}`);
+      }
+
+      return res.json(result);
+    } catch (e: any) {
+      console.log(`Login alert failed: ${e.message || 'Unknown error'}`);
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/security/notify-password-change', async (req, res) => {
+    try {
+      const { email, time, ip, location } = req.body;
+      if (!email) return res.status(400).json({ success: false, error: 'Email required' });
+      const result = await sendPasswordChangeEmail(email, {
+        time: time || new Date().toLocaleString(),
+        ip: ip || '127.0.0.1',
+        location: location || 'Online'
+      });
+      return res.json(result);
+    } catch (e: any) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/security/notify-new-device', async (req, res) => {
+    try {
+      const { email, time, device, browser, location, ip } = req.body;
+      if (!email) return res.status(400).json({ success: false, error: 'Email required' });
+      const result = await sendNewDeviceEmail(email, {
+        time: time || new Date().toLocaleString(),
+        device: device || 'New Device',
+        browser: browser || 'Unknown Browser',
+        location: location || 'Online',
+        ip: ip || '127.0.0.1'
+      });
+      return res.json(result);
+    } catch (e: any) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/security/notify-failed-login', async (req, res) => {
+    try {
+      const { email, attempts, ip, time } = req.body;
+      if (!email) return res.status(400).json({ success: false, error: 'Email required' });
+      const result = await sendFailedAttemptsEmail(email, {
+        attempts: attempts || 3,
+        ip: ip || '127.0.0.1',
+        time: time || new Date().toLocaleString()
+      });
+      return res.json(result);
+    } catch (e: any) {
+      return res.status(500).json({ success: false, error: e.message });
     }
   });
 

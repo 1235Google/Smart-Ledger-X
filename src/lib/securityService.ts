@@ -364,15 +364,16 @@ export async function detectDeviceInfoAsync(): Promise<DeviceInfo> {
 
   base.hasBattery = hasBattery;
 
-  // 3. Resolve Laptop vs Desktop
+  // 3. Resolve Laptop vs Desktop (BUG FIX: device detection)
   if (base.deviceType !== 'mobile' && base.deviceType !== 'tablet') {
-    const isLaptopHint =
-      hasBattery ||
+    const isExplicitLaptop =
       /Chromebook|Laptop|ThinkPad|IdeaPad|MacBook|Notebook|ZenBook|Inspiron|XPS|Latitude|EliteBook|Envy|Surface Laptop|Yoga|Swift|Gram/i.test(base.userAgent + (highEntropyModel || '')) ||
       base.os === 'FydeOS' ||
       base.os === 'ChromeOS';
 
-    if (isLaptopHint) {
+    const isLaptop = isExplicitLaptop || (hasBattery && /Macintosh|Windows|Linux/i.test(base.os) && navigator.maxTouchPoints === 0);
+
+    if (isLaptop) {
       base.deviceType = 'laptop';
       if (highEntropyModel) {
         base.deviceName = highEntropyModel;
@@ -380,6 +381,8 @@ export async function detectDeviceInfoAsync(): Promise<DeviceInfo> {
         base.deviceName = 'FydeOS Laptop';
       } else if (base.os === 'ChromeOS') {
         base.deviceName = 'Chromebook';
+      } else if (/Macintosh/.test(base.userAgent)) {
+        base.deviceName = 'Apple MacBook';
       } else {
         base.deviceName = `${base.os} Laptop`;
       }
@@ -387,6 +390,10 @@ export async function detectDeviceInfoAsync(): Promise<DeviceInfo> {
       base.deviceType = 'desktop';
       if (highEntropyModel) {
         base.deviceName = highEntropyModel;
+      } else if (base.os === 'Unknown OS') {
+        base.deviceName = 'Unknown Device';
+      } else {
+        base.deviceName = `${base.os} Workstation`;
       }
     }
   }
@@ -529,126 +536,93 @@ export async function getClientNetworkInfo(geoCoords?: { latitude: number; longi
     }
   } catch (e) {}
 
-  try {
-    // Priority 2: ipwho.is (fast, rich geolocation, flag emoji, and ISP)
-    const res = await fetch('https://ipwho.is/', { 
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(3500) 
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.success !== false) {
-        const ip = data.ip || '127.0.0.1';
-        const city = data.city || '';
-        const region = data.region || '';
-        const country = data.country || '';
-        const countryCode = data.country_code || 'US';
-        const flagEmoji = data.flag?.emoji || countryCodeToEmoji(countryCode);
-        const latitude = typeof data.latitude === 'number' ? data.latitude : null;
-        const longitude = typeof data.longitude === 'number' ? data.longitude : null;
-        const isp = data.connection?.isp || data.connection?.org || 'Public Internet';
-        const timezone = data.timezone?.id || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-        
-        const locParts = [city, region, country].filter(Boolean);
-        const location = locParts.length > 0 ? locParts.join(', ') : 'Online';
-
-        const result: NetworkGeoInfo = {
-          ip,
-          location,
-          city,
-          region,
-          country,
-          countryCode,
-          flagEmoji,
-          latitude,
-          longitude,
-          locationSource: 'ip',
-          isp,
-          timezone
-        };
-
-        cachedClientNetwork = result;
+  // BUG FIX: geolocation fallback & retry logic (1 retry) + coordinate validation (0,0 Null Island filter)
+  let geoData: any = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch('https://ipwho.is/', { 
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(3500) 
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.success !== false) {
+          geoData = data;
+          break;
+        }
+      }
+    } catch (e) {
+      if (attempt === 1) {
         try {
-          localStorage.setItem(CACHED_GEO_FULL_KEY, JSON.stringify(result));
-        } catch (e) {}
-        isFetchingGeo = false;
-        return result;
+          const ipRes = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(2000) });
+          if (ipRes.ok) {
+            const ipData = await ipRes.json();
+            const ipAddr = ipData.ip;
+            const geoRes = await fetch(`https://freeipapi.com/api/json/${ipAddr}`, { signal: AbortSignal.timeout(2500) });
+            if (geoRes.ok) {
+              const g = await geoRes.json();
+              geoData = {
+                ip: ipAddr,
+                city: g.cityName || '',
+                region: g.regionName || '',
+                country: g.countryName || '',
+                country_code: g.countryCode || 'US',
+                latitude: g.latitude,
+                longitude: g.longitude,
+                connection: { isp: 'Broadband Network' },
+                timezone: { id: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }
+              };
+            }
+          }
+        } catch (err) {}
       }
     }
-  } catch (e) {}
-
-  try {
-    // Priority 3: api.ipify.org + freeipapi.com fallback
-    const ipRes = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(2500) });
-    let ip = '127.0.0.1';
-    if (ipRes.ok) {
-      const ipData = await ipRes.json();
-      ip = ipData.ip || ip;
-    }
-
-    const geoRes = await fetch(`https://freeipapi.com/api/json/${ip}`, { signal: AbortSignal.timeout(2500) });
-    if (geoRes.ok) {
-      const g = await geoRes.json();
-      const city = g.cityName || '';
-      const region = g.regionName || '';
-      const country = g.countryName || '';
-      const countryCode = g.countryCode || 'US';
-      const flagEmoji = countryCodeToEmoji(countryCode);
-      const latitude = g.latitude || null;
-      const longitude = g.longitude || null;
-      const isp = 'Broadband Network';
-      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-      const location = [city, country].filter(Boolean).join(', ') || 'Online';
-
-      const result: NetworkGeoInfo = {
-        ip,
-        location,
-        city,
-        region,
-        country,
-        countryCode,
-        flagEmoji,
-        latitude,
-        longitude,
-        locationSource: 'ip',
-        isp,
-        timezone
-      };
-
-      cachedClientNetwork = result;
-      try {
-        localStorage.setItem(CACHED_GEO_FULL_KEY, JSON.stringify(result));
-      } catch (e) {}
-      isFetchingGeo = false;
-      return result;
-    }
-  } catch (e) {}
+  }
 
   isFetchingGeo = false;
 
-  // Priority 4: Browser system timezone fallback
-  const sysTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  const tzParts = sysTz.split('/');
-  const approxCity = tzParts.length > 1 ? tzParts[1].replace(/_/g, ' ') : sysTz;
+  const ip = geoData?.ip || '127.0.0.1';
+  const city = geoData?.city || '';
+  const region = geoData?.region || '';
+  const country = geoData?.country || geoData?.country_name || '';
+  const countryCode = geoData?.country_code || 'US';
+  const flagEmoji = geoData?.flag?.emoji || countryCodeToEmoji(countryCode);
   
-  const fallback: NetworkGeoInfo = {
-    ip: '127.0.0.1 (Local Session)',
-    location: `${approxCity} (${sysTz})`,
-    city: approxCity,
-    region: tzParts[0] || 'Local',
-    country: 'Local Network',
-    countryCode: 'LOC',
-    flagEmoji: '📍',
-    latitude: null,
-    longitude: null,
+  let latitude = typeof geoData?.latitude === 'number' ? geoData.latitude : null;
+  let longitude = typeof geoData?.longitude === 'number' ? geoData.longitude : null;
+
+  // Validate coordinates: treat 0,0 (Null Island) or missing as invalid data
+  if ((latitude === 0 && longitude === 0) || latitude === null || longitude === null) {
+    latitude = null;
+    longitude = null;
+  }
+
+  const isp = geoData?.connection?.isp || geoData?.connection?.org || 'Public Internet';
+  const timezone = geoData?.timezone?.id || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  
+  const locParts = [city, country].filter(Boolean);
+  const location = locParts.length > 0 ? locParts.join(', ') : 'Location unavailable';
+
+  const result: NetworkGeoInfo = {
+    ip,
+    location,
+    city,
+    region,
+    country,
+    countryCode,
+    flagEmoji,
+    latitude,
+    longitude,
     locationSource: 'ip',
-    isp: 'Local Host / Secure Loopback',
-    timezone: sysTz
+    isp,
+    timezone
   };
 
-  cachedClientNetwork = fallback;
-  return fallback;
+  cachedClientNetwork = result;
+  try {
+    localStorage.setItem(CACHED_GEO_FULL_KEY, JSON.stringify(result));
+  } catch (e) {}
+  return result;
 }
 
 /**

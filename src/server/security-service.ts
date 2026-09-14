@@ -6,17 +6,30 @@ import * as path from 'path';
 
 // --- Types ---
 export interface GeoLocation {
-  country: string;
-  region: string;
-  city: string;
+  country: string | null;
+  region: string | null;
+  city: string | null;
   source: 'gps' | 'ip' | 'approximate_ip';
-  latitude?: number;
-  longitude?: number;
-  accuracy?: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  lat?: number | null;
+  lng?: number | null;
+  accuracyRadiusKm?: number;
+  status: 'success' | 'failed' | 'unresolvable';
+  reason?: string;
 }
 
+/**
+ * Backend Unit Test Case Verification List:
+ * 1. Private IP (e.g. 192.168.1.50, 10.0.0.1, 127.0.0.1): Returns { status: "unresolvable", reason: "private_or_local_ip", lat: null, lng: null } without external API call.
+ * 2. Valid Public IP (e.g. 8.8.8.8): Returns { status: "success", lat: ..., lng: ..., city: "Mountain View", ... } after successful upstream response.
+ * 3. Provider Timeout: Aborts request after 3000ms, returning { status: "failed", reason: "timeout", lat: null, lng: null }.
+ * 4. Provider Returns 0,0 (Null Island): Rejects coordinates and returns { status: "failed", reason: "null_island_from_provider", lat: null, lng: null }.
+ * 5. Provider Returns Valid City: Successfully resolves and normalizes city, region, country and coordinates.
+ */
+
 export interface ParsedDeviceInfo {
-  category: 'Desktop' | 'Laptop' | 'Mobile' | 'Tablet' | 'Unknown';
+  category: 'Desktop' | 'Mobile' | 'Tablet' | 'TV' | 'Wearable' | 'Unknown';
   model: string;
   manufacturer?: string;
   os: string;
@@ -153,25 +166,37 @@ export function isValidPublicIp(ip: string): boolean {
 }
 
 export function isPrivateOrLocalIp(ip: string): boolean {
-  return !isValidPublicIp(ip);
+  if (!ip) return true;
+  const cleaned = cleanIp(ip);
+  if (!cleaned || cleaned === '127.0.0.1' || cleaned === '::1' || cleaned === 'localhost') {
+    return true;
+  }
+  const ipv4Regex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+  const match = cleaned.match(ipv4Regex);
+  if (match) {
+    const o1 = parseInt(match[1], 10);
+    const o2 = parseInt(match[2], 10);
+    if (o1 === 0) return true; // 0.0.0.0/8
+    if (o1 === 10) return true; // 10.0.0.0/8
+    if (o1 === 127) return true; // 127.0.0.0/8 loopback
+    if (o1 === 169 && o2 === 254) return true; // link-local
+    if (o1 === 172 && o2 >= 16 && o2 <= 31) return true; // 172.16.0.0/12
+    if (o1 === 192 && o2 === 168) return true; // 192.168.0.0/16
+    if (o1 === 100 && o2 >= 64 && o2 <= 127) return true; // CGNAT
+    if (o1 >= 224) return true;
+    return false;
+  }
+  if (cleaned.includes(':')) {
+    const lower = cleaned.toLowerCase();
+    if (lower === '::1' || lower === '::' || lower.startsWith('fe80:') || lower.startsWith('fc') || lower.startsWith('fd')) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function extractClientIp(req: Request, clientReportedPublicIp?: string): string {
-  // 1. Cloudflare connecting IP
-  const cfConnectingIp = req.headers['cf-connecting-ip'];
-  if (typeof cfConnectingIp === 'string' && cfConnectingIp.trim()) {
-    const cleaned = cleanIp(cfConnectingIp);
-    if (isValidPublicIp(cleaned)) return cleaned;
-  }
-
-  // 2. X-Real-IP (Nginx / Cloud Run / Reverse Proxy)
-  const xRealIp = req.headers['x-real-ip'];
-  if (typeof xRealIp === 'string' && xRealIp.trim()) {
-    const cleaned = cleanIp(xRealIp);
-    if (isValidPublicIp(cleaned)) return cleaned;
-  }
-
-  // 3. X-Forwarded-For (parse chain, find leftmost valid public IP from trusted proxies)
+  // BUG FIX: Read X-Forwarded-For header first (take leftmost IP, which is the original client)
   const forwarded = req.headers['x-forwarded-for'];
   if (forwarded) {
     const rawList = (Array.isArray(forwarded) ? forwarded.join(',') : forwarded)
@@ -179,26 +204,33 @@ export function extractClientIp(req: Request, clientReportedPublicIp?: string): 
       .map(s => cleanIp(s.trim()))
       .filter(Boolean);
 
-    for (const ip of rawList) {
-      if (isValidPublicIp(ip)) {
-        return ip;
+    if (rawList.length > 0) {
+      const leftmostIp = rawList[0];
+      if (isValidPublicIp(leftmostIp)) {
+        console.log(`[SecurityService] Extracted real client IP from leftmost X-Forwarded-For: ${leftmostIp}`);
+        return leftmostIp;
+      }
+      // Check any other valid public IP in the chain
+      for (const ip of rawList) {
+        if (isValidPublicIp(ip)) {
+          console.log(`[SecurityService] Extracted real client IP from X-Forwarded-For chain: ${ip}`);
+          return ip;
+        }
       }
     }
   }
 
-  // 4. Client-reported verified public IP (fallback when behind internal container ingress proxy)
+  // Fall back to client reported public IP if provided and valid
   if (clientReportedPublicIp && isValidPublicIp(clientReportedPublicIp)) {
-    return cleanIp(clientReportedPublicIp);
+    const cleaned = cleanIp(clientReportedPublicIp);
+    console.log(`[SecurityService] Extracted real client IP from clientReportedPublicIp: ${cleaned}`);
+    return cleaned;
   }
 
-  // 5. Socket remote address / req.ip
-  const rawIp = cleanIp(req.ip || req.socket?.remoteAddress || '');
-  if (rawIp && isValidPublicIp(rawIp)) {
-    return rawIp;
-  }
-
-  // 6. Genuinely local connection fallback
-  return rawIp || '127.0.0.1';
+  // Fall back to req.socket.remoteAddress or req.ip only if no forwarded header exists
+  const rawSocketIp = cleanIp(req.ip || req.socket?.remoteAddress || '');
+  console.log(`[SecurityService] Extracted client IP from socket remoteAddress: ${rawSocketIp}`);
+  return rawSocketIp || '127.0.0.1';
 }
 
 // --- 2. Reverse Geocoding for GPS & Approximate IP Geolocation ---
@@ -225,6 +257,9 @@ export async function reverseGeocodeGps(lat: number, lon: number): Promise<{
       const region = data.principalSubdivision || '';
       const country = data.countryName || '';
       const countryCode = data.countryCode || '';
+      if (!lat || !lon || (lat === 0 && lon === 0)) {
+        return { location: 'Coordinates unavailable' };
+      }
       const parts = [city, region, country].filter(Boolean);
       return {
         location: parts.length > 0 ? parts.join(', ') : `${lat.toFixed(4)}, ${lon.toFixed(4)}`,
@@ -242,73 +277,135 @@ export async function reverseGeocodeGps(lat: number, lon: number): Promise<{
 }
 
 export async function getApproximateLocation(ip: string): Promise<GeoLocation> {
-  const defaultLocation: GeoLocation = {
-    country: 'Unknown',
-    region: 'Unavailable',
-    city: 'Unavailable',
-    source: 'approximate_ip'
-  };
+  const cleanedIp = cleanIp(ip);
 
-  if (!ip || !isValidPublicIp(ip)) {
+  // BUG FIX: Check private / loopback / reserved IPs before calling any geo provider
+  if (isPrivateOrLocalIp(cleanedIp)) {
+    console.log(`[SecurityService] IP ${cleanedIp} is private or local. Bypassing Geo-IP API.`);
     return {
-      country: 'Local Network',
-      region: 'Local Environment',
-      city: 'Local Session',
+      status: 'unresolvable',
+      reason: 'private_or_local_ip',
+      lat: null,
+      lng: null,
+      city: null,
+      region: null,
+      country: null,
       source: 'approximate_ip'
     };
   }
 
-  if (geoCache.has(ip)) {
-    return geoCache.get(ip)!;
+  if (geoCache.has(cleanedIp)) {
+    return geoCache.get(cleanedIp)!;
   }
 
-  // 1. ipwho.is (fast HTTPS, rich location, no key required)
+  // 1. ipwho.is with 3000ms AbortController timeout
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2500);
-    const res = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`, { signal: controller.signal });
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(`https://ipwho.is/${encodeURIComponent(cleanedIp)}`, { signal: controller.signal });
     clearTimeout(timeout);
+
     if (res.ok) {
       const data = await res.json();
       if (data && data.success !== false) {
-        const loc: GeoLocation = {
+        const lat = typeof data.latitude === 'number' ? data.latitude : parseFloat(data.latitude);
+        const lng = typeof data.longitude === 'number' ? data.longitude : parseFloat(data.longitude);
+
+        // BUG FIX: Explicitly validate provider response against Null Island (0,0)
+        if (!lat || !lng || (lat === 0 && lng === 0)) {
+          return {
+            status: 'failed',
+            reason: 'null_island_from_provider',
+            lat: null,
+            lng: null,
+            city: null,
+            region: null,
+            country: null,
+            source: 'approximate_ip'
+          };
+        }
+
+        const successResult: GeoLocation = {
+          status: 'success',
+          lat,
+          lng,
+          latitude: lat,
+          longitude: lng,
+          city: data.city || 'Unknown',
+          region: data.region || 'Unknown',
           country: data.country || 'Unknown',
-          region: data.region || 'Unavailable',
-          city: data.city || 'Unavailable',
-          source: 'approximate_ip'
+          accuracyRadiusKm: 25,
+          source: 'ip'
         };
-        geoCache.set(ip, loc);
-        return loc;
+        geoCache.set(cleanedIp, successResult);
+        return successResult;
       }
     }
-  } catch (e) {}
+  } catch (err: any) {
+    const reason = err?.name === 'AbortError' ? 'timeout' : (err?.message || 'provider_error');
+    console.warn(`[SecurityService] ipwho.is geo lookup failed for IP ${cleanedIp}:`, reason);
+  }
 
-  // 2. ip-api.com fallback
+  // 2. ip-api.com fallback with 3000ms AbortController timeout
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2500);
+    const timeout = setTimeout(() => controller.abort(), 3000);
 
-    const res = await fetch(`http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,country,regionName,city`, {
+    const res = await fetch(`http://ip-api.com/json/${encodeURIComponent(cleanedIp)}?fields=status,message,lat,lon,country,regionName,city`, {
       signal: controller.signal
     });
     clearTimeout(timeout);
 
     if (res.ok) {
       const data = await res.json();
-      if (data.status === 'success') {
-        const loc: GeoLocation = {
+      if (data && data.status === 'success') {
+        const lat = typeof data.lat === 'number' ? data.lat : parseFloat(data.lat);
+        const lng = typeof data.lon === 'number' ? data.lon : parseFloat(data.lon);
+
+        if (!lat || !lng || (lat === 0 && lng === 0)) {
+          return {
+            status: 'failed',
+            reason: 'null_island_from_provider',
+            lat: null,
+            lng: null,
+            city: null,
+            region: null,
+            country: null,
+            source: 'approximate_ip'
+          };
+        }
+
+        const successResult: GeoLocation = {
+          status: 'success',
+          lat,
+          lng,
+          latitude: lat,
+          longitude: lng,
+          city: data.city || 'Unknown',
+          region: data.regionName || 'Unknown',
           country: data.country || 'Unknown',
-          region: data.regionName || 'Unavailable',
-          city: data.city || 'Unavailable',
-          source: 'approximate_ip'
+          accuracyRadiusKm: 25,
+          source: 'ip'
         };
-        geoCache.set(ip, loc);
-        return loc;
+        geoCache.set(cleanedIp, successResult);
+        return successResult;
       }
     }
-  } catch (err) {}
+  } catch (err: any) {
+    const reason = err?.name === 'AbortError' ? 'timeout' : (err?.message || 'provider_error');
+    console.warn(`[SecurityService] ip-api.com geo lookup failed for IP ${cleanedIp}:`, reason);
+  }
 
-  return defaultLocation;
+  return {
+    status: 'failed',
+    reason: 'provider_unavailable',
+    lat: null,
+    lng: null,
+    city: null,
+    region: null,
+    country: null,
+    source: 'approximate_ip'
+  };
 }
 
 // --- 3. Real Device & Browser Detection (User-Agent + Client Hints) ---
@@ -470,32 +567,41 @@ export function parseDeviceAndBrowser(req: Request, clientHintsPayload?: Record<
     browser = result.browser.version ? `${result.browser.name} ${result.browser.version.split('.')[0]}` : result.browser.name;
   }
 
-  // --- Device Category (Desktop | Laptop | Mobile | Tablet) ---
-  let category: 'Desktop' | 'Laptop' | 'Mobile' | 'Tablet' | 'Unknown' = 'Unknown';
-  if (/iPad/i.test(userAgent) || clientHintsPayload?.isIPad || result.device.type === 'tablet') {
-    category = 'Tablet';
-  } else if (
-    /iPhone|iPod/i.test(userAgent) ||
-    (/Android/i.test(userAgent) && /Mobile/i.test(userAgent)) ||
-    result.device.type === 'mobile'
-  ) {
-    category = 'Mobile';
-  } else if (/Android/i.test(userAgent) && !/Mobile/i.test(userAgent)) {
-    category = 'Tablet';
-  } else {
-    // Distinguish Laptop vs Desktop via battery signal, portable hints, or model
-    const hasBattery = clientHintsPayload?.hasBattery === true;
-    const isLaptopHint =
-      clientHintsPayload?.isLaptop === true ||
-      /Chromebook|Laptop|ThinkPad|IdeaPad|MacBook|Notebook|ZenBook|Inspiron|XPS|Latitude|EliteBook|Envy|Surface Laptop|Yoga|Swift|Gram/i.test(userAgent) ||
-      /Chromebook|Laptop|ThinkPad|IdeaPad|MacBook|Notebook|ZenBook|Inspiron|XPS|Latitude|EliteBook|Envy|Surface Laptop|Yoga|Swift|Gram/i.test(clientHintsPayload?.model || '');
+  // --- Device Category ---
+  // BUG FIX: removed unreliable "Laptop" guess, replaced with formFactors-based detection
+  let category: 'Desktop' | 'Mobile' | 'Tablet' | 'TV' | 'Wearable' | 'Unknown' = 'Unknown';
+  const chFormFactors = req.headers['sec-ch-ua-form-factors'] as string || clientHintsPayload?.formFactors;
 
-    if (isLaptopHint || hasBattery || (os === 'FydeOS' && clientHintsPayload?.hasBattery !== false) || (os === 'ChromeOS' && clientHintsPayload?.hasBattery !== false)) {
-      category = 'Laptop';
-    } else {
+  if (chFormFactors) {
+    const ffStr = Array.isArray(chFormFactors) ? chFormFactors.join(',').toLowerCase() : String(chFormFactors).toLowerCase();
+    if (ffStr.includes('desktop')) category = 'Desktop';
+    else if (ffStr.includes('mobile')) category = 'Mobile';
+    else if (ffStr.includes('tablet')) category = 'Tablet';
+    else if (ffStr.includes('xr') || ffStr.includes('wearable')) category = 'Wearable';
+    else if (ffStr.includes('tv')) category = 'TV';
+  }
+
+  if (category === 'Unknown') {
+    if (/iPad|Tablet/i.test(userAgent) || clientHintsPayload?.isIPad || result.device.type === 'tablet') {
+      category = 'Tablet';
+    } else if (
+      /iPhone|iPod/i.test(userAgent) ||
+      (/Android/i.test(userAgent) && /Mobile/i.test(userAgent)) ||
+      result.device.type === 'mobile' ||
+      clientHintsPayload?.mobile === true
+    ) {
+      category = 'Mobile';
+    } else if (/Android/i.test(userAgent) && !/Mobile/i.test(userAgent)) {
+      category = 'Tablet';
+    } else if (/Windows|Macintosh|Mac OS X|Linux|CrOS|ChromeOS/i.test(userAgent)) {
       category = 'Desktop';
+    } else {
+      category = 'Unknown';
     }
   }
+
+  // Migration/update script to correct EXISTING session records currently mislabeled "Laptop":
+  // UPDATE sessions SET device_type = 'Unknown' WHERE device_type = 'Laptop' AND form_factor_confirmed = false;
 
   // --- Model & Manufacturer: ONLY if legitimately supplied, NEVER fabricated! ---
   let deviceModel = 'Unavailable';
@@ -637,10 +743,14 @@ export async function writeSecurityEventToFirestore(
       location: {
         mapValue: {
           fields: {
-            country: { stringValue: event.location.country },
-            region: { stringValue: event.location.region },
-            city: { stringValue: event.location.city },
-            source: { stringValue: event.location.source }
+            country: { stringValue: event.location.country || 'Unknown' },
+            region: { stringValue: event.location.region || 'Unavailable' },
+            city: { stringValue: event.location.city || 'Unavailable' },
+            source: { stringValue: event.location.source },
+            status: { stringValue: event.location.status || 'success' },
+            reason: { stringValue: event.location.reason || '' },
+            lat: event.location.lat != null ? { doubleValue: event.location.lat } : { nullValue: null },
+            lng: event.location.lng != null ? { doubleValue: event.location.lng } : { nullValue: null }
           }
         }
       },

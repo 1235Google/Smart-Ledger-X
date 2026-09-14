@@ -6,7 +6,7 @@ import { Resend } from "resend";
 import { Server as SocketIOServer } from "socket.io";
 import http from "http";
 import { generateAndSendReport } from "./src/server/report-generator";
-import { executeBackupPipeline, getBackupStatusSummary, getTotalUsageBytes } from "./src/server/backup-service";
+import { executeBackupPipeline, getBackupStatusSummary, getBackupHistory, verifyBackupChecksumStorage } from "./src/server/backup-service";
 import { 
   hashPassword, 
   getStoredHash, 
@@ -103,8 +103,9 @@ app.use((req, res, next) => {
   );
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.setHeader("Accept-CH", "Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version, Sec-CH-UA-Model, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Full-Version-List");
-  res.setHeader("Critical-CH", "Sec-CH-UA-Platform, Sec-CH-UA-Model");
+  res.setHeader("Accept-CH", "Sec-CH-UA, Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version, Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Model, Sec-CH-UA-Mobile, Sec-CH-UA-Form-Factors");
+  res.setHeader("Critical-CH", "Sec-CH-UA-Platform-Version, Sec-CH-UA-Full-Version-List");
+  res.setHeader("Permissions-Policy", "ch-ua-platform-version=(self), ch-ua-full-version-list=(self), ch-ua-form-factors=(self)");
   res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
   res.setHeader("X-XSS-Protection", "1; mode=block");
   next();
@@ -613,6 +614,38 @@ startScheduledReportsWorker();
       return res.json({ success: true, logs });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: "Failed to retrieve security logs" });
+    }
+  });
+
+  // 6. Current Client IP Geolocation Endpoint
+  app.get("/api/security/location", async (req, res) => {
+    try {
+      const clientIp = extractClientIp(req);
+      const location = await getApproximateLocation(clientIp);
+      return res.json({
+        success: true,
+        ipMasked: clientIp.includes('.') ? clientIp.replace(/\.\d+$/, '.***') : clientIp,
+        location
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Internal server error' });
+    }
+  });
+
+  // 7. GPS Reverse Geocode Proxy Endpoint
+  app.post("/api/security/reverse-geocode", async (req, res) => {
+    try {
+      const { lat, lng } = req.body;
+      if (typeof lat !== 'number' || typeof lng !== 'number') {
+        return res.status(400).json({ success: false, error: 'Invalid latitude or longitude' });
+      }
+      if (!lat || !lng || (lat === 0 && lng === 0)) {
+        return res.json({ success: false, reason: 'null_island_coordinates' });
+      }
+      const geo = await reverseGeocodeGps(lat, lng);
+      return res.json({ success: true, ...geo });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Reverse geocode error' });
     }
   });
 
@@ -1512,34 +1545,64 @@ startScheduledReportsWorker();
 
   app.get('/api/backup/status', (req, res) => {
     try {
-      const summary = getBackupStatusSummary();
+      const userId = (req.query.userId as string) || 'system_admin';
+      const summary = getBackupStatusSummary(userId);
       return res.json(summary);
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
     }
   });
 
-  app.get('/api/backup/usage', (req, res) => {
+  app.get('/api/backup/history', (req, res) => {
     try {
-      const usageBytes = getTotalUsageBytes();
-      return res.json({ success: true, usageBytes, usageFormatted: `${(usageBytes / 1024).toFixed(2)} KB` });
+      const search = (req.query.search as string) || '';
+      const type = (req.query.type as string) || '';
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const result = getBackupHistory({ search, type, page, limit });
+      return res.json(result);
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
     }
   });
 
-  app.post('/api/backup/run', async (req, res) => {
+  app.post('/api/backup/run-now', async (req, res) => {
     try {
-      const userId = (req.body && req.body.userId) || 'user_authenticated';
-      console.log(`[BackupAPI] Manual backup triggered for user: ${userId}`);
-      const result = await executeBackupPipeline(userId, 'Manual');
+      const userId = (req.body && req.body.userId) || 'system_admin';
+      console.log(`[BackupAPI] Manual backup triggered via run-now for user: ${userId}`);
+      const result = await executeBackupPipeline(userId, 'manual');
       return res.json({
         success: result.status === 'success',
         backup: result,
         error: result.error_message
       });
     } catch (err: any) {
-      return res.status(500).json({ success: false, error: err.message || 'Backup run failed' });
+      return res.status(400).json({ success: false, error: err.message || 'Backup run failed' });
+    }
+  });
+
+  app.post('/api/backup/run', async (req, res) => {
+    try {
+      const userId = (req.body && req.body.userId) || 'system_admin';
+      console.log(`[BackupAPI] Manual backup triggered for user: ${userId}`);
+      const result = await executeBackupPipeline(userId, 'manual');
+      return res.json({
+        success: result.status === 'success',
+        backup: result,
+        error: result.error_message
+      });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, error: err.message || 'Backup run failed' });
+    }
+  });
+
+  app.get('/api/backup/:id/verify', (req, res) => {
+    try {
+      const { id } = req.params;
+      const verification = verifyBackupChecksumStorage(id);
+      return res.json(verification);
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
     }
   });
 
@@ -1639,7 +1702,7 @@ startScheduledReportsWorker();
   app.all('/api/cron/backup', async (req, res) => {
     try {
       console.log('[AutoBackup] Trigger received for /api/cron/backup');
-      const result = await executeBackupPipeline('system_cron', 'Automatic');
+      const result = await executeBackupPipeline('system_cron', 'scheduled');
       return res.json({
         success: result.status === 'success',
         message: result.status === 'success' ? 'Server-side automatic backup completed successfully' : 'Backup failed after retries',

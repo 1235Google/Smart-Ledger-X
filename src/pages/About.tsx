@@ -1,5 +1,6 @@
 import React from 'react';
 import { Wallet, Sparkles, User, Code, Briefcase, Calendar, Mail, CheckCircle2 } from 'lucide-react';
+import { AboutSection } from '../components/AboutSection';
 
 export default function About() {
   const currentYear = new Date().getFullYear();
@@ -33,6 +34,8 @@ export default function About() {
       </div>
 
       {/* Developer Information Card */}
+      <AboutSection />
+
       <div className="bg-indigo-950/40 border border-indigo-500/30 rounded-3xl p-6 sm:p-8 relative overflow-hidden shadow-2xl">
         <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
         

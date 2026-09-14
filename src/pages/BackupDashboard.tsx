@@ -93,10 +93,19 @@ export default function BackupDashboard() {
     setIsSimulatingCron(true);
     setCronSimulationResult(null);
     try {
-      const res = await fetch('/api/cron/backup', { method: 'POST' });
+      const res = await fetch('/api/backup/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: authUser?.uid || 'user_authenticated' })
+      });
       const data = await res.json();
-      setCronSimulationResult(data);
+      setCronSimulationResult({
+        success: data.success,
+        message: data.success ? 'Real-time backup pipeline completed & verified successfully' : (data.error || 'Backup failed'),
+        details: data.backup
+      });
       fetchServerStatus();
+      refreshBackups();
     } catch (e: any) {
       setCronSimulationResult({ success: false, error: e.message });
     } finally {
@@ -202,7 +211,7 @@ export default function BackupDashboard() {
               className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-xl shadow-md transition-all disabled:opacity-50"
             >
               {isSimulatingCron ? <RefreshCcw size={14} className="animate-spin" /> : <Play size={14} />}
-              <span>{isSimulatingCron ? 'Running Backup Test...' : 'Run Test Backup Now'}</span>
+              <span>{isSimulatingCron ? 'Running Backup Pipeline...' : 'Run Real Backup Now'}</span>
             </motion.button>
           </div>
 
@@ -257,9 +266,9 @@ export default function BackupDashboard() {
               <div className="flex items-center justify-between font-bold">
                 <span className="flex items-center gap-2">
                   {cronSimulationResult.success ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
-                  <span>{cronSimulationResult.message || 'Simulation Result'}</span>
+                  <span>{cronSimulationResult.message || 'Last Run Result'}</span>
                 </span>
-                <span className="text-[10px] opacity-80">Attempts: {cronSimulationResult.attempts}</span>
+                <span className="text-[10px] opacity-80">Status: {cronSimulationResult.success ? 'Success' : 'Failed'}</span>
               </div>
               {cronSimulationResult.details && (
                 <div className="font-mono bg-black/30 p-2.5 rounded-xl space-y-1 text-[11px] overflow-x-auto">

@@ -6,6 +6,7 @@ import { Resend } from "resend";
 import { Server as SocketIOServer } from "socket.io";
 import http from "http";
 import { generateAndSendReport } from "./src/server/report-generator";
+import { executeBackupPipeline, getBackupStatusSummary, getTotalUsageBytes } from "./src/server/backup-service";
 import { 
   hashPassword, 
   getStoredHash, 
@@ -1499,117 +1500,54 @@ startScheduledReportsWorker();
   });
 
   // =========================================================================
-  // TRUE SERVER-SIDE AUTOMATIC BACKUP SYSTEM & CRON
+  // PRODUCTION-GRADE CLOUD BACKUP & DISASTER RECOVERY ENDPOINTS
   // =========================================================================
-  let lastBackupExecution: string | null = null;
-  let nextBackupScheduled: string = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-  let backupSuccessCount7Days: number = 0;
-  let backupFailureCount7Days: number = 0;
-  let consecutiveFailures: number = 0;
-  const backupLogs: Array<{
-    id: string;
-    timestamp: string;
-    type: 'Automatic' | 'Manual';
-    size: number;
-    checksum: string;
-    status: 'Success' | 'Failed';
-    error?: string;
-    userId?: string;
-  }> = [];
 
-  async function executeAutomaticBackup(triggerSource: string = 'cron') {
-    const startTime = new Date().toISOString();
-    let attempts = 0;
-    const maxAttempts = 3;
-    let success = false;
-    let lastError = null;
-    let snapshotSize = 0;
-    let checksum = '';
-
-    while (attempts < maxAttempts && !success) {
-      attempts++;
-      try {
-        const backupPayload = {
-          timestamp: startTime,
-          source: triggerSource,
-          version: '2.0',
-          data: { ledgerEntriesCount: 142, totalBalance: 58490.00, systemState: 'active' }
-        };
-        const payloadString = JSON.stringify(backupPayload);
-        snapshotSize = Buffer.byteLength(payloadString, 'utf8');
-        checksum = crypto.createHash('sha256').update(payloadString).digest('hex');
-        success = true;
-      } catch (err: any) {
-        lastError = err.message;
-        const backoffMs = Math.pow(2, attempts - 1) * 1000;
-        await new Promise((resolve) => setTimeout(resolve, backoffMs));
-      }
+  app.get('/api/backup/status', (req, res) => {
+    try {
+      const summary = getBackupStatusSummary();
+      return res.json(summary);
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
     }
-
-    const logEntry = {
-      id: `backup_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
-      timestamp: startTime,
-      type: 'Automatic' as const,
-      size: snapshotSize,
-      checksum,
-      status: success ? ('Success' as const) : ('Failed' as const),
-      error: success ? undefined : lastError || 'Unknown error'
-    };
-
-    backupLogs.unshift(logEntry);
-    if (backupLogs.length > 50) backupLogs.pop();
-
-    if (success) {
-      lastBackupExecution = startTime;
-      nextBackupScheduled = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-      backupSuccessCount7Days++;
-      consecutiveFailures = 0;
-    } else {
-      backupFailureCount7Days++;
-      consecutiveFailures++;
-      if (consecutiveFailures >= 2) {
-        console.warn(`[AutoBackup] ALERT: Automatic backup has failed ${consecutiveFailures} times consecutively!`);
-      }
-    }
-
-    return { success, logEntry, attempts };
-  }
-
-  // Register daily cron job at 6:00 AM IST (Asia/Kolkata)
-  cron.schedule('0 6 * * *', async () => {
-    console.log('[AutoBackup] ⏰ Running server-side scheduled 24h backup cron (IST 6:00 AM)...');
-    await executeAutomaticBackup('cron');
-  }, {
-    timezone: 'Asia/Kolkata'
   });
 
-  // Cron webhook / manual trigger endpoint (GET & POST) for Vercel Cron Jobs and testing
+  app.get('/api/backup/usage', (req, res) => {
+    try {
+      const usageBytes = getTotalUsageBytes();
+      return res.json({ success: true, usageBytes, usageFormatted: `${(usageBytes / 1024).toFixed(2)} KB` });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/backup/run', async (req, res) => {
+    try {
+      const userId = (req.body && req.body.userId) || 'user_authenticated';
+      console.log(`[BackupAPI] Manual backup triggered for user: ${userId}`);
+      const result = await executeBackupPipeline(userId, 'Manual');
+      return res.json({
+        success: result.status === 'success',
+        backup: result,
+        error: result.error_message
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message || 'Backup run failed' });
+    }
+  });
+
   app.all('/api/cron/backup', async (req, res) => {
     try {
       console.log('[AutoBackup] Trigger received for /api/cron/backup');
-      const result = await executeAutomaticBackup('webhook_cron');
+      const result = await executeBackupPipeline('system_cron', 'Automatic');
       return res.json({
-        success: result.success,
-        message: result.success ? 'Server-side automatic backup completed successfully' : 'Backup failed after retries',
-        details: result.logEntry,
-        attempts: result.attempts
+        success: result.status === 'success',
+        message: result.status === 'success' ? 'Server-side automatic backup completed successfully' : 'Backup failed after retries',
+        details: result
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message || 'Cron execution failed' });
     }
-  });
-
-  // Admin / Debug status endpoint for backups
-  app.get('/api/backup/status', (req, res) => {
-    return res.json({
-      success: true,
-      lastCronExecution: lastBackupExecution,
-      nextScheduledExecution: nextBackupScheduled,
-      successCount7Days: backupSuccessCount7Days,
-      failureCount7Days: backupFailureCount7Days,
-      consecutiveFailures,
-      recentLogs: backupLogs.slice(0, 15)
-    });
   });
 
   // Scheduled job: Run at 08:00 AM on the 1st of every month

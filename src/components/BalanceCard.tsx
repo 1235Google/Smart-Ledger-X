@@ -37,29 +37,32 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [showBalance, setShowBalance] = useState(true);
 
+  const [displayBalance, setDisplayBalance] = useState(currentBalance);
+
   // Monitor balance changes for green/red flash and floating pill trigger
   useEffect(() => {
-    const prev = prevBalanceRef.current;
-    if (prev !== currentBalance) {
-      const diff = currentBalance - prev;
-      const isIncrease = diff > 0;
-      const absDiffStr = formatCurrency(Math.abs(diff));
-      const amountText = `${isIncrease ? '+' : '-'}${absDiffStr}`;
+    const throttleTimer = setTimeout(() => {
+      if (displayBalance !== currentBalance) {
+        setDisplayBalance(currentBalance);
+        
+        const diff = currentBalance - displayBalance;
+        const isIncrease = diff > 0;
+        const absDiffStr = formatCurrency(Math.abs(diff));
+        const amountText = `${isIncrease ? '+' : '-'}${absDiffStr}`;
 
-      setPulseState(isIncrease ? 'increase' : 'decrease');
+        setPulseState(isIncrease ? 'increase' : 'decrease');
 
-      const pillId = crypto.randomUUID();
-      setFloatingPills((p) => [...p, { id: pillId, amountText, isIncrease }]);
+        const pillId = crypto.randomUUID();
+        setFloatingPills((p) => [...p, { id: pillId, amountText, isIncrease }]);
 
-      const pulseTimer = setTimeout(() => {
-        setPulseState(null);
-      }, 1200);
+        setTimeout(() => {
+          setPulseState(null);
+        }, 1200);
+      }
+    }, 500);
 
-      prevBalanceRef.current = currentBalance;
-
-      return () => clearTimeout(pulseTimer);
-    }
-  }, [currentBalance]);
+    return () => clearTimeout(throttleTimer);
+  }, [currentBalance, displayBalance]);
 
   const removePill = (id: string) => {
     setFloatingPills((prev) => prev.filter((p) => p.id !== id));
@@ -77,13 +80,13 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
   return (
     <motion.div
       ref={cardRef}
-      initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20, filter: 'blur(8px)' }}
+      initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
       animate={{
         opacity: 1,
         y: 0,
-        filter: 'blur(0px)',
         scale: pulseState ? [1, 1.02, 1] : 1,
       }}
+      style={{ willChange: 'transform', transform: 'translateZ(0)', contain: 'layout style paint' }}
       whileHover={
         !shouldReduceMotion
           ? {
@@ -125,9 +128,9 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
         />
       )}
 
-      {/* Ambient Liquid Lighting Flares */}
-      <div className="absolute -top-10 right-0 w-80 h-80 bg-[#0a84ff]/[0.1] rounded-full blur-[110px] pointer-events-none animate-pulse-slow" />
-      <div className="absolute -bottom-10 left-0 w-72 h-72 bg-[#5e5ce6]/[0.08] rounded-full blur-[100px] pointer-events-none" />
+      {/* Ambient Liquid Lighting Flares - Isolated behind content */}
+      <div className="absolute -top-10 right-0 w-80 h-80 bg-[#0a84ff]/[0.08] rounded-full blur-[110px] pointer-events-none -z-10 decorative-element animate-pulse-slow" />
+      <div className="absolute -bottom-10 left-0 w-72 h-72 bg-[#5e5ce6]/[0.06] rounded-full blur-[100px] pointer-events-none -z-10 decorative-element" />
 
       {/* Floating Pill Animation on Balance Updates */}
       <AnimatePresence>
@@ -139,7 +142,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
             exit={{ opacity: 0, y: -72, scale: 0.9 }}
             transition={{ duration: 1.6, ease: [0.16, 1, 0.3, 1] }}
             onAnimationComplete={() => removePill(pill.id)}
-            className={`absolute top-6 right-6 z-30 px-3.5 py-1.5 rounded-full font-bold text-xs sm:text-sm border shadow-2xl backdrop-blur-2xl flex items-center gap-1.5 pointer-events-none ${
+            className={`absolute top-4 right-4 sm:top-6 sm:right-6 z-30 px-3 sm:px-3.5 py-1 sm:py-1.5 rounded-full font-bold text-xs sm:text-sm border shadow-2xl backdrop-blur-2xl flex items-center gap-1.5 pointer-events-none ${
               pill.isIncrease
                 ? 'bg-[#30d158]/25 text-[#30d158] border-[#30d158]/50 shadow-[#30d158]/40'
                 : 'bg-[#ff453a]/25 text-[#ff453a] border-[#ff453a]/50 shadow-[#ff453a]/40'
@@ -151,7 +154,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
         ))}
       </AnimatePresence>
 
-      <div className="relative z-20 flex flex-col justify-between gap-5 sm:gap-6">
+      <div className="relative z-20 flex flex-col justify-between gap-4 sm:gap-6">
         {/* Header Pill Row */}
         <div className="flex items-center justify-between gap-2 sm:gap-3 flex-wrap">
           <div className="flex items-center gap-2 min-w-0">
@@ -164,35 +167,35 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
                   : 'bg-[#0a84ff] shadow-[0_0_12px_rgba(10,132,255,0.9)] animate-pulse'
               }`}
             />
-            <span className="text-[11px] sm:text-xs font-semibold text-[#86868b] uppercase tracking-wider truncate">
+            <span className="text-[10.5px] sm:text-xs font-semibold text-[#86868b] uppercase tracking-wider truncate">
               Total Available Balance
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <motion.button
               whileHover={{ scale: 1.08 }}
               whileTap={{ scale: 0.92 }}
               onClick={() => setShowBalance(!showBalance)}
-              className="p-1.5 rounded-full bg-white/[0.08] hover:bg-white/[0.16] text-[#86868b] hover:text-white transition-all outline-none focus-visible:ring-2 focus-visible:ring-[#0a84ff] border border-white/[0.08] shadow-sm"
+              className="w-10 h-10 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-white/[0.08] hover:bg-white/[0.16] text-[#86868b] hover:text-white transition-all outline-none focus-visible:ring-2 focus-visible:ring-[#0a84ff] border border-white/[0.08] shadow-sm"
               title={showBalance ? "Hide balance" : "Show balance"}
               aria-label={showBalance ? "Hide balance" : "Show balance"}
             >
-              {showBalance ? <Eye size={15} /> : <EyeOff size={15} />}
+              {showBalance ? <Eye size={16} /> : <EyeOff size={16} />}
             </motion.button>
-            <div className="text-[10px] sm:text-[11px] font-semibold px-2 sm:px-3 py-1 rounded-full bg-white/[0.06] hover:bg-white/[0.1] text-[#a1a1a6] border border-white/[0.1] flex items-center gap-1 sm:gap-1.5 shadow-sm transition-colors backdrop-blur-md">
-              <ShieldCheck size={13} className="text-[#30d158]" />
-              <span className="hidden xs:inline sm:inline">Apple Secure</span>
+            <div className="text-[10px] sm:text-[11px] font-semibold px-2.5 sm:px-3 py-1 rounded-full bg-white/[0.06] hover:bg-white/[0.1] text-[#a1a1a6] border border-white/[0.1] flex items-center gap-1 sm:gap-1.5 shadow-sm transition-colors backdrop-blur-md min-h-[36px] sm:min-h-[40px]">
+              <ShieldCheck size={13} className="text-[#30d158] shrink-0" />
+              <span className="hidden xs:inline sm:inline whitespace-nowrap">Apple Secure</span>
             </div>
           </div>
         </div>
 
         {/* Primary Monetary Value */}
-        <div>
-          <div className="text-2xl min-[360px]:text-3xl min-[400px]:text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-white mb-2 flex items-baseline gap-1 font-tabular break-words">
+        <div className="my-0.5 sm:my-1">
+          <div className="text-[clamp(1.85rem,5.8vw,3.75rem)] font-extrabold tracking-tight text-white mb-1 sm:mb-1.5 flex items-baseline gap-1 font-tabular break-words leading-none">
             {showBalance ? (
               <CountUp
-                value={currentBalance}
+                value={displayBalance}
                 duration={1000}
                 formatter={(val) => formatCurrency(val)}
                 className="text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.6)]"
@@ -201,17 +204,17 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
               <span className="tracking-widest text-slate-400 font-mono text-2xl sm:text-4xl">••••••••</span>
             )}
           </div>
-          <p className="text-xs font-medium text-[#86868b]">Real-time liquid assets across all connected ledger vaults</p>
+          <p className="text-[11px] sm:text-xs font-medium text-[#86868b]">Real-time liquid assets across all connected ledger vaults</p>
         </div>
 
         {/* VisionOS Liquid Glass Metric Capsules */}
-        <div className="grid grid-cols-2 gap-2 sm:gap-3.5 pt-3 border-t border-white/[0.08]">
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-2 sm:gap-3.5 pt-3 border-t border-white/[0.08]">
           {/* Starting Balance */}
           <motion.div 
             whileHover={{ y: -2, scale: 1.02 }}
-            className="bg-white/[0.04] hover:bg-white/[0.08] p-3 sm:p-3.5 rounded-[18px] border border-white/[0.08] hover:border-white/[0.16] transition-all flex flex-col justify-center backdrop-blur-md shadow-sm"
+            className="bg-white/[0.04] hover:bg-white/[0.08] p-2.5 sm:p-3.5 rounded-[18px] border border-white/[0.08] hover:border-white/[0.16] transition-all flex flex-col justify-center backdrop-blur-md shadow-sm min-w-0"
           >
-            <span className="text-[10px] sm:text-[11px] text-[#86868b] uppercase tracking-wider font-bold">
+            <span className="text-[10px] sm:text-[11px] text-[#86868b] uppercase tracking-wider font-bold truncate">
               Starting Vault
             </span>
             <span className="text-xs sm:text-sm md:text-base font-bold text-white font-tabular mt-0.5 truncate">
@@ -222,10 +225,10 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
           {/* Total In */}
           <motion.div 
             whileHover={{ y: -2, scale: 1.02 }}
-            className="bg-[#30d158]/[0.08] hover:bg-[#30d158]/[0.15] p-3 sm:p-3.5 rounded-[18px] border border-[#30d158]/25 hover:border-[#30d158]/40 transition-all flex flex-col justify-center backdrop-blur-md shadow-[0_4px_16px_rgba(48,209,88,0.08)]"
+            className="bg-[#30d158]/[0.08] hover:bg-[#30d158]/[0.15] p-2.5 sm:p-3.5 rounded-[18px] border border-[#30d158]/25 hover:border-[#30d158]/40 transition-all flex flex-col justify-center backdrop-blur-md shadow-[0_4px_16px_rgba(48,209,88,0.08)] min-w-0"
           >
-            <span className="text-[10px] sm:text-[11px] text-[#30d158] uppercase tracking-wider font-bold flex items-center gap-1">
-              <TrendingUp size={12} /> Total Received (In)
+            <span className="text-[10px] sm:text-[11px] text-[#30d158] uppercase tracking-wider font-bold flex items-center gap-1 truncate">
+              <TrendingUp size={12} className="shrink-0" /> Total Received (In)
             </span>
             <span className="text-xs sm:text-sm md:text-base font-bold text-[#30d158] font-tabular mt-0.5 truncate">
               {showBalance ? `+${formatCurrency(totalReceived)}` : '••••'}
@@ -237,4 +240,4 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
   );
 };
 
-export default BalanceCard;
+export default React.memo(BalanceCard);

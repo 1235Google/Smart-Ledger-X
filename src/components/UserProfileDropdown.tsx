@@ -121,7 +121,7 @@ export default function UserProfileDropdown({ onOpenNotifications }: UserProfile
         aria-label="User Account Menu"
         aria-expanded={isOpen}
         aria-haspopup="true"
-        className="flex items-center gap-2 sm:gap-3 pl-1.5 pr-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+        className="flex items-center gap-2 sm:gap-3 p-1 sm:pl-1.5 sm:pr-3 sm:py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/50 min-h-[44px] min-w-[44px] justify-center"
       >
         <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border border-white/20 shadow-md flex-shrink-0">
           {photoUrl ? (

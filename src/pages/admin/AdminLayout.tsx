@@ -44,6 +44,7 @@ import { M3ThemeProvider, useM3Theme, M3ThemeMode } from '../../components/admin
 import { M3Button } from '../../components/admin/material3/M3Button';
 import { M3Dialog } from '../../components/admin/material3/M3Dialog';
 import SystemModeBanner from '../../components/SystemModeBanner';
+import PageTransitionWrapper from '../../components/PageTransitionWrapper';
 
 function AdminLayoutInner() {
   const { 
@@ -573,18 +574,9 @@ function AdminLayoutInner() {
 
         {/* Page Content Body */}
         <main className="flex-1 p-4 sm:p-8 max-w-[1600px] w-full mx-auto overflow-x-hidden">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={location.pathname}
-              initial={{ opacity: 0, y: 20, scale: 0.97, filter: 'blur(10px)' }}
-              animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, y: -20, scale: 0.97, filter: 'blur(10px)' }}
-              transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-              className="w-full relative"
-            >
-              <Outlet />
-            </motion.div>
-          </AnimatePresence>
+          <PageTransitionWrapper>
+            <Outlet />
+          </PageTransitionWrapper>
         </main>
       </div>
 

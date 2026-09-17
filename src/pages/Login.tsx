@@ -1,43 +1,35 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
-import { Loader2, Mail, Lock, User, ArrowRight, KeyRound, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Loader2, Mail, Lock, ArrowRight, CheckCircle2, AlertCircle, ShieldCheck, Wallet, Eye, EyeOff, Sparkles } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { 
   loginWithGoogle, 
   loginWithEmail, 
-  registerWithEmail, 
   requestPasswordReset, 
   checkRedirectResult,
   formatAuthError 
 } from '../lib/firebase';
 import { 
   loginWithSupabaseEmail, 
-  registerWithSupabaseEmail, 
-  loginWithSupabaseOAuth 
 } from '../lib/supabaseAuth';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { recordLoginActivity } from '../lib/securityService';
-import SyncStatusBadge from '../components/SyncStatusBadge';
-
-type AuthMode = 'signin' | 'signup' | 'forgot' | 'pin';
 
 export default function Login() {
-  const [authMode, setAuthMode] = useState<AuthMode>('signin');
+  const [showForgotModal, setShowForgotModal] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [fullName, setFullName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   
-  const { loginWithPin, updateUserProfile, securitySettings } = useStore();
-  const currentPinLength = securitySettings.pinLength || 4;
+  const { updateUserProfile } = useStore();
 
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-  const [shake, setShake] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
   const navigate = useNavigate();
 
   // Handle redirect sign-in results on initial mount
@@ -50,7 +42,6 @@ export default function Login() {
           try {
             sessionStorage.setItem('isUnlocked', 'true');
           } catch (e) {}
-          console.log('[Auth] Detected successful Google redirect login for:', user.uid);
           navigate('/', { replace: true });
         }
       } catch (err: any) {
@@ -63,39 +54,15 @@ export default function Login() {
     return () => { isMounted = false; };
   }, [navigate]);
 
-  // PIN state
-  const [pin, setPin] = useState<string[]>(() => Array(securitySettings.pinLength || 4).fill(''));
-  const pinRefs = useRef<(HTMLInputElement | null)[]>([]);
-
-  useEffect(() => {
-    setPin(Array(currentPinLength).fill(''));
-  }, [currentPinLength]);
-
-  useEffect(() => {
-    if (authMode === 'pin') {
-      pinRefs.current[0]?.focus();
-    }
-  }, [authMode]);
-
-  const triggerError = (msg: string) => {
-    setError(msg);
-    setShake(true);
-    setTimeout(() => setShake(false), 500);
-  };
-
   const handleGoogleSignIn = async () => {
     if (loading || googleLoading) return;
-    console.log('[Auth Action] Initiating Google Sign-In');
     setGoogleLoading(true);
     setError('');
     setSuccessMsg('');
     try {
       const result = await loginWithGoogle();
-      console.log('[Auth Action] Google Sign-In successful for user:', result?.user?.uid);
       if (result?.user) {
-        try {
-          sessionStorage.setItem('isUnlocked', 'true');
-        } catch (e) {}
+        try { sessionStorage.setItem('isUnlocked', 'true'); } catch (e) {}
         await recordLoginActivity(result.user.uid, {
           method: 'Google',
           status: 'Success',
@@ -103,16 +70,12 @@ export default function Login() {
           userName: result.user.displayName || '',
           userAvatar: result.user.photoURL || ''
         });
-        console.log('[Route Navigation] Navigating to / (Dashboard)');
         navigate('/', { replace: true });
       }
     } catch (err: any) {
-      console.error('[Auth Action Error] Google Sign-In failed:', err);
-      if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
-        console.log('[Auth Action] Google Sign-In was closed by the user.');
-      } else {
+      if (err?.code !== 'auth/popup-closed-by-user' && err?.code !== 'auth/cancelled-popup-request') {
         const friendlyMsg = formatAuthError(err);
-        triggerError(friendlyMsg);
+        setError(friendlyMsg);
         recordLoginActivity('anonymous', {
           method: 'Google',
           status: 'Failed',
@@ -121,6 +84,24 @@ export default function Login() {
       }
     } finally {
       setGoogleLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      await requestPasswordReset(email.trim());
+      setResetSent(true);
+    } catch (err: any) {
+      setError(formatAuthError(err));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -134,525 +115,304 @@ export default function Login() {
     const cleanPassword = password.trim();
 
     if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-      triggerError('Please enter a valid email address (e.g. user@example.com).');
-      return;
-    }
-
-    if (authMode === 'forgot') {
-      console.log('[Auth Action] Requesting password reset email for:', cleanEmail);
-      setLoading(true);
-      try {
-        await requestPasswordReset(cleanEmail);
-        console.log('[Auth Action] Password reset email sent successfully');
-        setSuccessMsg('Password recovery link has been sent to your email address.');
-        setTimeout(() => {
-          setAuthMode('signin');
-          setSuccessMsg('');
-        }, 4000);
-      } catch (err: any) {
-        console.error('[Auth Action Error] Password reset failed:', err);
-        triggerError(formatAuthError(err));
-      } finally {
-        setLoading(false);
-      }
+      setError('Please enter a valid email address.');
       return;
     }
 
     if (!cleanPassword || cleanPassword.length < 6) {
-      triggerError('Password must be at least 6 characters long.');
+      setError('Password must be at least 6 characters long.');
       return;
     }
 
-    if (authMode === 'signup') {
-      if (cleanPassword !== confirmPassword.trim()) {
-        triggerError('Passwords do not match. Please re-enter your password.');
-        return;
-      }
-
-      console.log('[Auth Action] Registering new user with email:', cleanEmail);
-      setLoading(true);
-      try {
-        const cred = await registerWithEmail(cleanEmail, cleanPassword, fullName.trim());
-        console.log('[Auth Action] User registration successful:', cred.user?.uid);
-        
-        // Also register in Supabase if configured
-        if (isSupabaseConfigured()) {
-          try {
-            await registerWithSupabaseEmail(cleanEmail, cleanPassword, fullName);
-            console.log('[Auth Action] Supabase user registration synchronized.');
-          } catch (sbErr) {
-            console.warn('[Auth Action] Supabase registration notice:', sbErr);
-          }
-        }
-
-        if (fullName.trim()) {
-          updateUserProfile({ fullName: fullName.trim() });
-        }
-        if (cred.user) {
-          try {
-            sessionStorage.setItem('isUnlocked', 'true');
-          } catch (e) {}
-          await recordLoginActivity(cred.user.uid, {
-            method: 'Email',
-            status: 'Success',
-            email: cleanEmail,
-            userName: fullName.trim() || 'New User',
-          });
-          console.log('[Route Navigation] Navigating to / (Dashboard)');
-          navigate('/', { replace: true });
-        }
-      } catch (err: any) {
-        console.error('[Auth Action Error] Registration failed:', err);
-        const friendlyMsg = formatAuthError(err);
-        triggerError(friendlyMsg);
-        recordLoginActivity('anonymous', {
-          method: 'Email',
-          status: 'Failed',
-          email: cleanEmail,
-          userName: fullName.trim(),
-          failureReason: friendlyMsg
-        });
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      // Sign in
-      console.log('[Auth Action] Logging in user with email:', cleanEmail);
-      setLoading(true);
-      try {
-        const cred = await loginWithEmail(cleanEmail, cleanPassword);
-        console.log('[Auth Action] Login successful for user:', cred.user?.uid);
-
-        // Also sign in to Supabase if configured
-        if (isSupabaseConfigured()) {
-          try {
-            await loginWithSupabaseEmail(cleanEmail, cleanPassword);
-            console.log('[Auth Action] Supabase user session synchronized.');
-          } catch (sbErr) {
-            console.warn('[Auth Action] Supabase login notice:', sbErr);
-          }
-        }
-
-        if (cred.user) {
-          try {
-            sessionStorage.setItem('isUnlocked', 'true');
-          } catch (e) {}
-          await recordLoginActivity(cred.user.uid, {
-            method: 'Email',
-            status: 'Success',
-            email: cleanEmail,
-            userName: cred.user.displayName || '',
-            userAvatar: cred.user.photoURL || ''
-          });
-          console.log('[Route Navigation] Navigating to / (Dashboard)');
-          navigate('/', { replace: true });
-        }
-      } catch (err: any) {
-        console.error('[Auth Action Error] Login failed:', err);
-        const friendlyMsg = formatAuthError(err);
-        triggerError(friendlyMsg);
-        recordLoginActivity('anonymous', {
-          method: 'Email',
-          status: 'Failed',
-          email: cleanEmail,
-          failureReason: friendlyMsg
-        });
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  const handlePinChange = (index: number, value: string) => {
-    if (!/^\d*$/.test(value)) return;
-    
-    const newPin = [...pin];
-    newPin[index] = value;
-    setPin(newPin);
-
-    // Auto-advance
-    if (value && index < currentPinLength - 1) {
-      pinRefs.current[index + 1]?.focus();
-    }
-    
-    // Check if full PIN entered
-    if (newPin.every((p) => p !== '') && newPin.length === currentPinLength) {
-      handlePinSubmit(newPin.join(''));
-    }
-  };
-
-  const handlePinKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !pin[index] && index > 0) {
-      pinRefs.current[index - 1]?.focus();
-    }
-  };
-
-  const handlePinSubmit = (fullPin: string) => {
-    if (loading) return;
     setLoading(true);
-    setError('');
-    setShake(false);
-    
-    const success = loginWithPin(fullPin);
-    if (success) {
+    try {
+      const cred = await loginWithEmail(cleanEmail, cleanPassword);
+      if (isSupabaseConfigured()) {
+        try {
+          await loginWithSupabaseEmail(cleanEmail, cleanPassword);
+        } catch (sbErr) {}
+      }
+
+      if (cred.user) {
+        try { sessionStorage.setItem('isUnlocked', 'true'); } catch (e) {}
+        await recordLoginActivity(cred.user.uid, {
+          method: 'Email',
+          status: 'Success',
+          email: cleanEmail,
+          userName: cred.user.displayName || '',
+          userAvatar: cred.user.photoURL || ''
+        });
+        navigate('/', { replace: true });
+      }
+    } catch (err: any) {
+      const friendlyMsg = formatAuthError(err);
+      setError(friendlyMsg);
+      recordLoginActivity('anonymous', {
+        method: 'Email',
+        status: 'Failed',
+        email: cleanEmail,
+        failureReason: friendlyMsg
+      });
+    } finally {
       setLoading(false);
-      navigate('/', { replace: true });
-    } else {
-      setLoading(false);
-      triggerError('Incorrect PIN. Please try again.');
-      setPin(Array(currentPinLength).fill(''));
-      pinRefs.current[0]?.focus();
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#05060a] flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans">
-      {/* Animated gradient atmosphere */}
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans select-none bg-gradient-to-br from-[#0c0f1c] via-[#050614] to-[#030408]">
+      {/* Background Geometric Web */}
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden select-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/15 rounded-full blur-[140px] animate-aurora-1" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-600/15 rounded-full blur-[140px] animate-aurora-2" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(255,255,255,0.03)_0%,_transparent_70%)]" />
+        {/* Left Web */}
+        <svg className="absolute -left-[10%] top-[10%] w-[60%] h-[80%] opacity-20" viewBox="0 0 500 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M0 250 L 250 100 L 500 250 L 250 400 Z" stroke="#00f0ff" strokeWidth="1" />
+          <path d="M0 250 L 250 400 L 100 500" stroke="#00f0ff" strokeWidth="1" />
+          <path d="M250 100 L 100 0" stroke="#00f0ff" strokeWidth="1" />
+          <path d="M250 100 L 250 400" stroke="#00f0ff" strokeWidth="1" />
+          <path d="M0 250 L 500 250" stroke="#00f0ff" strokeWidth="1" />
+          <circle cx="250" cy="100" r="3" fill="#00f0ff" />
+          <circle cx="500" cy="250" r="3" fill="#00f0ff" />
+          <circle cx="250" cy="400" r="3" fill="#00f0ff" />
+          <circle cx="0" cy="250" r="3" fill="#00f0ff" />
+          <circle cx="250" cy="250" r="3" fill="#00f0ff" />
+        </svg>
+
+        {/* Right Web */}
+        <svg className="absolute -right-[10%] top-[0%] w-[70%] h-[90%] opacity-20" viewBox="0 0 500 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M100 250 L 350 50 L 500 250 L 350 450 Z" stroke="#00f0ff" strokeWidth="1" />
+          <path d="M100 250 L 350 450 L 200 500" stroke="#00f0ff" strokeWidth="1" />
+          <path d="M500 250 L 500 500" stroke="#00f0ff" strokeWidth="1" />
+          <path d="M350 50 L 350 450" stroke="#00f0ff" strokeWidth="1" />
+          <path d="M100 250 L 500 250" stroke="#00f0ff" strokeWidth="1" />
+          <circle cx="350" cy="50" r="3" fill="#00f0ff" />
+          <circle cx="500" cy="250" r="3" fill="#00f0ff" />
+          <circle cx="350" cy="450" r="3" fill="#00f0ff" />
+          <circle cx="100" cy="250" r="3" fill="#00f0ff" />
+          <circle cx="350" cy="250" r="3" fill="#00f0ff" />
+        </svg>
+
+        {/* Soft radial glows */}
+        <div className="absolute top-0 left-0 w-[50%] h-[50%] bg-blue-900/10 blur-[120px] rounded-full" />
+        <div className="absolute bottom-0 right-0 w-[50%] h-[50%] bg-cyan-900/10 blur-[120px] rounded-full" />
       </div>
 
-      <div className="w-full max-w-md relative z-10">
-        <div className="flex justify-between items-center mb-4 px-2">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/25">
-              <ShieldCheck className="w-4 h-4 text-white" />
+      {/* Main Glassmorphic Card Container */}
+      <motion.div 
+        initial={{ opacity: 0, y: 30, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
+        className="w-full max-w-[420px] relative z-10"
+      >
+        {/* Intense Glowing Border Envelope */}
+        <div className="relative rounded-[26px] p-[2.5px] bg-white shadow-[0_0_30px_rgba(255,255,255,0.7),inset_0_0_15px_rgba(255,255,255,0.5)]">
+          
+          {/* Inner Frosted Glass Body */}
+          <div className="relative bg-[#1a1c23]/80 backdrop-blur-2xl rounded-[23px] py-8 sm:py-10 px-5 sm:px-8 overflow-hidden">
+            
+            {/* Card Header */}
+            <div className="mb-6 sm:mb-8 text-center relative z-10">
+              <h2 className="text-2xl sm:text-[32px] font-bold tracking-tight text-white mb-2 font-sans">
+                Welcome Back
+              </h2>
+              <p className="text-[13px] text-white/60 font-medium">
+                Sign in to access your encrypted ledger.
+              </p>
             </div>
-            <span className="text-white font-bold tracking-wider text-sm">SMART LEDGER</span>
-          </div>
-          <SyncStatusBadge />
-        </div>
 
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ 
-            opacity: 1, 
-            y: 0,
-            x: shake ? [-8, 8, -8, 8, -4, 4, 0] : 0 
-          }}
-          transition={{ duration: shake ? 0.4 : 0.25 }}
-          className="bg-[#171717] border border-white/[0.08] p-5 sm:p-8 rounded-2xl sm:rounded-[24px] shadow-[0_4px_24px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] relative overflow-hidden"
-        >
-          {/* Top subtle sheen */}
-          <div className="pointer-events-none absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/15 to-transparent" />
-
-          {/* Header */}
-          <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-white tracking-tight">
-              {authMode === 'signin' && 'Welcome Back'}
-              {authMode === 'signup' && 'Create Cloud Account'}
-              {authMode === 'forgot' && 'Reset Password'}
-              {authMode === 'pin' && 'Enter Quick PIN'}
-            </h1>
-            <p className="text-[#86868b] text-sm mt-1.5 font-medium">
-              {authMode === 'signin' && 'Sign in to synchronize your ledger across all devices'}
-              {authMode === 'signup' && 'All your financial records safely stored in Cloud Firestore'}
-              {authMode === 'forgot' && 'Enter your email to receive a recovery link'}
-              {authMode === 'pin' && 'Enter your 4-digit passcode to unlock ledger'}
-            </p>
-          </div>
-
-          {/* Status / Error feedback */}
-          {error && (
-            <motion.div 
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-[#ff453a]/10 border border-[#ff453a]/25 text-[#ff453a] px-4 py-3 rounded-2xl mb-5 text-sm space-y-2"
-            >
-              <div className="flex items-start gap-2.5">
-                <AlertCircle className="w-4 h-4 text-[#ff453a] shrink-0 mt-0.5" />
-                <span className="leading-relaxed text-xs">{error}</span>
-              </div>
-              
-              {(error.includes('Authorized Domain') || error.includes('auth/internal-error') || error.includes('Configuration Error')) && (
-                <div className="pt-2 border-t border-[#ff453a]/20 text-xs text-white/80 space-y-1">
-                  <p className="font-semibold text-[#ff453a]">Firebase Setup Checklist:</p>
-                  <ul className="list-disc list-inside space-y-0.5 text-[11px] text-[#86868b]">
-                    <li>Project ID: <code className="text-[#ffd60a] bg-white/5 px-1 py-0.5 rounded">studio-3200340687-9f052</code></li>
-                    <li>Current Host: <code className="text-[#ffd60a] bg-white/5 px-1 py-0.5 rounded">{typeof window !== 'undefined' ? window.location.hostname : 'current domain'}</code></li>
-                    <li>Firebase Console → Authentication → Sign-in method → Enable <strong>Google</strong></li>
-                    <li>Firebase Console → Authentication → Settings → Authorized domains → Add <strong>{typeof window !== 'undefined' ? window.location.hostname : 'domain'}</strong></li>
-                  </ul>
-                </div>
+            {/* Error Banner */}
+            <AnimatePresence>
+              {error && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0, y: -10 }}
+                  animate={{ opacity: 1, height: 'auto', y: 0 }}
+                  exit={{ opacity: 0, height: 0, y: -10 }}
+                  className="mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-start gap-3 text-rose-300 text-xs backdrop-blur-md z-10 relative shadow-sm"
+                >
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                  <span className="leading-relaxed font-medium">{error}</span>
+                </motion.div>
               )}
-            </motion.div>
-          )}
+            </AnimatePresence>
 
-          {successMsg && (
-            <motion.div 
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-[#30d158]/10 border border-[#30d158]/25 text-[#30d158] px-4 py-3 rounded-2xl mb-5 text-sm flex items-start gap-2.5"
-            >
-              <CheckCircle2 className="w-4 h-4 text-[#30d158] shrink-0 mt-0.5" />
-              <span>{successMsg}</span>
-            </motion.div>
-          )}
-
-          {/* Mode Switchers */}
-          {authMode !== 'pin' && authMode !== 'forgot' && (
-            <div className="grid grid-cols-2 gap-1 p-1 bg-[#1c1c1e] border border-white/[0.08] rounded-full mb-6 shadow-sm">
-              <button
+            <div className="relative z-10 space-y-5">
+              {/* Google OAuth Button */}
+              <motion.button
+                whileHover={{ scale: 1.015, y: -1 }}
+                whileTap={{ scale: 0.985 }}
                 type="button"
-                onClick={() => { setAuthMode('signin'); setError(''); }}
-                className={cn(
-                  'py-2 text-xs font-semibold rounded-full transition-all',
-                  authMode === 'signin'
-                    ? 'bg-[#0a84ff] text-white shadow-[0_2px_8px_rgba(10,132,255,0.3)]'
-                    : 'text-[#86868b] hover:text-white'
-                )}
-              >
-                Sign In
-              </button>
-              <button
-                type="button"
-                onClick={() => { setAuthMode('signup'); setError(''); }}
-                className={cn(
-                  'py-2 text-xs font-semibold rounded-full transition-all',
-                  authMode === 'signup'
-                    ? 'bg-[#0a84ff] text-white shadow-[0_2px_8px_rgba(10,132,255,0.3)]'
-                    : 'text-[#86868b] hover:text-white'
-                )}
-              >
-                Sign Up
-              </button>
-            </div>
-          )}
-
-          {/* GOOGLE SIGN IN BUTTON (Primary Cloud Auth Option) */}
-          {(authMode === 'signin' || authMode === 'signup') && (
-            <div className="space-y-4 mb-6">
-              <button
-                type="button"
-                disabled={googleLoading || loading}
                 onClick={handleGoogleSignIn}
-                className="w-full flex items-center justify-center gap-3 bg-white text-black hover:bg-neutral-100 font-semibold py-3 px-4 rounded-full transition-all shadow-md active:scale-[0.98] disabled:opacity-50 text-sm"
+                disabled={googleLoading || loading}
+                className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl text-sm font-bold text-white/90 bg-[#1e2029] hover:bg-[#252836] border border-white/5 transition-all duration-300 disabled:opacity-50"
               >
                 {googleLoading ? (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-5 h-5 animate-spin text-neutral-900" />
-                    <span>Signing in with Google...</span>
-                  </div>
+                  <Loader2 className="w-4 h-4 animate-spin text-white/70" />
                 ) : (
-                  <>
-                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
-                      <path
-                        fill="#4285F4"
-                        d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.04 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-                      />
-                    </svg>
-                    <span>Continue with Google</span>
-                  </>
+                  <svg className="w-4 h-4" viewBox="0 0 24 24">
+                    <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.9C6.2 7.4 8.9 5 12 5z" />
+                    <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.7-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5.1 3.7-8.9z" />
+                    <path fill="#FBBC05" d="M5.3 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.6 7.4C.6 9.4 0 11.6 0 14s.6 4.6 1.6 6.6l3.7-3.1-.4-2.7z" />
+                    <path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.1 0-5.8-2.4-6.7-5.3L1.6 16C3.5 19.8 7.4 23 12 23z" />
+                  </svg>
                 )}
-              </button>
+                <span>Continue with Google</span>
+              </motion.button>
 
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-[1px] bg-white/[0.08]" />
-                <span className="text-xs text-[#86868b] uppercase tracking-widest font-mono">Or with email</span>
-                <div className="flex-1 h-[1px] bg-white/[0.08]" />
-              </div>
-            </div>
-          )}
-
-          {/* PIN FORM */}
-          {authMode === 'pin' ? (
-            <motion.div
-              key="pin-form"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.2 }}
-              className="space-y-6"
-            >
-              <div className="flex justify-center gap-2 sm:gap-3">
-                {pin.map((digit, i) => (
-                  <input
-                    key={i}
-                    ref={(el) => { pinRefs.current[i] = el; }}
-                    type="password"
-                    maxLength={1}
-                    value={digit}
-                    onChange={(e) => handlePinChange(i, e.target.value)}
-                    onKeyDown={(e) => handlePinKeyDown(i, e)}
-                    className={cn(
-                      'w-11 sm:w-14 h-13 sm:h-16 bg-[#1f1f1f] border rounded-xl sm:rounded-2xl text-center text-xl sm:text-2xl text-white font-mono focus:outline-none transition-all',
-                      digit ? 'border-[#0a84ff] shadow-[0_0_15px_rgba(10,132,255,0.3)]' : 'border-white/[0.08] focus:border-[#0a84ff]'
-                    )}
-                  />
-                ))}
-              </div>
-              
-              <button
-                type="button"
-                disabled={loading || pin.some((p) => p === '')}
-                onClick={() => handlePinSubmit(pin.join(''))}
-                className="w-full bg-[#0a84ff] hover:bg-[#0a84ff]/90 disabled:opacity-50 text-white rounded-full py-3.5 font-semibold transition-all shadow-[0_4px_16px_rgba(10,132,255,0.3)] flex items-center justify-center gap-2 text-sm"
-              >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Unlock Wallet'}
-              </button>
-
-              <div className="text-center pt-2">
-                <button
-                  type="button"
-                  onClick={() => { setAuthMode('signin'); setError(''); }}
-                  className="text-xs text-[#0a84ff] hover:underline font-medium transition-colors"
-                >
-                  Switch to Cloud Account Login
-                </button>
-              </div>
-            </motion.div>
-          ) : (
-            /* EMAIL & PASSWORD FORM */
-            <form onSubmit={handleEmailAuth} className="space-y-4">
-              {authMode === 'signup' && (
+              {/* Form */}
+              <form onSubmit={handleEmailAuth} className="space-y-4 pt-2">
                 <div>
-                  <label className="block text-xs font-semibold text-white/90 mb-1.5">Full Name</label>
-                  <div className="relative">
-                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#86868b]" />
+                  <label className="block text-xs font-semibold text-white/90 mb-2">Email Address</label>
+                  <div className="relative group">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-white transition-colors">
+                      <Mail className="w-4 h-4" />
+                    </div>
                     <input
-                      type="text"
-                      placeholder="John Doe"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      className="w-full bg-[#1f1f1f] border border-white/[0.08] rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-[#86868b] focus:outline-none focus:border-[#0a84ff] focus:ring-2 focus:ring-[#0a84ff]/25 transition-all"
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="name@example.com"
+                      className="w-full pl-11 pr-4 py-3 bg-[#1e2029] border border-white/5 focus:border-white/20 focus:bg-[#252836] rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none transition-all duration-300"
                     />
                   </div>
                 </div>
-              )}
 
-              <div>
-                <label className="block text-xs font-semibold text-white/90 mb-1.5">Email Address</label>
-                <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#86868b]" />
-                  <input
-                    type="email"
-                    required
-                    placeholder="user@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-[#1f1f1f] border border-white/[0.08] rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-[#86868b] focus:outline-none focus:border-[#0a84ff] focus:ring-2 focus:ring-[#0a84ff]/25 transition-all"
-                  />
-                </div>
-              </div>
-
-              {authMode !== 'forgot' && (
                 <div>
-                  <div className="flex justify-between items-center mb-1.5">
-                    <label className="text-xs font-semibold text-white/90">Password</label>
-                    {authMode === 'signin' && (
-                      <button
-                        type="button"
-                        onClick={() => { setAuthMode('forgot'); setError(''); }}
-                        className="text-xs text-[#0a84ff] hover:underline transition-colors"
-                      >
-                        Forgot password?
-                      </button>
-                    )}
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-semibold text-white/90">Password</label>
+                    <span className="text-xs font-semibold text-[#00f0ff]">Enterprise Vault</span>
                   </div>
-                  <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#86868b]" />
+                  <div className="relative group">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-white transition-colors">
+                      <Lock className="w-4 h-4" />
+                    </div>
                     <input
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       required
-                      placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-[#1f1f1f] border border-white/[0.08] rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-[#86868b] focus:outline-none focus:border-[#0a84ff] focus:ring-2 focus:ring-[#0a84ff]/25 transition-all"
+                      placeholder="••••••••••••"
+                      className="w-full pl-11 pr-11 py-3 bg-[#1e2029] border border-white/5 focus:border-white/20 focus:bg-[#252836] rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none transition-all duration-300"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-white transition-colors focus:outline-none"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
                 </div>
-              )}
 
-              {authMode === 'signup' && (
-                <div>
-                  <label className="block text-xs font-semibold text-white/90 mb-1.5">Confirm Password</label>
-                  <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#86868b]" />
-                    <input
-                      type="password"
-                      required
-                      placeholder="••••••••"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full bg-[#1f1f1f] border border-white/[0.08] rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-[#86868b] focus:outline-none focus:border-[#0a84ff] focus:ring-2 focus:ring-[#0a84ff]/25 transition-all"
-                    />
+                {/* Primary Submit Button */}
+                <div className="pt-6">
+                  <motion.button
+                    whileHover={{ scale: 1.015, y: -1 }}
+                    whileTap={{ scale: 0.985 }}
+                    type="submit"
+                    disabled={loading || googleLoading}
+                    className="w-full relative py-3.5 px-4 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-[#2f5af4] to-[#00f0ff] shadow-[0_10px_30px_-10px_rgba(0,240,255,0.8)] hover:shadow-[0_15px_40px_-10px_rgba(0,240,255,1)] transition-all duration-300 flex items-center justify-center disabled:opacity-50 border border-white/20"
+                  >
+                    {loading ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <span>Sign in &rarr;</span>
+                    )}
+                  </motion.button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer Trust Indicator */}
+        <div className="mt-6 flex items-center justify-center gap-2 text-[10px] font-bold text-white/80 tracking-widest uppercase">
+          <ShieldCheck className="w-4 h-4 text-[#00f0ff] shrink-0" />
+          <span>End To End Encrypted Cloud Sync</span>
+        </div>
+      </motion.div>
+
+      {/* Forgot Password Modal */}
+      <AnimatePresence>
+        {showForgotModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="relative w-full max-w-md p-[1px] rounded-[24px] bg-gradient-to-b from-white/20 via-white/5 to-white/5 shadow-2xl"
+            >
+              <div className="bg-[#050b14]/95 backdrop-blur-3xl rounded-[23px] p-6 sm:p-8 overflow-hidden">
+                <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+                
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shadow-inner">
+                    <Sparkles className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white tracking-tight">Reset Password</h3>
+                    <p className="text-[13px] text-slate-400 mt-1 font-medium">Enter your email to receive a recovery link.</p>
                   </div>
                 </div>
-              )}
 
-              <button
-                type="submit"
-                disabled={loading || googleLoading}
-                className="w-full bg-[#0a84ff] hover:bg-[#0a84ff]/90 text-white font-semibold py-3.5 px-4 rounded-full transition-all shadow-[0_4px_16px_rgba(10,132,255,0.3)] active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 mt-2 text-sm"
-              >
-                {loading ? (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>
-                      {authMode === 'signin' && 'Signing in to Ledger...'}
-                      {authMode === 'signup' && 'Creating Account...'}
-                      {authMode === 'forgot' && 'Sending Recovery Email...'}
-                    </span>
+                {resetSent ? (
+                  <div className="p-5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-center shadow-inner">
+                    <CheckCircle2 className="w-10 h-10 text-cyan-400 mx-auto mb-3" />
+                    <h4 className="text-base font-bold text-white mb-1.5">Recovery Link Sent</h4>
+                    <p className="text-sm text-slate-300 mb-5 leading-relaxed">
+                      We sent a secure password reset link to <br/><span className="text-cyan-400 font-mono font-medium">{email}</span>
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotModal(false)}
+                      className="w-full py-3 rounded-xl text-sm font-bold text-white bg-white/5 hover:bg-white/10 transition-colors border border-white/10 shadow-sm"
+                    >
+                      Return to Sign In
+                    </button>
                   </div>
                 ) : (
-                  <>
-                    <span>
-                      {authMode === 'signin' && 'Sign In to Ledger'}
-                      {authMode === 'signup' && 'Create Account'}
-                      {authMode === 'forgot' && 'Send Recovery Email'}
-                    </span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
+                  <form onSubmit={handleResetPassword} className="space-y-5">
+                    {error && (
+                      <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2 shadow-sm">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span className="font-medium">{error}</span>
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                        Account Email Address
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="name@example.com"
+                        className="w-full px-4 py-3 bg-black/40 border border-white/[0.08] focus:border-cyan-400/50 rounded-xl text-white placeholder-slate-500/70 text-sm focus:outline-none focus:ring-4 focus:ring-cyan-400/10 transition-all shadow-inner"
+                      />
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowForgotModal(false)}
+                        className="flex-1 py-3.5 rounded-xl text-sm font-bold text-slate-300 bg-white/5 hover:bg-white/10 border border-white/5 transition-colors shadow-sm"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="flex-1 py-3.5 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-cyan-500 shadow-[0_4px_14px_rgba(6,182,212,0.3)] hover:shadow-[0_6px_20px_rgba(6,182,212,0.4)] transition-all disabled:opacity-50 border border-white/10"
+                      >
+                        {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Send Link'}
+                      </button>
+                    </div>
+                  </form>
                 )}
-              </button>
-
-              {authMode === 'forgot' && (
-                <div className="text-center pt-2">
-                  <button
-                    type="button"
-                    onClick={() => { setAuthMode('signin'); setError(''); }}
-                    className="text-xs text-[#86868b] hover:text-white transition-colors"
-                  >
-                    Back to Sign In
-                  </button>
-                </div>
-              )}
-            </form>
-          )}
-
-          {/* Bottom PIN fallback toggle */}
-          {authMode !== 'pin' && (
-            <div className="mt-6 pt-5 border-t border-white/[0.08] flex items-center justify-between text-xs text-[#86868b]">
-              <span className="flex items-center gap-1.5 text-[#86868b]">
-                <ShieldCheck className="w-3.5 h-3.5 text-[#30d158]" />
-                End-to-End Encrypted Cloud Sync
-              </span>
-              <button
-                type="button"
-                onClick={() => { setAuthMode('pin'); setError(''); }}
-                className="text-[#0a84ff] hover:underline font-semibold flex items-center gap-1 transition-colors"
-              >
-                <KeyRound className="w-3.5 h-3.5" />
-                Quick PIN
-              </button>
-            </div>
-          )}
-        </motion.div>
-      </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

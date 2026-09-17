@@ -52,11 +52,19 @@ interface SearchResultItem {
 export default function CommandPalette() {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<SearchCategory>('all');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedQuery(query);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [query]);
 
   const { transactions, customers, savingsGoals, gullakEntries, userProfile } = useStore();
 
@@ -425,11 +433,11 @@ export default function CommandPalette() {
       pool = pool.filter(item => item.category === selectedCategory);
     }
 
-    if (!query.trim()) {
+    if (!debouncedQuery.trim()) {
       return pool.slice(0, 15);
     }
 
-    const q = query.toLowerCase().trim();
+    const q = debouncedQuery.toLowerCase().trim();
     return pool.filter(item => {
       const matchTitle = item.title.toLowerCase().includes(q);
       const matchSubtitle = item.subtitle.toLowerCase().includes(q);
@@ -593,7 +601,7 @@ export default function CommandPalette() {
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-16 sm:pt-24 px-4 select-none">
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-10 sm:pt-24 px-2 sm:px-4 select-none">
           {/* Backdrop Blur */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -610,7 +618,7 @@ export default function CommandPalette() {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: -20 }}
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-            className="relative w-full max-w-2xl vision-glass-elevated border border-white/[0.14] rounded-[28px] shadow-[0_28px_80px_rgba(0,0,0,0.9),0_0_50px_rgba(10,132,255,0.15)] overflow-hidden flex flex-col max-h-[82vh] z-10"
+            className="relative w-full max-w-2xl vision-glass-elevated border border-white/[0.14] rounded-[24px] sm:rounded-[28px] shadow-[0_28px_80px_rgba(0,0,0,0.9),0_0_50px_rgba(10,132,255,0.15)] overflow-hidden flex flex-col max-h-[85vh] z-10"
           >
             {/* Top VisionOS Specular Rim */}
             <div className="pointer-events-none absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/35 to-transparent z-20" />
@@ -619,15 +627,15 @@ export default function CommandPalette() {
             <div className="absolute -top-16 -right-16 w-48 h-48 bg-[#0a84ff]/15 rounded-full blur-3xl pointer-events-none" />
 
             {/* Search Input Bar */}
-            <div className="flex items-center px-6 py-4.5 border-b border-white/[0.08] gap-3 relative z-10">
-              <Search size={20} className="text-[#0a84ff] shrink-0" />
+            <div className="flex items-center px-4 sm:px-6 py-3.5 sm:py-4.5 border-b border-white/[0.08] gap-2.5 sm:gap-3 relative z-10">
+              <Search size={18} className="text-[#0a84ff] shrink-0" />
               <input
                 ref={inputRef}
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search ledger, payments, people, pages, or ask AI..."
-                className="w-full bg-transparent text-white placeholder-[#86868b] text-base outline-none font-medium"
+                placeholder="Search ledger, payments, people..."
+                className="w-full bg-transparent text-white placeholder-[#86868b] text-sm sm:text-base outline-none font-medium"
               />
               {query && (
                 <button 

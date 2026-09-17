@@ -42,6 +42,7 @@ import UserProfileDropdown from './UserProfileDropdown';
 import SyncStatusBadge from './SyncStatusBadge';
 import LiquidSpotlight from './ui/LiquidSpotlight';
 import SystemModeBanner from './SystemModeBanner';
+import PageTransitionWrapper from './PageTransitionWrapper';
 
 // Primary Apple Floating Bottom Tab Bar Items - Simple & Clear
 const mobilePrimaryTabs = [
@@ -260,7 +261,7 @@ export default function Layout() {
   const isPrimaryTabActive = mobilePrimaryTabs.some(t => t.path === location.pathname);
 
   return (
-    <div className="min-h-[100dvh] bg-transparent text-white font-sans flex relative selection:bg-[#0a84ff]/30 selection:text-white">
+    <div className="min-h-[100dvh] bg-transparent text-white font-sans flex relative selection:bg-[#0a84ff]/30 selection:text-white w-full overflow-x-hidden">
       {/* VisionOS Dynamic Liquid Spotlight Tracker */}
       <LiquidSpotlight />
 
@@ -466,21 +467,21 @@ export default function Layout() {
 
       {/* Mobile Top Bar (Apple Frosted Header) */}
       <div className="md:hidden fixed top-0 left-0 right-0 bg-black/60 backdrop-blur-[20px] border-b border-white/[0.08] z-30 pt-[env(safe-area-inset-top,0px)]">
-        <div className="h-14 sm:h-16 flex items-center justify-between px-2 sm:px-4">
+        <div className="h-14 sm:h-16 flex items-center justify-between px-1.5 min-[360px]:px-3 sm:px-4">
           <div className="flex items-center gap-1 min-[360px]:gap-2 sm:gap-2.5 min-w-0">
             <button 
               onClick={() => setMobileMenuOpen(true)} 
               aria-label="Open Full App Menu"
-              className="w-8 h-8 min-[360px]:w-9 min-[360px]:h-9 sm:w-10 sm:h-10 flex items-center justify-center text-[#f5f5f7] rounded-full hover:bg-white/[0.08] active:scale-95 transition-all shrink-0"
+              className="w-9 h-9 min-[360px]:w-10 min-[360px]:h-10 min-h-[44px] min-w-[44px] flex items-center justify-center text-[#f5f5f7] rounded-full hover:bg-white/[0.08] active:scale-95 transition-all shrink-0"
             >
-              <Menu size={18} />
+              <Menu size={19} />
             </button>
             <Link to="/" className="flex items-center gap-1.5 min-[360px]:gap-2 min-w-0">
               <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-tr from-[#0a84ff] to-[#5e5ce6] rounded-xl flex items-center justify-center shadow-md shadow-[#0a84ff]/20 border border-white/15 shrink-0">
                 <Wallet className="text-white" size={14} />
               </div>
               <div className="flex items-center gap-1 min-w-0">
-                <span className="font-bold tracking-tight text-white text-[13px] min-[360px]:text-sm sm:text-base whitespace-nowrap truncate">Smart Ledger</span>
+                <span className="font-bold tracking-tight text-white text-[12px] min-[360px]:text-sm sm:text-base whitespace-nowrap truncate max-w-[85px] min-[360px]:max-w-none">Smart Ledger</span>
                 <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 border border-white/20 shrink-0">
                   X
                 </span>
@@ -488,13 +489,13 @@ export default function Layout() {
             </Link>
           </div>
 
-          <div className="flex items-center gap-1 min-[360px]:gap-1.5 shrink-0">
+          <div className="flex items-center gap-0.5 min-[360px]:gap-1.5 shrink-0">
             <button
               onClick={openSearch}
               aria-label="Universal Search (Cmd+K)"
-              className="w-8 h-8 min-[360px]:w-9 min-[360px]:h-9 sm:w-10 sm:h-10 flex items-center justify-center text-[#86868b] hover:text-white rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] active:scale-95 transition-all shrink-0"
+              className="w-9 h-9 min-[360px]:w-10 min-[360px]:h-10 min-h-[44px] min-w-[44px] flex items-center justify-center text-[#86868b] hover:text-white rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] active:scale-95 transition-all shrink-0"
             >
-              <Search size={15} />
+              <Search size={16} />
             </button>
             <NotificationDropdown ref={mobileNotifRef} />
             <UserProfileDropdown onOpenNotifications={() => mobileNotifRef.current?.open()} />
@@ -640,18 +641,9 @@ export default function Layout() {
         {/* Fast, Smooth Page Routing Container (Instant & Stutter-Free) */}
         <div className="flex-1 w-full pt-[calc(3.75rem+env(safe-area-inset-top,0px))] md:pt-0">
           <div className="w-full max-w-7xl mx-auto p-3 sm:p-6 md:p-8 relative">
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.div
-                key={location.pathname}
-                initial={{ opacity: 0, y: 16, scale: 0.98, filter: 'blur(8px)' }}
-                animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
-                exit={{ opacity: 0, y: -16, scale: 0.98, filter: 'blur(8px)' }}
-                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-                className="w-full relative"
-              >
-                <Outlet />
-              </motion.div>
-            </AnimatePresence>
+            <PageTransitionWrapper>
+              <Outlet />
+            </PageTransitionWrapper>
             {/* Explicit bottom clearance spacer so no content is obscured behind the floating tab capsule */}
             <div className="h-14 md:hidden pointer-events-none" aria-hidden="true" />
           </div>

@@ -96,22 +96,22 @@ export default function CurrentBalance() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full space-y-8 bg-[#05060a]"
+        className="w-full space-y-6 sm:space-y-8 overflow-x-hidden"
       >
-      <header className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <header className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white mb-1">Current Balance</h1>
-          <p className="text-slate-400 text-sm font-medium">Real-time ledger audit, liquidity status, and activity tracking.</p>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-white mb-1">Current Balance</h1>
+          <p className="text-slate-400 text-xs sm:text-sm font-medium">Real-time ledger audit, liquidity status, and activity tracking.</p>
         </div>
 
-        <div className="flex flex-wrap sm:flex-nowrap gap-2.5 sm:gap-3 w-full sm:w-auto">
+        <div className="flex flex-wrap sm:flex-nowrap gap-2 sm:gap-3 w-full sm:w-auto">
           <Link to="/received" className="flex-1 sm:flex-none">
-            <AnimatedButton variant="success" icon={<ArrowDownLeft size={16} />} className="w-full sm:w-auto justify-center">
+            <AnimatedButton variant="success" icon={<ArrowDownLeft size={16} />} className="w-full sm:w-auto justify-center min-h-[44px]">
               Add Received
             </AnimatedButton>
           </Link>
           <Link to="/pending" className="flex-1 sm:flex-none">
-            <AnimatedButton variant="primary" icon={<Clock size={16} />} className="w-full sm:w-auto justify-center">
+            <AnimatedButton variant="primary" icon={<Clock size={16} />} className="w-full sm:w-auto justify-center min-h-[44px]">
               Add Pending
             </AnimatedButton>
           </Link>
@@ -126,23 +126,23 @@ export default function CurrentBalance() {
       />
 
       {/* Stats Grid with VisionOS Liquid Glass Styling */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 md:gap-6">
         {/* Total Received Card */}
         <GlassCard 
           delay={0.08} 
           glowColor="rgba(48, 209, 88, 0.25)"
-          className="p-4 sm:p-6 md:p-7 relative select-none flex flex-col justify-between cursor-pointer group rounded-[22px] sm:rounded-[24px]"
+          className="p-3.5 sm:p-6 md:p-7 relative select-none flex flex-col justify-between cursor-pointer group rounded-[20px] sm:rounded-[24px]"
           onClick={() => navigate('/received')}
         >
           {/* Top Specular Rim */}
           <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
 
           {/* Ambient Glow */}
-          <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#30d158]/10 rounded-full blur-2xl pointer-events-none group-hover:bg-[#30d158]/20 transition-all duration-500" />
+          <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#30d158]/10 rounded-full blur-2xl pointer-events-none group-hover:bg-[#30d158]/20 transition-all duration-500 decorative-element -z-10" />
 
           <div>
-            <div className="flex items-start justify-between relative z-10 mb-3 gap-2">
-              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="flex items-start justify-between relative z-10 mb-2.5 sm:mb-3 gap-2 flex-wrap">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                 <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#30d158]/15 border border-[#30d158]/30 flex items-center justify-center text-[#30d158] shadow-sm shrink-0">
                   <ArrowDownLeft size={18} />
                 </div>
@@ -155,17 +155,17 @@ export default function CurrentBalance() {
                   </span>
                 </div>
               </div>
-              <span className="text-[10px] sm:text-[11px] font-bold px-2 sm:px-2.5 py-1 rounded-full bg-[#30d158]/15 text-[#30d158] border border-[#30d158]/25 shadow-sm flex items-center gap-1 shrink-0">
-                <CheckCircle2 size={12} /> {receivedCount} {receivedCount === 1 ? 'record' : 'records'}
+              <span className="text-[10px] sm:text-[11px] font-bold px-2 sm:px-2.5 py-1 rounded-full bg-[#30d158]/15 text-[#30d158] border border-[#30d158]/25 shadow-sm flex items-center gap-1 shrink-0 whitespace-nowrap min-h-[28px]">
+                <CheckCircle2 size={12} className="shrink-0" /> {receivedCount} {receivedCount === 1 ? 'record' : 'records'}
               </span>
             </div>
 
-            <div className="text-2xl sm:text-4xl font-extrabold text-white font-tabular tracking-tight my-2 relative z-10 break-words">
+            <div className="text-[clamp(1.5rem,4.5vw,2.25rem)] font-extrabold text-white font-tabular tracking-tight my-1 sm:my-2 relative z-10 break-words leading-none">
               <CountUp value={totalReceived} formatter={(v) => formatCurrency(v)} />
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-xs pt-3 border-t border-white/[0.06] mt-4 relative z-10 gap-2">
+          <div className="flex items-center justify-between text-xs pt-3 border-t border-white/[0.06] mt-3 sm:mt-4 relative z-10 gap-2 flex-wrap sm:flex-nowrap">
             <div className="flex items-center gap-1.5 sm:gap-2 text-[#86868b] text-[11px] sm:text-xs truncate">
               <Users size={14} className="text-[#30d158] shrink-0" />
               <span className="truncate">
@@ -184,18 +184,18 @@ export default function CurrentBalance() {
         <GlassCard 
           delay={0.16} 
           glowColor="rgba(255, 214, 10, 0.25)"
-          className="p-4 sm:p-6 md:p-7 relative select-none flex flex-col justify-between cursor-pointer group rounded-[22px] sm:rounded-[24px]"
+          className="p-3.5 sm:p-6 md:p-7 relative select-none flex flex-col justify-between cursor-pointer group rounded-[20px] sm:rounded-[24px]"
           onClick={() => navigate('/pending')}
         >
           {/* Top Specular Rim */}
           <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
 
           {/* Ambient Glow */}
-          <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#ffd60a]/10 rounded-full blur-2xl pointer-events-none group-hover:bg-[#ffd60a]/20 transition-all duration-500" />
+          <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#ffd60a]/10 rounded-full blur-2xl pointer-events-none group-hover:bg-[#ffd60a]/20 transition-all duration-500 decorative-element -z-10" />
 
           <div>
-            <div className="flex items-start justify-between relative z-10 mb-3 gap-2">
-              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="flex items-start justify-between relative z-10 mb-2.5 sm:mb-3 gap-2 flex-wrap">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                 <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#ffd60a]/15 border border-[#ffd60a]/30 flex items-center justify-center text-[#ffd60a] shadow-sm shrink-0">
                   <Clock size={18} />
                 </div>
@@ -208,24 +208,24 @@ export default function CurrentBalance() {
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
                 {overduePendingCount > 0 && (
-                  <span className="text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-[#ff453a]/20 text-[#ff453a] border border-[#ff453a]/30 animate-pulse">
+                  <span className="text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-[#ff453a]/20 text-[#ff453a] border border-[#ff453a]/30 animate-pulse whitespace-nowrap">
                     {overduePendingCount} overdue
                   </span>
                 )}
-                <span className="text-[10px] sm:text-[11px] font-bold px-2 sm:px-2.5 py-1 rounded-full bg-[#ffd60a]/15 text-[#ffd60a] border border-[#ffd60a]/25 shadow-sm">
+                <span className="text-[10px] sm:text-[11px] font-bold px-2 sm:px-2.5 py-1 rounded-full bg-[#ffd60a]/15 text-[#ffd60a] border border-[#ffd60a]/25 shadow-sm whitespace-nowrap min-h-[28px] flex items-center">
                   {pendingCount} {pendingCount === 1 ? 'due' : 'dues'}
                 </span>
               </div>
             </div>
 
-            <div className="text-2xl sm:text-4xl font-extrabold text-[#ffd60a] font-tabular tracking-tight my-2 relative z-10 break-words">
+            <div className="text-[clamp(1.5rem,4.5vw,2.25rem)] font-extrabold text-[#ffd60a] font-tabular tracking-tight my-1 sm:my-2 relative z-10 break-words leading-none">
               <CountUp value={totalPending} formatter={(v) => formatCurrency(v)} />
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-xs pt-3 border-t border-white/[0.06] mt-4 relative z-10 gap-2">
+          <div className="flex items-center justify-between text-xs pt-3 border-t border-white/[0.06] mt-3 sm:mt-4 relative z-10 gap-2 flex-wrap sm:flex-nowrap">
             <div className="flex items-center gap-1.5 sm:gap-2 text-[#86868b] text-[11px] sm:text-xs truncate">
               <Users size={14} className="text-[#ffd60a] shrink-0" />
               <span className="truncate">
@@ -243,9 +243,9 @@ export default function CurrentBalance() {
 
       {/* Recent Activity */}
       <div>
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-white tracking-tight">Activity Log</h2>
-          <Link to="/analytics" className="text-xs text-blue-400 font-bold hover:underline transition-all">
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
+          <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">Activity Log</h2>
+          <Link to="/analytics" className="text-xs text-blue-400 font-bold hover:underline transition-all min-h-[36px] flex items-center">
             View Analytics →
           </Link>
         </div>
@@ -271,34 +271,34 @@ export default function CurrentBalance() {
                     delay: idx * 0.03,
                   }}
                   whileHover={{ scale: 1.01, x: 2 }}
-                  className="group bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 p-4 rounded-2xl flex items-center gap-4 transition-all shadow-md"
+                  className="group bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 p-3 sm:p-4 rounded-2xl flex items-center gap-2.5 sm:gap-4 transition-all shadow-md min-w-0"
                 >
                   <div className={cn(
-                    "w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-inner",
+                    "w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0 shadow-inner",
                     tx.type === 'received' ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" :
                     tx.type === 'sent' ? "bg-rose-500/20 text-rose-400 border border-rose-500/30" :
                     "bg-amber-500/20 text-amber-400 border border-amber-500/30"
                   )}>
-                    {tx.type === 'received' ? <ArrowDownLeft size={22} /> : 
-                     tx.type === 'sent' ? <ArrowUpRight size={22} /> : 
-                     <Clock size={22} />}
+                    {tx.type === 'received' ? <ArrowDownLeft size={18} className="sm:w-[22px] sm:h-[22px]" /> : 
+                     tx.type === 'sent' ? <ArrowUpRight size={18} className="sm:w-[22px] sm:h-[22px]" /> : 
+                     <Clock size={18} className="sm:w-[22px] sm:h-[22px]" />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-bold text-sm text-white truncate">{tx.personName}</div>
-                    <div className="text-xs text-slate-400 mt-0.5">
+                    <div className="font-bold text-xs sm:text-sm text-white truncate">{tx.personName}</div>
+                    <div className="text-[10.5px] sm:text-xs text-slate-400 mt-0.5 truncate">
                       {tx.type === 'received' || tx.type === 'sent' ? tx.purpose : (tx as any).reason} • {formatDate(tx.type === 'received' || tx.type === 'sent' ? tx.date : (tx as any).dueDate, generalSettings?.timezone)}
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0 min-w-fit pl-1">
                     <p className={cn(
-                      "text-sm font-extrabold tracking-tight",
+                      "text-xs sm:text-sm md:text-base font-extrabold tracking-tight whitespace-nowrap",
                       tx.type === 'received' ? "text-emerald-400" :
                       tx.type === 'sent' ? "text-rose-400" :
                       "text-amber-400"
                     )}>
                       {tx.type === 'received' ? '+' : tx.type === 'sent' ? '-' : '⏳'} {formatCurrency(tx.amount)}
                     </p>
-                    <p className="text-[10px] text-slate-500 uppercase font-semibold">{tx.type}</p>
+                    <p className="text-[9.5px] sm:text-[10px] text-slate-500 uppercase font-semibold">{tx.type}</p>
                   </div>
                 </motion.div>
               ))}

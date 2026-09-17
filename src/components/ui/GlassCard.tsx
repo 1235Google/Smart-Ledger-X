@@ -51,11 +51,10 @@ export const GlassCard: React.FC<GlassCardProps> = ({
   return (
     <motion.div
       ref={cardRef}
-      initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20, filter: 'blur(6px)' }}
+      initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
       animate={{ 
         opacity: 1, 
         y: 0,
-        filter: 'blur(0px)',
       }}
       transition={
         shouldReduceMotion

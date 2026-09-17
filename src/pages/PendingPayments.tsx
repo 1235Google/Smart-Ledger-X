@@ -1,12 +1,16 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../context/StoreContext';
 import { motion, AnimatePresence } from 'motion/react';
-import { Clock, Plus, User, Calendar, FileText, CheckCircle2, Phone, MessageCircle, Trash, AlertTriangle, Loader2, ClipboardList, Coins, Wallet, Brain, MoreVertical, Edit2, Play, Pause, Copy, Share2, Download, Archive, Bell } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Clock, Plus, User, Calendar, FileText, CheckCircle2, Phone, MessageCircle, Trash, AlertTriangle, Loader2, ClipboardList, Coins, Wallet, Brain, MoreVertical, Edit2, Play, Pause, Copy, Share2, Download, Archive, Bell, ArrowDownLeft, TrendingUp, Users, Award } from 'lucide-react';
 import { formatCurrency, formatDate, formatName, getDaysDiff, calculateReminderDetails, formatReminderMessage, cn } from '../lib/utils';
 import { PendingMoney } from '../types';
 import LatePenaltyModal from '../components/LatePenaltyModal';
 import ReminderMessageEditor, { generateSmartDefaultReminder } from "../components/ReminderMessageEditor";
 import DataStateGuard from '../components/ui/DataStateGuard';
+import GlassCard from '../components/ui/GlassCard';
+import AnimatedButton from '../components/ui/AnimatedButton';
+import { CountUp } from '../components/ui/CountUp';
 
 const getInitials = (name: string) => {
   return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
@@ -203,7 +207,7 @@ function PaymentCard({
           {!isPaid && (
             <button 
               onClick={() => onEditPenalty(tx)}
-              className={`mt-2 sm:mt-2.5 px-3 py-1.5 rounded-full text-[10px] font-bold tracking-wide uppercase border flex items-center gap-1.5 transition-all ${
+              className={`mt-2 sm:mt-2.5 px-3 py-1.5 rounded-full text-[10px] font-bold tracking-wide uppercase border flex items-center gap-1.5 transition-all min-h-[36px] touch-target ${
                 tx.penaltyEnabled && penaltyAmount > 0
                   ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20'
                   : tx.penaltyEnabled
@@ -476,13 +480,27 @@ export default function PendingPayments() {
 
   const pendingTransactions = transactions.filter((t): t is PendingMoney => t.type === 'pending');
 
-  const { pendingRecordsCount, totalPendingAmount, overdueAmount, overdueCount, collectedThisMonthAmount, collectedThisMonthCount } = useMemo(() => {
+  const { 
+    pendingRecordsCount, 
+    totalPendingAmount, 
+    overdueAmount, 
+    overdueCount, 
+    collectedThisMonthAmount, 
+    collectedThisMonthCount,
+    totalReceivables,
+    recoveryProgressPercent,
+    avgRecoveryProbability,
+    uniqueDebtorsCount
+  } = useMemo(() => {
     let pRecordsCount = 0;
     let tPendingAmount = 0;
     let oAmount = 0;
     let oCount = 0;
     let cThisMonthAmount = 0;
     let cThisMonthCount = 0;
+    let probSum = 0;
+    let probCount = 0;
+    const debtors = new Set<string>();
     
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -506,6 +524,12 @@ export default function PendingPayments() {
           oAmount += amt;
           oCount++;
         }
+
+        probSum += getProbability(tx.id, amt, tx.dueDate);
+        probCount++;
+        if (tx.personName?.trim()) {
+          debtors.add(tx.personName.trim().toLowerCase());
+        }
       } else if (tx.type === 'received' && (tx.purpose?.startsWith('Settled: ') || (tx as any).settledFromPending)) {
         const rxDate = new Date(tx.date);
         if (rxDate.getMonth() === currentMonth && rxDate.getFullYear() === currentYear) {
@@ -515,13 +539,21 @@ export default function PendingPayments() {
       }
     });
 
+    const totReceivables = tPendingAmount + cThisMonthAmount;
+    const progress = totReceivables > 0 ? Math.min(100, Math.round((cThisMonthAmount / totReceivables) * 100)) : 0;
+    const avgProb = probCount > 0 ? Math.round(probSum / probCount) : 85;
+
     return {
       pendingRecordsCount: pRecordsCount,
       totalPendingAmount: tPendingAmount,
       overdueAmount: oAmount,
       overdueCount: oCount,
       collectedThisMonthAmount: cThisMonthAmount,
-      collectedThisMonthCount: cThisMonthCount
+      collectedThisMonthCount: cThisMonthCount,
+      totalReceivables: totReceivables,
+      recoveryProgressPercent: progress,
+      avgRecoveryProbability: avgProb,
+      uniqueDebtorsCount: debtors.size
     };
   }, [transactions]);
 
@@ -664,17 +696,180 @@ export default function PendingPayments() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full space-y-8"
+        className="w-full space-y-6 sm:space-y-8 overflow-x-hidden"
       >
-        <header className="mb-6">
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#ffd60a] uppercase tracking-wider mb-1">
-            <span className="w-2 h-2 rounded-full bg-[#ffd60a]" /> Due Money Ledger
+        {/* Header Section */}
+        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[11px] sm:text-xs font-bold text-[#ffd60a] uppercase tracking-wider mb-1">
+              <span className="w-2 h-2 rounded-full bg-[#ffd60a] animate-pulse shadow-[0_0_8px_rgba(255,214,10,0.8)]" /> 
+              <span>Due Money Ledger • Active Follow-ups</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-white flex items-center gap-2.5 sm:gap-3">
+              <span>Due Money</span>
+            </h1>
+            <p className="text-[#86868b] mt-1 text-xs sm:text-sm font-medium">
+              Track who owes you money, automate gentle reminders, and collect outstanding dues.
+            </p>
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
-            Due Money
-          </h1>
-          <p className="text-[#86868b] mt-1 text-sm font-medium">Track who owes you money, send friendly reminders, and record payments easily.</p>
+
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <Link to="/received" className="w-full sm:w-auto">
+              <AnimatedButton 
+                variant="success" 
+                icon={<ArrowDownLeft size={16} />} 
+                className="w-full sm:w-auto justify-center min-h-[44px] text-xs font-semibold"
+              >
+                Add Received
+              </AnimatedButton>
+            </Link>
+            <Link to="/balance" className="w-full sm:w-auto">
+              <AnimatedButton 
+                variant="primary" 
+                icon={<Coins size={16} />} 
+                className="w-full sm:w-auto justify-center min-h-[44px] text-xs font-semibold"
+              >
+                Balance Overview
+              </AnimatedButton>
+            </Link>
+          </div>
         </header>
+
+        {/* HERO CARD: Due Money Overview & Collection Progress */}
+        <GlassCard 
+          glowColor="rgba(255, 214, 10, 0.2)"
+          className="p-4 sm:p-6 md:p-8 relative select-none rounded-[22px] sm:rounded-[28px] overflow-hidden"
+        >
+          {/* Top Specular Rim */}
+          <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
+
+          {/* Ambient Lighting Orbs - Isolated Layering Strictly Behind Text (-z-10) */}
+          <div className="absolute -top-16 -right-16 w-64 h-64 bg-[#ffd60a]/10 rounded-full blur-3xl pointer-events-none decorative-element -z-10" />
+          <div className="absolute -bottom-16 -left-16 w-64 h-64 bg-[#ff453a]/08 rounded-full blur-3xl pointer-events-none decorative-element -z-10" />
+
+          <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 sm:gap-8">
+            {/* Left Block: Amount, Badges, and Details */}
+            <div className="space-y-4 sm:space-y-6 flex-1 w-full min-w-0">
+              {/* Title / Icon Block */}
+              <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-[#ffd60a] to-[#d48806] rounded-2xl shadow-[0_0_24px_rgba(255,214,10,0.35)] border border-white/20 relative overflow-hidden shrink-0 flex items-center justify-center">
+                  <Clock className="text-black relative z-10 shrink-0 font-bold" size={22} />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-base sm:text-lg font-bold text-white tracking-tight leading-tight truncate">
+                    Total Receivables Ledger
+                  </h2>
+                  <div className="text-[#86868b] text-[11px] sm:text-xs font-semibold flex items-center gap-1.5 mt-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#ffd60a]" /> Outstanding vs. Settled Inflows
+                  </div>
+                </div>
+              </div>
+
+              {/* Current Amount Section with Strict Z-Index & No Overlap */}
+              <div className="relative z-10 space-y-1.5 sm:space-y-2">
+                <div className="text-slate-400 font-semibold tracking-[0.18em] text-[10px] sm:text-[11px] uppercase flex items-center gap-2 select-none">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#ffd60a] animate-pulse shadow-[0_0_8px_rgba(255,214,10,0.8)] shrink-0" />
+                  CURRENT OUTSTANDING DUES
+                </div>
+
+                <div className="relative flex items-baseline gap-2 group cursor-default w-fit max-w-full">
+                  {/* Foreground Amount Text with responsive clamp */}
+                  <div className="relative z-10 text-[clamp(1.9rem,6vw,3.75rem)] font-extrabold leading-none text-[#ffd60a] tracking-tight font-tabular">
+                    <CountUp value={totalPendingAmount} formatter={(v) => formatCurrency(v)} />
+                  </div>
+
+                  {/* Decorative Micro-Coin Icon: Positioned strictly to the right, hidden or scaled on narrow mobile, NEVER overlaps label */}
+                  <div className="pointer-events-none opacity-40 overflow-visible -z-10 decorative-element hidden sm:block ml-2">
+                    <div className="text-[#ffd60a]/50 animate-pulse">
+                      <Coins size={22} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Badge/Chip Row with flex-wrap and aligned icons */}
+              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 pt-1">
+                <div className="badge-chip bg-[#ffd60a]/10 border border-[#ffd60a]/25 text-[#ffd60a] text-xs sm:text-[13px] shadow-sm">
+                  <Clock size={14} className="shrink-0" />
+                  <span className="font-semibold leading-none">{pendingRecordsCount} {pendingRecordsCount === 1 ? 'Due' : 'Dues'} Active</span>
+                </div>
+
+                {overdueCount > 0 && (
+                  <div className="badge-chip bg-[#ff453a]/15 border border-[#ff453a]/30 text-[#ff453a] text-xs sm:text-[13px] shadow-sm animate-pulse">
+                    <AlertTriangle size={14} className="shrink-0" />
+                    <span className="font-semibold leading-none">{overdueCount} Overdue (₹{overdueAmount.toLocaleString('en-IN')})</span>
+                  </div>
+                )}
+
+                {collectedThisMonthAmount > 0 && (
+                  <div className="badge-chip bg-[#30d158]/10 border border-[#30d158]/25 text-[#30d158] text-xs sm:text-[13px] shadow-sm">
+                    <CheckCircle2 size={14} className="shrink-0" />
+                    <span className="font-semibold leading-none">+₹{collectedThisMonthAmount.toLocaleString('en-IN')} Settled</span>
+                  </div>
+                )}
+
+                <div className="badge-chip bg-white/[0.05] border border-white/10 text-slate-300 text-xs sm:text-[13px] shadow-sm">
+                  <Users size={14} className="text-blue-400 shrink-0" />
+                  <span className="font-semibold leading-none">{uniqueDebtorsCount} {uniqueDebtorsCount === 1 ? 'Debtor' : 'Debtors'}</span>
+                </div>
+
+                <div className="badge-chip bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs sm:text-[13px] shadow-sm">
+                  <Brain size={14} className="shrink-0" />
+                  <span className="font-semibold leading-none">{avgRecoveryProbability}% AI Collection Odds</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Block: Collection Rate Circular Chart */}
+            <div className="w-full lg:w-auto flex flex-col items-center justify-center pt-2 lg:pt-0 border-t lg:border-t-0 border-white/[0.06]">
+              <div className="progress-circle-wrap">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                  {/* Background Track */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="transparent"
+                    stroke="rgba(255, 255, 255, 0.08)"
+                    strokeWidth="8"
+                  />
+                  {/* Active Progress Ring */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="transparent"
+                    stroke="url(#amberGradient)"
+                    strokeWidth="8"
+                    strokeDasharray={251.2}
+                    strokeDashoffset={251.2 - (251.2 * recoveryProgressPercent) / 100}
+                    strokeLinecap="round"
+                    className="transition-all duration-1000 ease-out"
+                  />
+                  <defs>
+                    <linearGradient id="amberGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#ffd60a" />
+                      <stop offset="100%" stopColor="#f59e0b" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+
+                {/* Inner Ring Metrics */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4 select-none">
+                  <span className="text-[10px] sm:text-[11px] font-bold tracking-wider text-[#86868b] uppercase mb-0.5">
+                    COLLECTION RATE
+                  </span>
+                  <span className="text-2xl sm:text-3xl font-black text-white font-tabular leading-none tracking-tight">
+                    {recoveryProgressPercent}%
+                  </span>
+                  <span className="text-[10.5px] sm:text-xs text-[#ffd60a] font-bold mt-1 font-tabular">
+                    ₹{collectedThisMonthAmount.toLocaleString('en-IN')} / ₹{totalReceivables.toLocaleString('en-IN')}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </GlassCard>
 
       {/* Apple Metrics 4-Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-6 sm:mb-8">
@@ -683,15 +878,15 @@ export default function PendingPayments() {
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-[#12131a]/85 border border-white/[0.08] rounded-2xl p-3.5 sm:p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between"
+          className="bg-[#12131a]/85 border border-white/[0.08] rounded-2xl p-3 sm:p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between min-w-0"
         >
-          <div className="flex items-center gap-2 sm:gap-3 mb-1.5 sm:mb-2">
+          <div className="flex items-center gap-2 sm:gap-3 mb-1.5 sm:mb-2 min-w-0">
             <div className="p-2 sm:p-2.5 bg-[#0a84ff]/15 rounded-xl shrink-0">
               <ClipboardList size={16} className="text-[#0a84ff]" />
             </div>
             <h3 className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#86868b] truncate">Receivables</h3>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-white mt-1 sm:mt-2 font-tabular">
+          <div className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white mt-1 sm:mt-2 font-tabular truncate">
             <AnimatedCounter value={pendingRecordsCount} />
           </div>
         </motion.div>
@@ -701,15 +896,15 @@ export default function PendingPayments() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-[#12131a]/85 border border-white/[0.08] rounded-2xl p-3.5 sm:p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between"
+          className="bg-[#12131a]/85 border border-white/[0.08] rounded-2xl p-3 sm:p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between min-w-0"
         >
-          <div className="flex items-center gap-2 sm:gap-3 mb-1.5 sm:mb-2">
+          <div className="flex items-center gap-2 sm:gap-3 mb-1.5 sm:mb-2 min-w-0">
             <div className="p-2 sm:p-2.5 bg-[#ffd60a]/15 rounded-xl shrink-0">
               <Coins size={16} className="text-[#ffd60a]" />
             </div>
             <h3 className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#86868b] truncate">Outstanding</h3>
           </div>
-          <div className="text-xl min-[380px]:text-2xl sm:text-3xl font-extrabold text-[#ffd60a] mt-1 sm:mt-2 font-tabular truncate">
+          <div className="text-base min-[380px]:text-lg sm:text-2xl md:text-3xl font-extrabold text-[#ffd60a] mt-1 sm:mt-2 font-tabular truncate">
             <AnimatedCounter value={totalPendingAmount} isCurrency />
           </div>
         </motion.div>
@@ -719,20 +914,20 @@ export default function PendingPayments() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-[#12131a]/85 border border-[#ff453a]/25 rounded-2xl p-3.5 sm:p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between"
+          className="bg-[#12131a]/85 border border-[#ff453a]/25 rounded-2xl p-3 sm:p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between min-w-0"
         >
           <div>
-            <div className="flex items-center gap-2 sm:gap-3 mb-1.5 sm:mb-2">
+            <div className="flex items-center gap-2 sm:gap-3 mb-1.5 sm:mb-2 min-w-0">
               <div className="p-2 sm:p-2.5 bg-[#ff453a]/15 rounded-xl shrink-0">
                 <AlertTriangle size={16} className="text-[#ff453a]" />
               </div>
               <h3 className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#ff453a] truncate">Overdue</h3>
             </div>
-            <div className="text-xl min-[380px]:text-2xl sm:text-3xl font-extrabold text-[#ff453a] mt-1 sm:mt-2 font-tabular truncate">
+            <div className="text-base min-[380px]:text-lg sm:text-2xl md:text-3xl font-extrabold text-[#ff453a] mt-1 sm:mt-2 font-tabular truncate">
               <AnimatedCounter value={overdueAmount} isCurrency />
             </div>
           </div>
-          <div className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-[#ff453a]/80 font-semibold truncate">
+          <div className="mt-1.5 sm:mt-2 text-[9.5px] sm:text-xs text-[#ff453a]/80 font-semibold truncate">
             {overdueCount} {overdueCount === 1 ? 'record' : 'records'} overdue
           </div>
         </motion.div>
@@ -742,20 +937,20 @@ export default function PendingPayments() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="bg-[#12131a]/85 border border-[#30d158]/25 rounded-2xl p-3.5 sm:p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between"
+          className="bg-[#12131a]/85 border border-[#30d158]/25 rounded-2xl p-3 sm:p-5 backdrop-blur-2xl shadow-xl flex flex-col justify-between min-w-0"
         >
           <div>
-            <div className="flex items-center gap-2 sm:gap-3 mb-1.5 sm:mb-2">
+            <div className="flex items-center gap-2 sm:gap-3 mb-1.5 sm:mb-2 min-w-0">
               <div className="p-2 sm:p-2.5 bg-[#30d158]/15 rounded-xl shrink-0">
                 <CheckCircle2 size={16} className="text-[#30d158]" />
               </div>
               <h3 className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#30d158] truncate">Settled</h3>
             </div>
-            <div className="text-xl min-[380px]:text-2xl sm:text-3xl font-extrabold text-[#30d158] mt-1 sm:mt-2 font-tabular truncate">
+            <div className="text-base min-[380px]:text-lg sm:text-2xl md:text-3xl font-extrabold text-[#30d158] mt-1 sm:mt-2 font-tabular truncate">
               <AnimatedCounter value={collectedThisMonthAmount} isCurrency />
             </div>
           </div>
-          <div className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-[#30d158]/80 font-semibold truncate">
+          <div className="mt-1.5 sm:mt-2 text-[9.5px] sm:text-xs text-[#30d158]/80 font-semibold truncate">
             {collectedThisMonthCount} collected
           </div>
         </motion.div>

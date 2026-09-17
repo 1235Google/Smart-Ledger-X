@@ -321,36 +321,34 @@ export default function Gullak() {
         {progress >= 100 && <Confetti width={width} height={height} recycle={false} numberOfPieces={500} gravity={0.2} />}
       
       {/* Premium Hero Section */}
-      <div className="relative overflow-hidden rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-8 md:p-12 bg-[#0A0B10] border border-white/5 shadow-2xl group">
-        {/* Background Mesh & Ambient Glow */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/20 via-[#0A0B10] to-[#0A0B10] opacity-80" />
-        <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-purple-500/10 blur-[100px] rounded-full pointer-events-none" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-indigo-500/5 blur-[120px] rounded-[100%] pointer-events-none" />
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl p-4 sm:p-7 md:p-10 bg-[#0A0B10] border border-white/10 shadow-2xl group">
+        {/* Background Mesh & Ambient Glow (Strictly z-0 behind content) */}
+        <div className="decorative-element absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/25 via-[#0A0B10] to-[#0A0B10] opacity-80" />
+        <div className="decorative-element absolute -bottom-24 -left-24 w-96 h-96 bg-purple-500/10 blur-[100px] rounded-full" />
+        <div className="decorative-element absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[350px] bg-indigo-500/5 blur-[120px] rounded-[100%]" />
         
-        {/* Subtle Floating Particles */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {[...Array(6)].map((_, i) => (
+        {/* Background Decorative Currency/Coin Particles - Confined STRICTLY to the right side (65%+), away from "CURRENT SAVINGS" text, with subtle opacity */}
+        <div className="decorative-element absolute inset-0 overflow-hidden select-none -z-10 hidden sm:block">
+          {[
+            { x: '72%', y: '20%', size: 'text-2xl', delay: 0, dur: 18 },
+            { x: '88%', y: '65%', size: 'text-xl', delay: 3, dur: 22 },
+            { x: '78%', y: '80%', size: 'text-3xl', delay: 6, dur: 20 },
+            { x: '92%', y: '30%', size: 'text-lg', delay: 9, dur: 24 }
+          ].map((item, i) => (
             <motion.div
               key={i}
-              className="absolute text-white/5 font-serif text-2xl select-none"
-              initial={{ 
-                x: Math.random() * 100 + "%", 
-                y: Math.random() * 100 + "%", 
-                opacity: 0,
-                scale: 0.5,
-                rotate: 0
-              }}
+              className={`absolute text-amber-400/[0.08] font-serif ${item.size} select-none pointer-events-none`}
+              style={{ left: item.x, top: item.y }}
               animate={{ 
-                y: [null, Math.random() * -100 - 50],
-                opacity: [0, 0.4, 0],
-                scale: [0.5, 1, 0.5],
-                rotate: 360
+                y: [-8, 8, -8],
+                rotate: [0, 180, 360],
+                opacity: [0.05, 0.12, 0.05]
               }}
               transition={{
-                duration: Math.random() * 10 + 15,
+                duration: item.dur,
                 repeat: Infinity,
-                ease: "linear",
-                delay: Math.random() * 10
+                ease: "easeInOut",
+                delay: item.delay
               }}
             >
               ₹
@@ -358,96 +356,90 @@ export default function Gullak() {
           ))}
         </div>
 
-        <div className="absolute -inset-[1px] bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-2xl sm:rounded-[2.5rem] opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-md pointer-events-none" />
+        {/* Ambient interactive border glow */}
+        <div className="decorative-element absolute -inset-[1px] bg-gradient-to-r from-indigo-500/15 via-purple-500/15 to-pink-500/15 rounded-2xl sm:rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-sm pointer-events-none" />
         
-        <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 sm:gap-12 pr-0 lg:pr-8">
-          <div className="space-y-6 sm:space-y-10 flex-1 w-full">
+        {/* Foreground Content with isolated stacking context (z-10) */}
+        <div className="relative z-10 isolate flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 sm:gap-10 pr-0 lg:pr-6">
+          <div className="space-y-4 sm:space-y-6 flex-1 w-full min-w-0">
+            {/* Title / Icon Block */}
             <div className="flex items-center gap-3 sm:gap-4">
-              <div className="p-3 sm:p-3.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-[0_0_30px_rgba(99,102,241,0.3)] border border-white/10 relative overflow-hidden group-hover:scale-105 transition-transform duration-500 shrink-0">
-                <div className="absolute inset-0 bg-white/20 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <PiggyBank className="text-white relative z-10" size={24} />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-[0_0_25px_rgba(99,102,241,0.35)] border border-white/15 relative overflow-hidden group-hover:scale-105 transition-transform duration-500 shrink-0 flex items-center justify-center">
+                <div className="absolute inset-0 bg-white/20 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+                <PiggyBank className="text-white relative z-10 shrink-0" size={22} />
               </div>
-              <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Gullak Savings</h1>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white tracking-tight leading-tight whitespace-nowrap">
+                Gullak Savings
+              </h1>
             </div>
             
-            <div className="relative">
-              <div className="text-slate-400 font-medium tracking-[0.2em] text-[10px] sm:text-[11px] uppercase mb-2 sm:mb-4 flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
-                Current Savings
+            {/* Current Savings Block with 100% isolated text layering */}
+            <div className="relative z-10 space-y-2 sm:space-y-2.5">
+              <div className="text-slate-300 font-bold tracking-[0.2em] text-[11px] sm:text-xs uppercase flex items-center gap-2 select-none">
+                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)] shrink-0" />
+                <span>CURRENT SAVINGS</span>
               </div>
-              <div className="text-3xl sm:text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white via-slate-200 to-slate-500 tracking-tight flex items-baseline gap-1 relative group cursor-default w-fit max-w-full break-words">
-                <CountUp prefix="₹" value={totalSavings} />
+
+              <div className="relative flex items-baseline gap-2 group cursor-default w-fit max-w-full">
+                {/* Background Ambient Glow strictly behind the amount */}
+                <div className="absolute -inset-3 bg-gradient-to-r from-indigo-500/15 via-purple-500/10 to-transparent rounded-2xl blur-lg pointer-events-none -z-10 opacity-75 group-hover:opacity-100 transition-opacity duration-500" />
                 
-                {/* Floating Coins on Hover */}
-                <div className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300 overflow-visible z-50">
-                  {[...Array(5)].map((_, i) => (
-                    <motion.div
-                      key={i}
-                      className="absolute text-amber-400"
-                      initial={{ opacity: 0, y: 10, x: 0 }}
-                      animate={{ 
-                        opacity: [0, 1, 0],
-                        y: [-10, -60],
-                        x: [(i - 2) * 15, (i - 2) * 35],
-                        rotate: [0, Math.random() * 360]
-                      }}
-                      transition={{
-                        duration: 1.5,
-                        repeat: Infinity,
-                        delay: i * 0.2,
-                        ease: "easeOut"
-                      }}
-                      style={{
-                        left: '50%',
-                        top: '50%',
-                        marginLeft: '-12px',
-                        marginTop: '-12px',
-                        filter: 'drop-shadow(0 0 10px rgba(251,191,36,0.6))'
-                      }}
-                    >
-                      <Coins size={24} />
-                    </motion.div>
-                  ))}
+                {/* Foreground Amount Text with responsive clamp */}
+                <div className="relative z-10 text-[clamp(2.25rem,6.8vw,4.25rem)] font-black leading-none text-transparent bg-clip-text bg-gradient-to-br from-white via-slate-100 to-slate-300 tracking-tight font-tabular">
+                  <CountUp prefix="₹" value={totalSavings} />
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+            {/* Badges / Chips Row with flex-wrap and aligned icons */}
+            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 pt-1 w-full">
               {[
                 { icon: TrendingUp, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", shadow: "hover:shadow-[0_0_15px_rgba(16,185,129,0.2)]", label: `+₹${todaySavings.toLocaleString('en-IN')} Today` },
                 { icon: Flame, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", shadow: "hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]", label: `${savingsStreak} Day Streak` },
                 { icon: Sparkles, color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/20", shadow: "hover:shadow-[0_0_15px_rgba(168,85,247,0.2)]", label: "AI On Track" }
               ].map((badge, idx) => (
-                <div key={idx} className={`flex items-center gap-2 ${badge.bg} border ${badge.border} px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl backdrop-blur-md transition-all duration-300 hover:-translate-y-1 ${badge.shadow} cursor-default text-xs sm:text-[13px]`}>
-                  <badge.icon size={15} className={badge.color} />
-                  <span className={`${badge.color} font-semibold tracking-wide truncate`}>{badge.label}</span>
+                <div 
+                  key={idx} 
+                  className={`badge-chip ${badge.bg} border ${badge.border} ${badge.shadow} px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 cursor-default text-xs sm:text-[13px] whitespace-nowrap min-h-[38px] sm:min-h-[40px] shrink-0`}
+                >
+                  <badge.icon size={15} className={cn(badge.color, "shrink-0")} />
+                  <span className={cn(badge.color, "font-semibold tracking-wide leading-none")}>{badge.label}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="relative w-full lg:w-[22rem] aspect-square max-w-[260px] sm:max-w-[300px] mx-auto lg:mx-0 flex items-center justify-center shrink-0">
-             <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/20 to-pink-500/20 rounded-full blur-[40px] animate-pulse group-hover:blur-[60px] transition-all duration-700" />
-             <div className="relative w-[90%] h-[90%] bg-[#0f1117]/80 border border-white/10 rounded-full backdrop-blur-2xl flex flex-col items-center justify-center shadow-[0_20px_50px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.1)] p-4 sm:p-6 group-hover:scale-[1.02] transition-transform duration-500">
-                <Target size={18} className="text-slate-400 mb-2 sm:mb-3 opacity-50" />
-                <div className="text-slate-400 text-[10px] font-bold tracking-[0.2em] uppercase mb-1">Goal Progress</div>
-                <div className="text-4xl sm:text-5xl font-black text-white mb-1.5 sm:mb-2 tracking-tighter flex items-baseline">
-                  <CountUp value={progress} />
-                  <span className="text-2xl sm:text-3xl font-bold text-white/50 ml-1">%</span>
+          {/* Goal Progress Circular Chart - Responsive CSS Clamp */}
+          <div 
+            className="progress-circle-wrap mx-auto lg:mx-0 shrink-0 my-3 lg:my-0 self-center"
+            style={{
+              width: 'clamp(180px, 46vw, 240px)',
+              height: 'clamp(180px, 46vw, 240px)'
+            }}
+          >
+             <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/15 to-pink-500/15 rounded-full blur-[35px] animate-pulse pointer-events-none -z-10" />
+             <div className="relative w-full h-full bg-[#0f1117]/90 border border-white/10 rounded-full backdrop-blur-2xl flex flex-col items-center justify-center shadow-[0_20px_50px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.12)] p-3 sm:p-5 group-hover:scale-[1.02] transition-transform duration-500 text-center">
+                <Target size={16} className="text-slate-400 mb-1 sm:mb-1.5 opacity-70 shrink-0" />
+                <div className="text-slate-400 text-[10px] sm:text-[11px] font-bold tracking-[0.16em] uppercase mb-0.5 sm:mb-1 select-none">
+                  Goal Progress
                 </div>
-                <div className="text-xs sm:text-[13px] text-slate-400 font-medium tracking-wide">
+                <div className="text-3xl sm:text-4xl md:text-5xl font-black text-white mb-0.5 sm:mb-1 tracking-tight flex items-baseline justify-center font-tabular">
+                  <CountUp value={progress} />
+                  <span className="text-xl sm:text-2xl font-bold text-white/50 ml-0.5">%</span>
+                </div>
+                <div className="text-[11px] sm:text-xs text-slate-400 font-medium tracking-normal truncate max-w-[85%] px-1 font-tabular">
                   ₹{totalSavings.toLocaleString('en-IN')} / ₹{goal.toLocaleString('en-IN')}
                 </div>
                 
                 {/* SVG Progress Circle */}
-                <svg className="absolute inset-0 w-full h-full transform -rotate-90 pointer-events-none" viewBox="0 0 100 100">
-                  <circle cx="50" cy="50" r="46" fill="transparent" stroke="rgba(255,255,255,0.03)" strokeWidth="6" />
+                <svg className="absolute inset-0 w-full h-full transform -rotate-90 pointer-events-none p-1" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="45" fill="transparent" stroke="rgba(255,255,255,0.05)" strokeWidth="5.5" />
                   <motion.circle 
-                    cx="50" cy="50" r="46" fill="transparent" 
-                    stroke="url(#progress-gradient)" strokeWidth="6" strokeLinecap="round"
-                    strokeDasharray="289.0265"
-                    initial={{ strokeDashoffset: 289.0265 }}
-                    animate={{ strokeDashoffset: 289.0265 - (289.0265 * progress) / 100 }}
+                    cx="50" cy="50" r="45" fill="transparent" 
+                    stroke="url(#progress-gradient)" strokeWidth="5.5" strokeLinecap="round"
+                    strokeDasharray="282.743"
+                    initial={{ strokeDashoffset: 282.743 }}
+                    animate={{ strokeDashoffset: 282.743 - (282.743 * Math.min(100, progress)) / 100 }}
                     transition={{ duration: 1.5, ease: [0.16, 1, 0.3, 1] }}
                     style={{ filter: "drop-shadow(0 0 4px rgba(139,92,246,0.5))" }}
                   />
@@ -506,50 +498,50 @@ export default function Gullak() {
           <motion.div key="dashboard" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-8">
             
             {/* AI Insights & Goal Card */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-gradient-to-br from-[#0f1117] to-indigo-950/20 border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden group">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+              <div className="bg-gradient-to-br from-[#0f1117] to-indigo-950/20 border border-white/5 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl relative overflow-hidden group">
                 <div className="absolute right-0 top-0 w-32 h-32 bg-indigo-500/10 blur-3xl rounded-full" />
-                <div className="flex items-center gap-3 mb-6">
+                <div className="flex items-center gap-3 mb-4 sm:mb-6">
                   <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400">
                     <Sparkles size={20} />
                   </div>
-                  <h3 className="text-lg font-bold text-white">Smart AI Insights</h3>
+                  <h3 className="text-base sm:text-lg font-bold text-white">Smart AI Insights</h3>
                 </div>
-                <div className="space-y-4 relative z-10">
-                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex gap-4">
-                    <div className="text-2xl pt-1">📈</div>
+                <div className="space-y-3 sm:space-y-4 relative z-10">
+                  <div className="bg-white/5 border border-white/10 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 flex gap-3 sm:gap-4 items-start">
+                    <div className="text-xl sm:text-2xl pt-0.5 shrink-0">📈</div>
                     <div>
-                      <p className="text-white font-medium">You are saving {Math.abs(savingsDiff).toFixed(0)}% {savingsDiff >= 0 ? 'more' : 'less'} than last month.</p>
-                      <p className="text-sm text-slate-400 mt-1">Consistent deposits are helping you build wealth faster.</p>
+                      <p className="text-white font-medium text-xs sm:text-sm">You are saving {Math.abs(savingsDiff).toFixed(0)}% {savingsDiff >= 0 ? 'more' : 'less'} than last month.</p>
+                      <p className="text-xs text-slate-400 mt-1">Consistent deposits are helping you build wealth faster.</p>
                     </div>
                   </div>
-                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex gap-4">
-                    <div className="text-2xl pt-1">💡</div>
+                  <div className="bg-white/5 border border-white/10 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 flex gap-3 sm:gap-4 items-start">
+                    <div className="text-xl sm:text-2xl pt-0.5 shrink-0">💡</div>
                     <div>
-                      <p className="text-white font-medium">Save ₹{Math.ceil(remainingGoal / Math.max(1, daysLeftInMonth)).toLocaleString('en-IN')} daily</p>
-                      <p className="text-sm text-slate-400 mt-1">To comfortably hit your ₹{goal.toLocaleString('en-IN')} goal this month.</p>
+                      <p className="text-white font-medium text-xs sm:text-sm">Save ₹{Math.ceil(remainingGoal / Math.max(1, daysLeftInMonth)).toLocaleString('en-IN')} daily</p>
+                      <p className="text-xs text-slate-400 mt-1">To comfortably hit your ₹{goal.toLocaleString('en-IN')} goal this month.</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-gradient-to-br from-[#0f1117] to-purple-950/20 border border-white/5 rounded-3xl p-6 shadow-xl">
-                <div className="flex justify-between items-start mb-6">
+              <div className="bg-gradient-to-br from-[#0f1117] to-purple-950/20 border border-white/5 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl">
+                <div className="flex justify-between items-start mb-4 sm:mb-6">
                   <div>
-                    <h3 className="text-lg font-bold text-white mb-1">Monthly Goal</h3>
-                    <p className="text-slate-400 text-sm">Target: ₹{goal.toLocaleString('en-IN')}</p>
+                    <h3 className="text-base sm:text-lg font-bold text-white mb-1">Monthly Goal</h3>
+                    <p className="text-slate-400 text-xs sm:text-sm">Target: ₹{goal.toLocaleString('en-IN')}</p>
                   </div>
                   <div className="text-right">
-                    <div className="text-2xl font-bold text-purple-400">{progress.toFixed(0)}%</div>
+                    <div className="text-xl sm:text-2xl font-black text-purple-400 font-tabular">{progress.toFixed(0)}%</div>
                   </div>
                 </div>
                 
                 <div className="mb-4">
-                  <div className="flex justify-between text-sm mb-2 text-white font-medium">
+                  <div className="flex justify-between text-xs sm:text-sm mb-2 text-white font-medium font-tabular">
                     <span>₹{thisMonthSavings.toLocaleString('en-IN')} Saved</span>
                     <span>₹{remainingGoal.toLocaleString('en-IN')} Left</span>
                   </div>
-                  <div className="h-3 bg-black/50 rounded-full overflow-hidden border border-white/5">
+                  <div className="h-2.5 sm:h-3 bg-black/50 rounded-full overflow-hidden border border-white/5">
                     <motion.div 
                       className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"
                       initial={{ width: 0 }}
@@ -559,7 +551,7 @@ export default function Gullak() {
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center text-sm">
+                <div className="flex justify-between items-center text-xs sm:text-sm">
                   <div className="text-slate-400">
                     <span className="text-white font-medium">{daysLeftInMonth}</span> Days Remaining
                   </div>
@@ -571,35 +563,35 @@ export default function Gullak() {
             </div>
 
             {/* Premium Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4">
               {[
                 { label: 'Total Saved', value: `₹${totalSavings.toLocaleString('en-IN')}`, icon: PiggyBank, color: 'text-blue-400', bg: 'bg-blue-500/10' },
                 { label: "Today", value: `₹${todaySavings.toLocaleString('en-IN')}`, icon: Activity, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
                 { label: 'Highest Deposit', value: `₹${highestDeposit.toLocaleString('en-IN')}`, icon: Trophy, color: 'text-amber-400', bg: 'bg-amber-500/10' },
                 { label: 'Avg Deposit', value: `₹${averageDeposit.toLocaleString('en-IN')}`, icon: BarChart3, color: 'text-purple-400', bg: 'bg-purple-500/10' }
               ].map((stat, i) => (
-                <div key={i} className="bg-[#0f1117] border border-white/5 rounded-2xl p-5 hover:bg-white/5 transition-colors group">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${stat.bg} mb-4 group-hover:scale-110 transition-transform`}>
-                    <stat.icon className={stat.color} size={20} />
+                <div key={i} className="bg-[#0f1117] border border-white/5 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 hover:bg-white/5 transition-colors group">
+                  <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center ${stat.bg} mb-2.5 sm:mb-4 group-hover:scale-110 transition-transform`}>
+                    <stat.icon className={stat.color} size={18} />
                   </div>
-                  <p className="text-sm font-medium text-slate-400 mb-1">{stat.label}</p>
-                  <p className="text-xl font-bold text-white tracking-tight">{stat.value}</p>
+                  <p className="text-xs sm:text-sm font-medium text-slate-400 mb-0.5 sm:mb-1">{stat.label}</p>
+                  <p className="text-base min-[360px]:text-lg sm:text-xl font-bold text-white tracking-tight font-tabular truncate">{stat.value}</p>
                 </div>
               ))}
             </div>
 
             {/* Main Content Area */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
               {/* Chart */}
-              <div className="lg:col-span-2 bg-[#0f1117] border border-white/5 rounded-3xl p-6 shadow-xl">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-lg font-bold text-white">Savings Activity</h3>
+              <div className="lg:col-span-2 bg-[#0f1117] border border-white/5 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl">
+                <div className="flex flex-wrap gap-2 justify-between items-center mb-4 sm:mb-6">
+                  <h3 className="text-base sm:text-lg font-bold text-white">Savings Activity</h3>
                   <div className="flex bg-black/40 rounded-lg p-1 border border-white/10">
                     {['7days', '30days', '90days'].map(period => (
                       <button 
                         key={period} 
                         onClick={() => setChartPeriod(period)}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${chartPeriod === period ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white'}`}
+                        className={`px-2.5 sm:px-3 py-1 sm:py-1.5 min-h-[36px] text-xs font-semibold rounded-md transition-colors ${chartPeriod === period ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white'}`}
                       >
                         {period.replace('days', 'D')}
                       </button>
@@ -664,29 +656,114 @@ export default function Gullak() {
 
         {/* Other tabs follow the original style but upgraded slightly */}
         {activeTab === 'list' && (
-          <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
-            <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-               <div className="relative w-full sm:w-96">
-                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                 <input type="text" placeholder="Search entries..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full bg-[#0a0b10] border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-white focus:border-indigo-500/50" />
+          <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4 sm:space-y-6">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-center justify-between">
+               <div className="relative w-full sm:w-80 md:w-96">
+                 <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                 <input 
+                   type="text" 
+                   placeholder="Search entries..." 
+                   value={searchTerm} 
+                   onChange={e => setSearchTerm(e.target.value)} 
+                   className="w-full bg-[#0a0b10] border border-white/10 rounded-xl pl-10 pr-4 py-2.5 min-h-[44px] text-white focus:border-indigo-500/50 text-sm outline-none" 
+                 />
                </div>
-               <div className="flex gap-2 w-full sm:w-auto">
-                 <select value={dateRange} onChange={e => setDateRange(e.target.value)} className="bg-[#0a0b10] border border-white/10 rounded-xl px-4 py-2.5 text-white">
-                   <option value="all">All Time</option><option value="today">Today</option><option value="week">This Week</option><option value="month">This Month</option><option value="year">This Year</option>
+               <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
+                 <select 
+                   value={dateRange} 
+                   onChange={e => setDateRange(e.target.value)} 
+                   className="bg-[#0a0b10] border border-white/10 rounded-xl px-3 py-2.5 min-h-[44px] text-white text-xs sm:text-sm outline-none focus:border-indigo-500/50"
+                 >
+                   <option value="all">All Time</option>
+                   <option value="today">Today</option>
+                   <option value="week">This Week</option>
+                   <option value="month">This Month</option>
+                   <option value="year">This Year</option>
                  </select>
-                 <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="bg-[#0a0b10] border border-white/10 rounded-xl px-4 py-2.5 text-white">
-                   <option value="newest">Newest First</option><option value="oldest">Oldest First</option><option value="highest">Highest Amount</option><option value="lowest">Lowest Amount</option>
+                 <select 
+                   value={sortBy} 
+                   onChange={e => setSortBy(e.target.value)} 
+                   className="bg-[#0a0b10] border border-white/10 rounded-xl px-3 py-2.5 min-h-[44px] text-white text-xs sm:text-sm outline-none focus:border-indigo-500/50"
+                 >
+                   <option value="newest">Newest First</option>
+                   <option value="oldest">Oldest First</option>
+                   <option value="highest">Highest Amount</option>
+                   <option value="lowest">Lowest Amount</option>
                  </select>
                </div>
             </div>
-            <div className="bg-[#0a0b10] border border-white/10 rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl">
+
+            {/* Mobile Cards View (< sm) */}
+            <div className="block sm:hidden space-y-3">
+              {filteredEntries.map(entry => {
+                const isCredit = getGullakEntryDirection(entry) === 'credit';
+                const absAmt = getGullakAbsoluteAmount(entry);
+                return (
+                  <div key={entry.id} className="bg-[#0a0b10] border border-white/10 rounded-2xl p-4 shadow-lg space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 className="font-bold text-white text-base leading-tight">{entry.personName}</h4>
+                        <div className="text-xs text-slate-400 mt-0.5">
+                          {format(parseISO(entry.date), 'dd MMM yyyy')} • {entry.time}
+                        </div>
+                      </div>
+                      <div className={cn("text-lg font-black font-tabular shrink-0", isCredit ? "text-emerald-400" : "text-rose-400")}>
+                        {isCredit ? '+' : '-'}₹{absAmt.toLocaleString('en-IN')}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-white/5 text-xs text-slate-400">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-1 bg-white/5 rounded-md text-slate-300 font-medium">{entry.category || 'Savings'}</span>
+                        <span className="text-slate-500">•</span>
+                        <span>{entry.paymentMethod}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button 
+                          onClick={() => handleDuplicate(entry)} 
+                          aria-label="Duplicate entry" 
+                          className="w-9 h-9 min-h-[40px] min-w-[40px] flex items-center justify-center text-slate-400 hover:text-white rounded-lg hover:bg-white/10 active:scale-95 transition-all"
+                        >
+                          <Copy size={16} />
+                        </button>
+                        <button 
+                          onClick={() => openEditModal(entry)} 
+                          aria-label="Edit entry" 
+                          className="w-9 h-9 min-h-[40px] min-w-[40px] flex items-center justify-center text-slate-400 hover:text-indigo-400 rounded-lg hover:bg-white/10 active:scale-95 transition-all"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button 
+                          onClick={() => openDeleteModal(entry.id)} 
+                          aria-label="Delete entry" 
+                          className="w-9 h-9 min-h-[40px] min-w-[40px] flex items-center justify-center text-slate-400 hover:text-rose-400 rounded-lg hover:bg-white/10 active:scale-95 transition-all"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredEntries.length === 0 && (
+                <div className="text-center py-12 bg-[#0a0b10] border border-white/10 rounded-2xl text-slate-400 text-sm">
+                  No entries found.
+                </div>
+              )}
+            </div>
+
+            {/* Desktop Table View (>= sm) */}
+            <div className="hidden sm:block bg-[#0a0b10] border border-white/10 rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse min-w-[600px]">
                   <thead>
                     <tr className="border-b border-white/5 bg-black/20 text-slate-400 text-sm">
-                      <th className="p-4 font-medium">Date & Time</th><th className="p-4 font-medium">Added By</th>
-                      <th className="p-4 font-medium text-right">Amount</th><th className="p-4 font-medium">Category</th>
-                      <th className="p-4 font-medium">Method</th><th className="p-4 font-medium text-right">Actions</th>
+                      <th className="p-4 font-medium">Date & Time</th>
+                      <th className="p-4 font-medium">Added By</th>
+                      <th className="p-4 font-medium text-right">Amount</th>
+                      <th className="p-4 font-medium">Category</th>
+                      <th className="p-4 font-medium">Method</th>
+                      <th className="p-4 font-medium text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
@@ -695,18 +772,23 @@ export default function Gullak() {
                       const absAmt = getGullakAbsoluteAmount(entry);
                       return (
                         <tr key={entry.id} className="hover:bg-white/5 transition-colors group">
-                          <td className="p-4"><div className="text-white font-medium">{format(parseISO(entry.date), 'dd MMM yyyy')}</div><div className="text-slate-500 text-xs">{entry.time}</div></td>
-                          <td className="p-4 text-white">{entry.personName}</td>
+                          <td className="p-4">
+                            <div className="text-white font-medium">{format(parseISO(entry.date), 'dd MMM yyyy')}</div>
+                            <div className="text-slate-500 text-xs">{entry.time}</div>
+                          </td>
+                          <td className="p-4 text-white font-medium">{entry.personName}</td>
                           <td className={cn("p-4 text-right font-bold tabular-nums", isCredit ? "text-emerald-400" : "text-rose-400")}>
                             {isCredit ? '+' : '-'}₹{absAmt.toLocaleString('en-IN')}
                           </td>
-                          <td className="p-4"><span className="px-2.5 py-1 bg-white/5 rounded-md text-slate-300 text-xs">{entry.category || 'Savings'}</span></td>
+                          <td className="p-4">
+                            <span className="px-2.5 py-1 bg-white/5 rounded-md text-slate-300 text-xs font-medium">{entry.category || 'Savings'}</span>
+                          </td>
                           <td className="p-4 text-slate-400 text-sm">{entry.paymentMethod}</td>
                           <td className="p-4 text-right">
                             <div className="flex items-center justify-end gap-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => handleDuplicate(entry)} aria-label="Duplicate entry" className="p-2 min-h-[38px] min-w-[38px] flex items-center justify-center text-slate-400 hover:text-white rounded-lg hover:bg-white/10 active:scale-95"><Copy size={16} /></button>
-                              <button onClick={() => openEditModal(entry)} aria-label="Edit entry" className="p-2 min-h-[38px] min-w-[38px] flex items-center justify-center text-slate-400 hover:text-indigo-400 rounded-lg hover:bg-white/10 active:scale-95"><Edit2 size={16} /></button>
-                              <button onClick={() => openDeleteModal(entry.id)} aria-label="Delete entry" className="p-2 min-h-[38px] min-w-[38px] flex items-center justify-center text-slate-400 hover:text-red-400 rounded-lg hover:bg-white/10 active:scale-95"><Trash2 size={16} /></button>
+                              <button onClick={() => handleDuplicate(entry)} aria-label="Duplicate entry" className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center text-slate-400 hover:text-white rounded-lg hover:bg-white/10 active:scale-95 transition-all"><Copy size={16} /></button>
+                              <button onClick={() => openEditModal(entry)} aria-label="Edit entry" className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center text-slate-400 hover:text-indigo-400 rounded-lg hover:bg-white/10 active:scale-95 transition-all"><Edit2 size={16} /></button>
+                              <button onClick={() => openDeleteModal(entry.id)} aria-label="Delete entry" className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center text-slate-400 hover:text-red-400 rounded-lg hover:bg-white/10 active:scale-95 transition-all"><Trash2 size={16} /></button>
                             </div>
                           </td>
                         </tr>
@@ -724,21 +806,39 @@ export default function Gullak() {
 
         {/* Analytics Tab (Simplified for space, matching premium look) */}
         {activeTab === 'analytics' && (
-          <motion.div key="analytics" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-[#0f1117] border border-white/5 p-6 rounded-3xl shadow-xl">
-                <h3 className="text-lg font-bold text-white mb-6">Savings by Category</h3>
-                <div className="h-64"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={categoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">{categoryData.map((entry, index) => <Cell key={index} fill={entry.color} />)}</Pie><RechartsTooltip formatter={(val: number) => `₹${val}`} contentStyle={{ backgroundColor: '#000', border: 'none', borderRadius: '8px' }} /></PieChart></ResponsiveContainer></div>
+          <motion.div key="analytics" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4 sm:space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+              <div className="bg-[#0f1117] border border-white/5 p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-xl">
+                <h3 className="text-base sm:text-lg font-bold text-white mb-4 sm:mb-6">Savings by Category</h3>
+                <div className="h-56 sm:h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={categoryData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={5} dataKey="value">
+                        {categoryData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
+                      </Pie>
+                      <RechartsTooltip formatter={(val: number) => `₹${val.toLocaleString('en-IN')}`} contentStyle={{ backgroundColor: '#000', border: 'none', borderRadius: '8px' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
-              <div className="bg-[#0f1117] border border-white/5 p-6 rounded-3xl shadow-xl">
-                <h3 className="text-lg font-bold text-white mb-6">Top Contributors</h3>
-                <div className="space-y-4">
-                  {categoryData.length === 0 ? <p className="text-slate-500">No data available.</p> : personData.map((p, i) => (
-                    <div key={i} className="flex items-center justify-between">
-                      <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-sm">{p.name.charAt(0)}</div><span className="text-white">{p.name}</span></div>
-                      <span className="font-bold text-white">₹{p.total.toLocaleString('en-IN')}</span>
-                    </div>
-                  ))}
+              <div className="bg-[#0f1117] border border-white/5 p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-xl">
+                <h3 className="text-base sm:text-lg font-bold text-white mb-4 sm:mb-6">Top Contributors</h3>
+                <div className="space-y-3 sm:space-y-4">
+                  {categoryData.length === 0 ? (
+                    <p className="text-slate-500 text-sm">No data available.</p>
+                  ) : (
+                    personData.map((p, i) => (
+                      <div key={i} className="flex items-center justify-between gap-2 p-2 rounded-xl hover:bg-white/5 transition-colors">
+                        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                          <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-sm shrink-0">
+                            {p.name.charAt(0)}
+                          </div>
+                          <span className="text-white text-sm sm:text-base font-medium truncate">{p.name}</span>
+                        </div>
+                        <span className="font-bold text-white text-sm sm:text-base font-tabular shrink-0">₹{p.total.toLocaleString('en-IN')}</span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -747,32 +847,33 @@ export default function Gullak() {
 
         {/* Achievements Tab */}
         {activeTab === 'achievements' && (
-          <motion.div key="achievements" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
-            <div className="bg-gradient-to-br from-amber-500/10 to-[#0f1117] border border-amber-500/20 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden text-center">
-              <Trophy size={48} className="text-amber-500 mx-auto mb-4" />
-              <h2 className="text-3xl font-bold text-white mb-2">Level {currentLevel.level}: {currentLevel.title}</h2>
-              <p className="text-slate-400 mb-6 max-w-lg mx-auto">Earn XP by saving regularly and unlocking achievements. Level up to become a Savings Master!</p>
-              <div className="max-w-xl mx-auto bg-black/40 rounded-full h-4 border border-white/10 overflow-hidden relative">
+          <motion.div key="achievements" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6 sm:space-y-8">
+            <div className="bg-gradient-to-br from-amber-500/10 to-[#0f1117] border border-amber-500/20 rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-8 shadow-2xl relative overflow-hidden text-center">
+              <Trophy size={40} className="text-amber-500 mx-auto mb-3 sm:mb-4 shrink-0" />
+              <h2 className="text-xl min-[360px]:text-2xl sm:text-3xl font-bold text-white mb-2">Level {currentLevel.level}: {currentLevel.title}</h2>
+              <p className="text-slate-400 text-xs sm:text-sm mb-5 sm:mb-6 max-w-lg mx-auto">Earn XP by saving regularly and unlocking achievements. Level up to become a Savings Master!</p>
+              <div className="max-w-xl mx-auto bg-black/40 rounded-full h-3 sm:h-4 border border-white/10 overflow-hidden relative">
                  <motion.div 
                     className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-amber-500 to-yellow-400"
-                    initial={{ width: 0 }} animate={{ width: `${((totalXp - currentLevel.minXp) / (nextLevel.minXp - currentLevel.minXp)) * 100}%` }}
+                    initial={{ width: 0 }} 
+                    animate={{ width: `${((totalXp - currentLevel.minXp) / (nextLevel.minXp - currentLevel.minXp)) * 100}%` }}
                  />
               </div>
-              <p className="text-sm font-semibold text-amber-400 mt-3">{totalXp} / {nextLevel.minXp} XP</p>
+              <p className="text-xs sm:text-sm font-semibold text-amber-400 mt-2.5 sm:mt-3 font-tabular">{totalXp} / {nextLevel.minXp} XP</p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {filteredAchievements.map(a => {
                 const isUnlocked = unlockedAchievements?.find(u => u.id === a.id);
                 return (
-                  <div key={a.id} className={`p-6 rounded-3xl border transition-all ${isUnlocked ? 'bg-gradient-to-br from-amber-500/10 to-transparent border-amber-500/30' : 'bg-[#0f1117] border-white/5 opacity-70 grayscale'}`}>
-                    <div className="flex justify-between items-start mb-4">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg ${isUnlocked ? 'bg-amber-500 text-black shadow-amber-500/30' : 'bg-slate-800 text-slate-400'}`}>
+                  <div key={a.id} className={`p-4 sm:p-6 rounded-2xl sm:rounded-3xl border transition-all ${isUnlocked ? 'bg-gradient-to-br from-amber-500/10 to-transparent border-amber-500/30 shadow-lg shadow-amber-500/5' : 'bg-[#0f1117] border-white/5 opacity-70 grayscale'}`}>
+                    <div className="flex justify-between items-start mb-3 sm:mb-4">
+                      <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg ${isUnlocked ? 'bg-amber-500 text-black shadow-amber-500/30' : 'bg-slate-800 text-slate-400'}`}>
                          {iconMap[a.icon] || <Trophy size={20} />}
                       </div>
-                      <div className={`text-xs font-bold px-3 py-1 rounded-full ${isUnlocked ? 'bg-amber-500/20 text-amber-400' : 'bg-white/5 text-slate-500'}`}>+{a.xpReward} XP</div>
+                      <div className={`text-xs font-bold px-2.5 sm:px-3 py-1 rounded-full ${isUnlocked ? 'bg-amber-500/20 text-amber-400' : 'bg-white/5 text-slate-500'}`}>+{a.xpReward} XP</div>
                     </div>
-                    <h3 className="text-lg font-bold text-white mb-1">{a.name}</h3>
-                    <p className="text-sm text-slate-400">{a.description}</p>
+                    <h3 className="text-base sm:text-lg font-bold text-white mb-1">{a.name}</h3>
+                    <p className="text-xs sm:text-sm text-slate-400">{a.description}</p>
                   </div>
                 );
               })}
@@ -783,19 +884,19 @@ export default function Gullak() {
         {/* Settings Tab */}
         {activeTab === 'settings' && (
           <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="max-w-2xl">
-             <div className="bg-[#0f1117] border border-white/5 rounded-3xl p-8 shadow-xl">
-               <h3 className="text-xl font-bold text-white mb-6">Savings Goal Configuration</h3>
+             <div className="bg-[#0f1117] border border-white/5 rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-xl">
+               <h3 className="text-lg sm:text-xl font-bold text-white mb-4 sm:mb-6">Savings Goal Configuration</h3>
                <div className="space-y-4">
                  <div>
-                   <label className="block text-sm font-medium text-slate-400 mb-2">Monthly Target Amount (₹)</label>
+                   <label className="block text-xs sm:text-sm font-medium text-slate-400 mb-2">Monthly Target Amount (₹)</label>
                    <input 
                      type="number" 
                      value={gullakSettings?.monthlyGoal || 5000} 
                      onChange={(e) => updateGullakSettings({ monthlyGoal: Number(e.target.value) })}
-                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-indigo-500/50 outline-none text-lg"
+                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 min-h-[48px] text-white focus:border-indigo-500/50 outline-none text-base sm:text-lg font-bold font-tabular"
                    />
                  </div>
-                 <p className="text-sm text-slate-500 leading-relaxed">This goal helps track your monthly savings progress. We recommend saving at least 20% of your income.</p>
+                 <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">This goal helps track your monthly savings progress. We recommend saving at least 20% of your income.</p>
                </div>
              </div>
           </motion.div>

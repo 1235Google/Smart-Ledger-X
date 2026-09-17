@@ -131,11 +131,11 @@ const NotificationDropdown = forwardRef<NotificationDropdownRef, {}>((props, ref
         aria-label="Notifications"
         aria-expanded={isOpen}
         aria-haspopup="true"
-        className="w-10 h-10 flex items-center justify-center text-slate-300 hover:text-white relative rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+        className="w-10 h-10 min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-300 hover:text-white relative rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
       >
-        <Bell size={20} />
+        <Bell size={19} className="shrink-0" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-[#05060a] shadow-lg animate-pulse">
+          <span className="absolute top-0.5 right-0.5 translate-x-1 -translate-y-1 min-w-[18px] h-[18px] px-1 bg-rose-500 text-white text-[9px] font-extrabold rounded-full flex items-center justify-center border-2 border-[#0a0b10] shadow-md pointer-events-none z-10 font-tabular">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}

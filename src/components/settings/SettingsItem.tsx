@@ -25,7 +25,7 @@ export default function SettingsItem({ icon: Icon, title, description, action, o
         onClick && "cursor-pointer"
       )}
     >
-      <div className="flex items-center gap-3.5 text-left min-w-0">
+      <div className="flex items-center gap-3.5 text-left min-w-0 flex-1">
         <div className={cn(
           "w-10 h-10 rounded-xl flex items-center justify-center border transition-colors shrink-0 shadow-sm",
           variant === 'danger' 
@@ -34,12 +34,12 @@ export default function SettingsItem({ icon: Icon, title, description, action, o
         )}>
           <Icon size={18} />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h4 className={cn("text-sm font-semibold truncate", variant === 'danger' ? "text-[#ff453a]" : "text-white")}>{title}</h4>
           {description && <p className="text-xs text-[#86868b] mt-0.5 leading-relaxed truncate">{description}</p>}
         </div>
       </div>
-      <div className="ml-4 shrink-0 flex items-center gap-2">
+      <div className="ml-3 sm:ml-4 shrink-0 flex items-center gap-2">
         {action}
         {onClick && !action && <ChevronRight size={16} className="text-[#86868b]" />}
       </div>

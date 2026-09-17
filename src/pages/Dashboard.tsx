@@ -1,4 +1,4 @@
-import React, { useState, lazy, Suspense } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { useStore } from '../context/StoreContext';
 import { motion, useReducedMotion, Variants } from 'motion/react';
 import { 
@@ -30,6 +30,31 @@ const SectionLoadingFallback = () => (
   </div>
 );
 
+const DeferredSection = ({ children, fallback }: { children: React.ReactNode; fallback?: React.ReactNode }) => {
+  const [isRendered, setIsRendered] = useState(false);
+
+  useEffect(() => {
+    let handle: number;
+    let timer: NodeJS.Timeout;
+    
+    if ('requestIdleCallback' in window) {
+      handle = window.requestIdleCallback(() => setIsRendered(true), { timeout: 1000 });
+    } else {
+      timer = setTimeout(() => setIsRendered(true), 100);
+    }
+    
+    return () => {
+      if (handle && 'cancelIdleCallback' in window) window.cancelIdleCallback(handle);
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
+  if (!isRendered) {
+    return fallback ? <>{fallback}</> : null;
+  }
+  return <>{children}</>;
+};
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const shouldReduceMotion = useReducedMotion();
@@ -47,43 +72,63 @@ export default function Dashboard() {
     retryFetchData
   } = useStore();
 
-  const recentTransactions = transactions.slice(0, 8);
-  const receivedCount = transactions.filter(t => t.type === 'received').length;
-  const pendingCount = transactions.filter(t => t.type === 'pending' && (t.status === 'pending' || t.status === 'overdue' || (t.status !== 'completed' && t.status !== 'cancelled' && t.status !== 'closed'))).length;
+  const {
+    recentTransactions, receivedCount, pendingCount, pendingTransactions,
+    overduePending, upcomingPending, dueReminders, receivedMoneyTxs,
+    totalReceivedAmount, avgInflow, highInflowAnomalies, duplicateInvoices,
+    today
+  } = React.useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const recentTx = transactions.slice(0, 8);
+    const rCount = transactions.filter(t => t.type === 'received').length;
+    const pCount = transactions.filter(t => t.type === 'pending' && (t.status === 'pending' || t.status === 'overdue' || (t.status !== 'completed' && t.status !== 'cancelled' && t.status !== 'closed'))).length;
+    
+    const pTxs = transactions.filter((t): t is PendingMoney => t.type === 'pending' && (t.status === 'pending' || t.status === 'overdue' || (t.status !== 'completed' && t.status !== 'cancelled' && t.status !== 'closed')));
+    const oPending = pTxs.filter(t => t.dueDate < todayStr || t.status === 'overdue');
+    const uPending = pTxs.filter(t => t.dueDate >= todayStr && t.status !== 'overdue');
 
-  const today = new Date().toISOString().split('T')[0];
-  
-  // Pending Receivables breakdown
-  const pendingTransactions = transactions.filter((t): t is PendingMoney => t.type === 'pending' && (t.status === 'pending' || t.status === 'overdue' || (t.status !== 'completed' && t.status !== 'cancelled' && t.status !== 'closed')));
-  const overduePending = pendingTransactions.filter(t => t.dueDate < today || t.status === 'overdue');
-  const upcomingPending = pendingTransactions.filter(t => t.dueDate >= today && t.status !== 'overdue');
+    const dReminders = transactions.filter((t): t is PendingMoney => {
+      if (t.type !== 'pending' || t.status !== 'pending' || t.reminderStatus !== 'active') return false;
+      const details = calculateReminderDetails(t, generalSettings?.timezone);
+      return !details.isStopped && !!details.nextReminderDate && details.nextReminderDate <= todayStr;
+    });
 
-  const dueReminders = transactions.filter((t): t is PendingMoney => {
-    if (t.type !== 'pending' || t.status !== 'pending' || t.reminderStatus !== 'active') return false;
-    const details = calculateReminderDetails(t, generalSettings?.timezone);
-    return !details.isStopped && !!details.nextReminderDate && details.nextReminderDate <= today;
-  });
+    const rMoneyTxs = transactions.filter((t): t is ReceivedMoney => t.type === 'received');
+    const tReceivedAmount = rMoneyTxs.reduce((sum, tx) => sum + tx.amount, 0);
+    const aInflow = rMoneyTxs.length > 0 ? tReceivedAmount / rMoneyTxs.length : 0;
+    
+    const hInflowAnomalies = rMoneyTxs.filter(
+      tx => tx.amount > aInflow * 2.5 && aInflow > 0
+    );
 
-  // Anomaly Detection (AI Insights)
-  const receivedMoneyTxs = transactions.filter((t): t is ReceivedMoney => t.type === 'received');
-  const totalReceivedAmount = receivedMoneyTxs.reduce((sum, tx) => sum + tx.amount, 0);
-  const avgInflow = receivedMoneyTxs.length > 0 ? totalReceivedAmount / receivedMoneyTxs.length : 0;
-  
-  const highInflowAnomalies = receivedMoneyTxs.filter(
-    tx => tx.amount > avgInflow * 2.5 && avgInflow > 0
-  );
+    const invMap = new Map<string, Array<ReceivedMoney>>();
+    transactions.forEach(tx => {
+      if (tx.type === 'received' && tx.invoiceNumber) {
+        const key = tx.invoiceNumber.toLowerCase().trim();
+        const existing = invMap.get(key) || [];
+        existing.push(tx);
+        invMap.set(key, existing);
+      }
+    });
 
-  const invoiceNumberMap = new Map<string, Array<ReceivedMoney>>();
-  transactions.forEach(tx => {
-    if (tx.type === 'received' && tx.invoiceNumber) {
-      const key = tx.invoiceNumber.toLowerCase().trim();
-      const existing = invoiceNumberMap.get(key) || [];
-      existing.push(tx);
-      invoiceNumberMap.set(key, existing);
-    }
-  });
+    const dInvoices = Array.from(invMap.values()).filter(group => group.length > 1);
 
-  const duplicateInvoices = Array.from(invoiceNumberMap.values()).filter(group => group.length > 1);
+    return {
+      recentTransactions: recentTx,
+      receivedCount: rCount,
+      pendingCount: pCount,
+      pendingTransactions: pTxs,
+      overduePending: oPending,
+      upcomingPending: uPending,
+      dueReminders: dReminders,
+      receivedMoneyTxs: rMoneyTxs,
+      totalReceivedAmount: tReceivedAmount,
+      avgInflow: aInflow,
+      highInflowAnomalies: hInflowAnomalies,
+      duplicateInvoices: dInvoices,
+      today: todayStr
+    };
+  }, [transactions, generalSettings?.timezone]);
 
   const triggerSearch = () => {
     window.dispatchEvent(new CustomEvent('open-command-palette'));
@@ -101,11 +146,10 @@ export default function Dashboard() {
   };
 
   const itemVariants: Variants = {
-    hidden: { opacity: 0, y: 18, filter: 'blur(6px)' },
+    hidden: { opacity: 0, y: 18 },
     show: { 
       opacity: 1, 
       y: 0, 
-      filter: 'blur(0px)',
       transition: { 
         duration: 0.45, 
         ease: [0.16, 1, 0.3, 1] as const
@@ -161,7 +205,12 @@ export default function Dashboard() {
             {/* --------------------------------------------------------------------- */}
             {/* 1. CURRENT BALANCE & LIQUIDITY VAULT                                  */}
             {/* --------------------------------------------------------------------- */}
-            <motion.section variants={itemVariants} id="section-balance" className="space-y-4">
+            <motion.section 
+              variants={itemVariants} 
+              id="section-balance" 
+              className="space-y-4"
+              style={{ contain: 'layout style', willChange: 'transform', transform: 'translateZ(0)' }}
+            >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <div className="text-[11px] font-bold text-[#0a84ff] uppercase tracking-wider flex items-center gap-1.5">
@@ -265,7 +314,13 @@ export default function Dashboard() {
             {/* --------------------------------------------------------------------- */}
             {/* 2. PENDING PAYMENTS (Active Receivables, Overdue Alerts, Reminders)     */}
             {/* --------------------------------------------------------------------- */}
-            <motion.section variants={itemVariants} id="section-pending" className="space-y-4">
+            <DeferredSection fallback={<SectionLoadingFallback />}>
+              <motion.section 
+                variants={itemVariants} 
+                id="section-pending" 
+                className="space-y-4"
+                style={{ contain: 'layout style', willChange: 'transform', transform: 'translateZ(0)' }}
+              >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <div className="text-[11px] font-bold text-[#ffd60a] uppercase tracking-wider flex items-center gap-1.5">
@@ -392,12 +447,19 @@ export default function Dashboard() {
                   })
                 )}
               </div>
-            </motion.section>
+              </motion.section>
+            </DeferredSection>
 
             {/* --------------------------------------------------------------------- */}
             {/* 3. RECENT TRANSACTIONS (Activity Feed)                                */}
             {/* --------------------------------------------------------------------- */}
-            <motion.section variants={itemVariants} id="section-transactions" className="space-y-4">
+            <DeferredSection fallback={<SectionLoadingFallback />}>
+              <motion.section 
+                variants={itemVariants} 
+                id="section-transactions" 
+                className="space-y-4"
+                style={{ contain: 'layout style', willChange: 'transform', transform: 'translateZ(0)' }}
+              >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <div className="text-[11px] font-bold text-[#30d158] uppercase tracking-wider flex items-center gap-1.5">
@@ -483,11 +545,17 @@ export default function Dashboard() {
                 )}
               </div>
             </motion.section>
+            </DeferredSection>
 
             {/* --------------------------------------------------------------------- */}
             {/* 4. QUICK ACTIONS (High-Utility Action Grid in VisionOS Liquid Glass)  */}
             {/* --------------------------------------------------------------------- */}
-            <motion.section variants={itemVariants} id="section-quick-actions" className="space-y-4">
+            <motion.section 
+              variants={itemVariants} 
+              id="section-quick-actions" 
+              className="space-y-4"
+              style={{ contain: 'layout style', willChange: 'transform', transform: 'translateZ(0)' }}
+            >
               <div>
                 <div className="text-[11px] font-bold text-[#0a84ff] uppercase tracking-wider flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#0a84ff]" /> 04 • Fast Workflow
@@ -608,7 +676,8 @@ export default function Dashboard() {
             {/* --------------------------------------------------------------------- */}
             {/* 5. ANALYTICS & VELOCITY (Interactive Analytics Section)               */}
             {/* --------------------------------------------------------------------- */}
-            <motion.section variants={itemVariants} id="section-analytics" className="space-y-4">
+            <DeferredSection fallback={<SectionLoadingFallback />}>
+              <motion.section variants={itemVariants} id="section-analytics" className="space-y-4" style={{ contain: 'layout style', willChange: 'transform', transform: 'translateZ(0)' }}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <div className="text-[11px] font-bold text-[#bf5af2] uppercase tracking-wider flex items-center gap-1.5">
@@ -632,11 +701,13 @@ export default function Dashboard() {
                 <InteractiveAnalyticsSection />
               </Suspense>
             </motion.section>
+            </DeferredSection>
 
             {/* --------------------------------------------------------------------- */}
             {/* 6. SMART ALERTS HUD                                */}
             {/* --------------------------------------------------------------------- */}
-            <motion.section variants={itemVariants} id="section-ai-insights" className="space-y-4">
+            <DeferredSection fallback={<SectionLoadingFallback />}>
+              <motion.section variants={itemVariants} id="section-ai-insights" className="space-y-4" style={{ contain: 'layout style', willChange: 'transform', transform: 'translateZ(0)' }}>
               <div>
                 <div className="text-[11px] font-bold text-[#bf5af2] uppercase tracking-wider flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#bf5af2]" /> 06 • Smart Intelligence
@@ -704,15 +775,18 @@ export default function Dashboard() {
                 <SmartReminderHUD />
               </Suspense>
             </motion.section>
+            </DeferredSection>
 
             {/* --------------------------------------------------------------------- */}
             {/* FEATURE BENTO (Gullak, Timeline, Security Vault, Cloud)               */}
             {/* --------------------------------------------------------------------- */}
-            <motion.section variants={itemVariants} id="section-feature-bento" className="pt-4">
+            <DeferredSection fallback={<SectionLoadingFallback />}>
+              <motion.section variants={itemVariants} id="section-feature-bento" className="pt-4" style={{ contain: 'layout style', willChange: 'transform', transform: 'translateZ(0)' }}>
               <Suspense fallback={<SectionLoadingFallback />}>
                 <InteractiveFeatureBento />
               </Suspense>
             </motion.section>
+            </DeferredSection>
           </div>
       </motion.div>
     </DataStateGuard>

@@ -230,7 +230,7 @@ export default function Notifications() {
   return (
     <div className="space-y-6 max-w-6xl mx-auto text-white">
       {/* Top Header Card */}
-      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-neutral-900/60 backdrop-blur-2xl border border-white/10 p-4 sm:p-8 shadow-2xl">
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-neutral-900/60 backdrop-blur-2xl border border-white/10 p-5 sm:p-8 shadow-2xl">
         <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
         
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
@@ -509,7 +509,7 @@ function NotificationCard({ notification: n, onActionClick, onMarkRead, onDelete
       )}
 
       {/* Left Details */}
-      <div className="flex items-start gap-3 sm:gap-4 pl-1 sm:pl-4 min-w-0 flex-1 w-full">
+      <div className="flex items-start gap-3 sm:gap-4 pl-2 sm:pl-4 min-w-0">
         <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0 border shadow-inner ${visuals.bgColor} ${visuals.borderColor} ${visuals.color}`}>
           <Icon size={20} className="sm:w-[22px] sm:h-[22px]" />
         </div>

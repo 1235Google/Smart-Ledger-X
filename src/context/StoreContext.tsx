@@ -259,10 +259,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       });
     }
   }, []);
-  const [currentUser, setCurrentUser] = useState<User | null>(() => auth.currentUser);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
-      return !!auth.currentUser || localStorage.getItem('smartledger_authenticated') === 'true';
+      return localStorage.getItem('smartledger_authenticated') === 'true';
     } catch {
       return false;
     }
@@ -392,10 +392,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setIsAuthenticated(true);
         setIsAuthReady(true);
         try {
-          sessionStorage.setItem('isUnlocked', 'true');
+          const unlocked = sessionStorage.getItem('isUnlocked') === 'true';
+          setIsLocked(!unlocked);
+        } catch (e) {}
+        try {
           localStorage.setItem('smartledger_authenticated', 'true');
         } catch (e) {}
-        setIsLocked(false);
 
         setDataStatus('loading');
         setIsLoading(true);
@@ -493,9 +495,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setIsAuthReady(true);
         try {
           localStorage.removeItem('smartledger_authenticated');
-          sessionStorage.removeItem('isUnlocked');
         } catch (e) {}
-        setIsLocked(true);
         
         // Load from local if not authenticated
         try {

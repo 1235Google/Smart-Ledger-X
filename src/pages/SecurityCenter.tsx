@@ -641,7 +641,7 @@ export default function SecurityCenter() {
   };
 
   return (
-    <div className="relative min-h-screen p-3 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 overflow-hidden">
+    <div className="relative min-h-screen p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 overflow-hidden">
       {/* CINEMATIC UI: Animated Gradient Mesh Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
         <div className="absolute top-1/4 left-1/4 w-[450px] h-[450px] bg-teal-500/10 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '6s' }} />
@@ -651,7 +651,7 @@ export default function SecurityCenter() {
 
       {/* Main Container with Soft Ambient Glow Border */}
       <div className="relative p-[1px] rounded-[32px] bg-gradient-to-r from-teal-500/30 via-purple-500/30 to-blue-500/30 shadow-2xl">
-        <div className="bg-[#0b0f19]/90 backdrop-blur-2xl rounded-[31px] p-4 sm:p-6 lg:p-8 space-y-6">
+        <div className="bg-[#0b0f19]/90 backdrop-blur-2xl rounded-[31px] p-6 sm:p-8 space-y-6">
           
           {/* Header */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -705,7 +705,7 @@ export default function SecurityCenter() {
           )}
 
           {/* Navigation Tabs with Sliding Pill Indicator */}
-          <div className="relative flex overflow-x-auto sm:flex-wrap items-center gap-2 bg-black/40 p-2 rounded-2xl border border-white/10 backdrop-blur-md no-scrollbar">
+          <div className="relative flex flex-wrap items-center gap-2 bg-black/40 p-2 rounded-2xl border border-white/10 backdrop-blur-md">
             {[
               { id: 'overview', label: 'Overview', icon: Shield },
               { id: 'session', label: 'Current Session', icon: Globe },
@@ -721,7 +721,7 @@ export default function SecurityCenter() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as TabType)}
                   className={cn(
-                    "relative flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-colors z-10 shrink-0",
+                    "relative flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors z-10",
                     isActive ? "text-teal-300" : "text-neutral-400 hover:text-white"
                   )}
                 >
@@ -921,11 +921,11 @@ export default function SecurityCenter() {
                         device.isCurrent ? "bg-teal-600/10 border-teal-500/40" : "bg-black/30 border-white/10 hover:border-teal-500/30"
                       )}
                     >
-                      <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0 flex-1">
-                         <div className="shrink-0 flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-teal-500/10 border border-teal-500/20">
+                      <div className="flex items-center gap-4">
+                         <div className="shrink-0 flex items-center justify-center w-14 h-14 rounded-2xl bg-teal-500/10 border border-teal-500/20">
                            {renderDeviceIcon(device.deviceType, device.isCurrent)}
                          </div>
-                         <div className="min-w-0 flex-1">
+                         <div>
                            <div className="flex flex-wrap items-center gap-2 mb-1">
                              <h4 className="text-white font-bold">{device.browser || 'Browser'} on {device.os || 'OS'}</h4>
                              
@@ -1006,8 +1006,8 @@ export default function SecurityCenter() {
                  ) : loginLogs.length === 0 ? (
                    <div className="text-neutral-400 text-sm py-8 text-center">No login history available.</div>
                  ) : (
-                   <div className="overflow-x-auto -mx-2 sm:mx-0">
-                     <table className="w-full min-w-[540px] text-left text-sm text-neutral-300">
+                   <div className="overflow-x-auto">
+                     <table className="w-full text-left text-sm text-neutral-300">
                        <thead className="bg-black/30 text-neutral-400 text-xs uppercase tracking-wider">
                          <tr>
                            <th className="px-4 py-3.5 rounded-l-xl font-semibold">Date & Time</th>

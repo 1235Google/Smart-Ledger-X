@@ -6,7 +6,7 @@ import { Resend } from "resend";
 import { Server as SocketIOServer } from "socket.io";
 import http from "http";
 import { generateAndSendReport } from "./src/server/report-generator";
-import { executeBackupPipeline, getBackupStatusSummary, getBackupHistory, verifyBackupChecksumStorage } from "./src/server/backup-service";
+import { executeBackupPipeline, getBackupStatusSummary, getBackupHistory, verifyBackupChecksumStorage, checkAndRunScheduledBackups } from "./src/server/backup-service";
 import { 
   hashPassword, 
   getStoredHash, 
@@ -1543,10 +1543,10 @@ startScheduledReportsWorker();
   // PRODUCTION-GRADE CLOUD BACKUP & DISASTER RECOVERY ENDPOINTS
   // =========================================================================
 
-  app.get('/api/backup/status', (req, res) => {
+  app.get('/api/backup/status', async (req, res) => {
     try {
       const userId = (req.query.userId as string) || 'system_admin';
-      const summary = getBackupStatusSummary(userId);
+      const summary = await getBackupStatusSummary(userId);
       return res.json(summary);
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message });
@@ -1606,6 +1606,24 @@ startScheduledReportsWorker();
     }
   });
 
+  app.get('/api/backup/:id/download', (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = (req.query.userId as string) || 'system_admin';
+      const file = path.join(process.cwd(), 'backup_storage', userId, `${id}.backup`);
+      if (fs.existsSync(file)) {
+        return res.download(file);
+      }
+      const fileAlt = path.join(process.cwd(), 'backup_storage', userId, `ledger_backup_${id}.backup`);
+      if (fs.existsSync(fileAlt)) {
+        return res.download(fileAlt);
+      }
+      return res.status(404).json({ success: false, error: 'Backup snapshot archive not found on disk storage' });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // =========================================================================
   // RESEND EMAIL SECURITY NOTIFICATION ENDPOINTS
   // =========================================================================
@@ -1625,51 +1643,30 @@ startScheduledReportsWorker();
 
   app.post('/api/security/notify-login', async (req, res) => {
     try {
-      const { email, userName, method, time, device, browser, os, location, ip } = req.body;
+      const { email, time, device, browser, os, location, ip } = req.body;
       if (!email) return res.status(400).json({ success: false, error: 'Email required' });
 
-      // Calculate accurate client IP
-      const resolvedIp = ip && ip !== '127.0.0.1' && ip !== '::1' ? ip : extractClientIp(req);
+      console.log('Login successful');
+      console.log(`Sending login alert to: ${email}`);
 
-      // Format current timestamp in Indian Standard Time (IST) if not supplied
-      const istTime = time || new Intl.DateTimeFormat('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        dateStyle: 'full',
-        timeStyle: 'medium'
-      }).format(new Date()) + ' (IST)';
-
-      // Recipient list: user's email + Admin email
-      const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || "souvikbbsr811@gmail.com";
-      const recipientSet = new Set<string>();
-      if (email) recipientSet.add(email);
-      if (adminEmail) recipientSet.add(adminEmail);
-      const recipients = Array.from(recipientSet);
-
-      console.log(`[AuthNotification] User logged in: ${userName || email} (${method || 'Google OAuth'})`);
-      console.log(`[AuthNotification] Sending login alert to: ${recipients.join(', ')}`);
-
-      const result = await sendLoginSuccessEmail(recipients, {
-        userName: userName || email.split('@')[0],
-        userEmail: email,
-        method: method || 'Google Sign-In (OAuth)',
-        time: istTime,
-        device: device || 'Desktop Device',
+      const result = await sendLoginSuccessEmail(email, {
+        time: time || new Date().toLocaleString(),
+        device: device || 'Desktop',
         browser: `${browser || 'Web Browser'}${os ? ` (${os})` : ''}`,
-        location: location || 'Online Session',
-        ip: resolvedIp || '127.0.0.1'
+        location: location || 'Online',
+        ip: ip || '127.0.0.1'
       });
 
       if (result.success) {
-        console.log('[AuthNotification] Login alert sent successfully');
+        console.log('Login alert sent successfully');
       } else {
-        console.warn(`[AuthNotification] Login alert skipped or failed: ${result.error || 'Check RESEND_API_KEY'}`);
+        console.log(`Login alert failed: ${result.error || 'Unknown Resend error'}`);
       }
 
-      // Return 200 with result so login is never blocked
-      return res.status(200).json(result);
+      return res.json(result);
     } catch (e: any) {
-      console.warn(`[AuthNotification] Non-blocking error handling login alert: ${e.message || 'Unknown error'}`);
-      return res.status(200).json({ success: false, error: e.message });
+      console.log(`Login alert failed: ${e.message || 'Unknown error'}`);
+      return res.status(500).json({ success: false, error: e.message });
     }
   });
 
@@ -1723,11 +1720,10 @@ startScheduledReportsWorker();
   app.all('/api/cron/backup', async (req, res) => {
     try {
       console.log('[AutoBackup] Trigger received for /api/cron/backup');
-      const result = await executeBackupPipeline('system_cron', 'scheduled');
+      const count = await checkAndRunScheduledBackups();
       return res.json({
-        success: result.status === 'success',
-        message: result.status === 'success' ? 'Server-side automatic backup completed successfully' : 'Backup failed after retries',
-        details: result
+        success: true,
+        message: `Cron check finished. Executed ${count} overdue backups.`
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err.message || 'Cron execution failed' });

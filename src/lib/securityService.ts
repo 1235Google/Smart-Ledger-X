@@ -710,27 +710,25 @@ export async function recordLoginActivity(
 
       if (options.email) {
         try {
-          const istTime = new Intl.DateTimeFormat('en-IN', {
-            timeZone: 'Asia/Kolkata',
-            dateStyle: 'full',
-            timeStyle: 'medium'
-          }).format(new Date()) + ' (IST)';
-
-          fetch('/api/security/notify-login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: options.email,
-              userName: options.userName,
-              method: options.method === 'Google' ? 'Google Sign-In (OAuth)' : options.method,
-              time: istTime,
-              device: dev.deviceName,
-              browser: dev.browser,
-              os: dev.os,
-              location: net.location,
-              ip: net.ip
-            })
-          }).catch(err => console.warn('[Security] Failed to dispatch login alert:', err?.message));
+          const dedupeKey = 'smartledger_login_email_sent_' + options.email;
+          const lastSent = sessionStorage.getItem(dedupeKey);
+          const now = Date.now();
+          if (!lastSent || now - Number(lastSent) > 120000) {
+            sessionStorage.setItem(dedupeKey, String(now));
+            fetch('/api/security/notify-login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: options.email,
+                time: new Date().toLocaleString(),
+                device: dev.deviceName,
+                browser: dev.browser,
+                os: dev.os,
+                location: net.location,
+                ip: net.ip
+              })
+            }).catch(err => console.warn('[Security] Failed to dispatch login alert:', err?.message));
+          }
         } catch (e) {}
       }
     }

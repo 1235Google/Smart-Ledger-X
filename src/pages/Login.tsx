@@ -23,7 +23,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   
-  const { unlockApp, isAuthenticated, currentUser, updateUserProfile } = useStore();
+  const { updateUserProfile } = useStore();
 
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -32,32 +32,6 @@ export default function Login() {
   const [resetSent, setResetSent] = useState(false);
   const navigate = useNavigate();
 
-  // If already authenticated, redirect automatically to dashboard
-  useEffect(() => {
-    if (isAuthenticated || currentUser) {
-      console.log('Navigation started');
-      navigate('/', { replace: true });
-      console.log('Navigation completed');
-    }
-  }, [isAuthenticated, currentUser, navigate]);
-
-  // Dispatch non-blocking login notification to backend Resend email API
-  const sendLoginNotification = (user: { email?: string | null; displayName?: string | null }) => {
-    if (!user?.email) return;
-    fetch('/api/security/notify-login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: user.email,
-        userName: user.displayName || user.email.split('@')[0],
-        method: 'Google Sign-In',
-        time: new Date().toISOString()
-      })
-    }).catch((err) => {
-      console.warn('[LoginNotification] Non-blocking alert error:', err?.message);
-    });
-  };
-
   // Handle redirect sign-in results on initial mount
   useEffect(() => {
     let isMounted = true;
@@ -65,28 +39,10 @@ export default function Login() {
       try {
         const user = await checkRedirectResult();
         if (user && isMounted) {
-          console.log('Authentication successful');
-          console.log('User email received:', user.email);
           try {
             sessionStorage.setItem('isUnlocked', 'true');
-            localStorage.setItem('smartledger_authenticated', 'true');
           } catch (e) {}
-          unlockApp();
-
-          // Send login notification to backend
-          sendLoginNotification(user);
-
-          await recordLoginActivity(user.uid, {
-            method: 'Google',
-            status: 'Success',
-            email: user.email || '',
-            userName: user.displayName || '',
-            userAvatar: user.photoURL || ''
-          });
-
-          console.log('Navigation started');
           navigate('/', { replace: true });
-          console.log('Navigation completed');
         }
       } catch (err: any) {
         if (isMounted) {
@@ -96,7 +52,7 @@ export default function Login() {
     };
     processRedirect();
     return () => { isMounted = false; };
-  }, [navigate, unlockApp]);
+  }, [navigate]);
 
   const handleGoogleSignIn = async () => {
     if (loading || googleLoading) return;
@@ -106,16 +62,7 @@ export default function Login() {
     try {
       const result = await loginWithGoogle();
       if (result?.user) {
-        console.log('User email received:', result.user.email);
-        try { 
-          sessionStorage.setItem('isUnlocked', 'true'); 
-          localStorage.setItem('smartledger_authenticated', 'true');
-        } catch (e) {}
-        unlockApp();
-
-        // Send login notification to backend
-        sendLoginNotification(result.user);
-
+        try { sessionStorage.setItem('isUnlocked', 'true'); } catch (e) {}
         await recordLoginActivity(result.user.uid, {
           method: 'Google',
           status: 'Success',
@@ -123,10 +70,7 @@ export default function Login() {
           userName: result.user.displayName || '',
           userAvatar: result.user.photoURL || ''
         });
-
-        console.log('Navigation started');
         navigate('/', { replace: true });
-        console.log('Navigation completed');
       }
     } catch (err: any) {
       if (err?.code !== 'auth/popup-closed-by-user' && err?.code !== 'auth/cancelled-popup-request') {
@@ -190,11 +134,7 @@ export default function Login() {
       }
 
       if (cred.user) {
-        try { 
-          sessionStorage.setItem('isUnlocked', 'true');
-          localStorage.setItem('smartledger_authenticated', 'true');
-        } catch (e) {}
-        unlockApp();
+        try { sessionStorage.setItem('isUnlocked', 'true'); } catch (e) {}
         await recordLoginActivity(cred.user.uid, {
           method: 'Email',
           status: 'Success',
@@ -202,9 +142,7 @@ export default function Login() {
           userName: cred.user.displayName || '',
           userAvatar: cred.user.photoURL || ''
         });
-        console.log('Navigation started');
         navigate('/', { replace: true });
-        console.log('Navigation completed');
       }
     } catch (err: any) {
       const friendlyMsg = formatAuthError(err);
@@ -268,11 +206,11 @@ export default function Login() {
         <div className="relative rounded-[26px] p-[2.5px] bg-white shadow-[0_0_30px_rgba(255,255,255,0.7),inset_0_0_15px_rgba(255,255,255,0.5)]">
           
           {/* Inner Frosted Glass Body */}
-          <div className="relative bg-[#1a1c23]/80 backdrop-blur-2xl rounded-[23px] py-8 sm:py-10 px-5 sm:px-8 overflow-hidden">
+          <div className="relative bg-[#1a1c23]/80 backdrop-blur-2xl rounded-[23px] py-10 px-8 overflow-hidden">
             
             {/* Card Header */}
-            <div className="mb-6 sm:mb-8 text-center relative z-10">
-              <h2 className="text-2xl sm:text-[32px] font-bold tracking-tight text-white mb-2 font-sans">
+            <div className="mb-8 text-center relative z-10">
+              <h2 className="text-[32px] font-bold tracking-tight text-white mb-2 font-sans">
                 Welcome Back
               </h2>
               <p className="text-[13px] text-white/60 font-medium">

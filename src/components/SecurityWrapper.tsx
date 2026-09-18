@@ -14,6 +14,7 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
   const { 
     currentUser, 
     isAuthReady, 
+    isUnlocked: storeIsUnlocked,
     unlockApp: storeUnlockApp, 
     lockApp: storeLockApp 
   } = useStore();
@@ -29,6 +30,14 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
       return false;
     }
   });
+
+  // Synchronize with store unlock status
+  useEffect(() => {
+    const isNowUnlocked = storeIsUnlocked || (typeof window !== 'undefined' && sessionStorage.getItem('isUnlocked') === 'true');
+    if (isNowUnlocked) {
+      setIsUnlocked(true);
+    }
+  }, [storeIsUnlocked, currentUser]);
 
   // 1. Ensure Firebase Auth uses browser local persistence so Google login survives page refresh & auto-lock
   useEffect(() => {
@@ -162,20 +171,19 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
     );
   }
 
-  // Priority B: NO Firebase user -> render Google Sign-In page
-  // (AppRoutes renders LoginRoute/Login; ProtectedRoute redirects to /login)
-  if (!currentUser) {
+  // Priority B: NO Firebase user OR currently on /login -> render routes (let Login / LoginRoute handle)
+  if (!currentUser || location.pathname === '/login') {
     return <>{children}</>;
   }
 
-  // Priority C: There IS a Firebase user, but sessionStorage.isUnlocked !== "true"
+  // Priority C: There IS a Firebase user, but not unlocked
   // Render local lock screen: Face Unlock first priority, PIN fallback second priority
-  const isLocallyUnlocked = isUnlocked && sessionStorage.getItem('isUnlocked') === 'true';
+  const isLocallyUnlocked = isUnlocked || storeIsUnlocked || (typeof window !== 'undefined' && sessionStorage.getItem('isUnlocked') === 'true');
   if (!isLocallyUnlocked) {
     return <LockScreen onUnlock={handleUnlock} />;
   }
 
-  // Priority D: There IS a Firebase user AND sessionStorage.isUnlocked === "true"
+  // Priority D: There IS a Firebase user AND unlocked
   // Render the main Smart Ledger X dashboard
   return <>{children}</>;
 }

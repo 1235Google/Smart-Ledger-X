@@ -23,7 +23,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   
-  const { updateUserProfile } = useStore();
+  const { unlockApp, isAuthenticated, currentUser, updateUserProfile } = useStore();
 
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -31,6 +31,15 @@ export default function Login() {
   const [successMsg, setSuccessMsg] = useState('');
   const [resetSent, setResetSent] = useState(false);
   const navigate = useNavigate();
+
+  // If already authenticated, redirect automatically to dashboard
+  useEffect(() => {
+    if (isAuthenticated || currentUser) {
+      console.log('Navigation started');
+      navigate('/', { replace: true });
+      console.log('Navigation completed');
+    }
+  }, [isAuthenticated, currentUser, navigate]);
 
   // Dispatch non-blocking login notification to backend Resend email API
   const sendLoginNotification = (user: { email?: string | null; displayName?: string | null }) => {
@@ -56,9 +65,13 @@ export default function Login() {
       try {
         const user = await checkRedirectResult();
         if (user && isMounted) {
+          console.log('Authentication successful');
+          console.log('User email received:', user.email);
           try {
             sessionStorage.setItem('isUnlocked', 'true');
+            localStorage.setItem('smartledger_authenticated', 'true');
           } catch (e) {}
+          unlockApp();
 
           // Send login notification to backend
           sendLoginNotification(user);
@@ -70,7 +83,10 @@ export default function Login() {
             userName: user.displayName || '',
             userAvatar: user.photoURL || ''
           });
+
+          console.log('Navigation started');
           navigate('/', { replace: true });
+          console.log('Navigation completed');
         }
       } catch (err: any) {
         if (isMounted) {
@@ -80,7 +96,7 @@ export default function Login() {
     };
     processRedirect();
     return () => { isMounted = false; };
-  }, [navigate]);
+  }, [navigate, unlockApp]);
 
   const handleGoogleSignIn = async () => {
     if (loading || googleLoading) return;
@@ -90,7 +106,12 @@ export default function Login() {
     try {
       const result = await loginWithGoogle();
       if (result?.user) {
-        try { sessionStorage.setItem('isUnlocked', 'true'); } catch (e) {}
+        console.log('User email received:', result.user.email);
+        try { 
+          sessionStorage.setItem('isUnlocked', 'true'); 
+          localStorage.setItem('smartledger_authenticated', 'true');
+        } catch (e) {}
+        unlockApp();
 
         // Send login notification to backend
         sendLoginNotification(result.user);
@@ -102,7 +123,10 @@ export default function Login() {
           userName: result.user.displayName || '',
           userAvatar: result.user.photoURL || ''
         });
+
+        console.log('Navigation started');
         navigate('/', { replace: true });
+        console.log('Navigation completed');
       }
     } catch (err: any) {
       if (err?.code !== 'auth/popup-closed-by-user' && err?.code !== 'auth/cancelled-popup-request') {
@@ -166,7 +190,11 @@ export default function Login() {
       }
 
       if (cred.user) {
-        try { sessionStorage.setItem('isUnlocked', 'true'); } catch (e) {}
+        try { 
+          sessionStorage.setItem('isUnlocked', 'true');
+          localStorage.setItem('smartledger_authenticated', 'true');
+        } catch (e) {}
+        unlockApp();
         await recordLoginActivity(cred.user.uid, {
           method: 'Email',
           status: 'Success',
@@ -174,7 +202,9 @@ export default function Login() {
           userName: cred.user.displayName || '',
           userAvatar: cred.user.photoURL || ''
         });
+        console.log('Navigation started');
         navigate('/', { replace: true });
+        console.log('Navigation completed');
       }
     } catch (err: any) {
       const friendlyMsg = formatAuthError(err);

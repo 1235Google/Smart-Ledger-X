@@ -1,6 +1,7 @@
 import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { StoreProvider, useStore } from './context/StoreContext';
+import { auth } from './lib/firebase';
 import Layout from './components/Layout';
 import SecurityWrapper from './components/SecurityWrapper';
 
@@ -49,7 +50,7 @@ const AdminTrustedDevices = lazy(() => import('./pages/admin/AdminTrustedDevices
 const Login = lazy(() => import('./pages/Login'));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isAuthReady, systemConfig, isAdminAuthenticated } = useStore();
+  const { isAuthenticated, isAuthReady, systemConfig, isAdminAuthenticated, currentUser } = useStore();
   
   if (!isAuthReady) {
     return (
@@ -65,14 +66,16 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <MaintenanceScreen />;
   }
 
-  if (!isAuthenticated) {
+  const isAuthed = isAuthenticated || !!currentUser || !!auth.currentUser;
+
+  if (!isAuthed) {
     return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
 }
 
 function LoginRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isAuthReady, systemConfig, isAdminAuthenticated } = useStore();
+  const { isAuthenticated, isAuthReady, systemConfig, isAdminAuthenticated, currentUser } = useStore();
   
   if (!isAuthReady) {
     return (
@@ -88,7 +91,9 @@ function LoginRoute({ children }: { children: React.ReactNode }) {
     return <MaintenanceScreen />;
   }
 
-  if (isAuthenticated) {
+  const isAuthed = isAuthenticated || !!currentUser || !!auth.currentUser;
+
+  if (isAuthed) {
     return <Navigate to="/" replace />;
   }
   return <>{children}</>;

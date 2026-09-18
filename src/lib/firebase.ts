@@ -235,16 +235,21 @@ export async function ensureUserProfileDoc(user: User, customFullName?: string):
  * Task 1, 4, 7: Audit Google auth flow, handle popup-closed-by-user, log details
  */
 export async function loginWithGoogle(): Promise<{ user: User }> {
-  console.log('[Firebase Auth] Launching signInWithPopup for Google...');
+  console.log('Google popup opened');
   try {
-    const result = await signInWithPopup(auth, googleProvider, browserPopupRedirectResolver);
+    if (typeof window !== 'undefined') {
+      try {
+        await setPersistence(auth, browserLocalPersistence);
+      } catch (pErr) {
+        console.warn('[Firebase Auth] Persistence note:', pErr);
+      }
+    }
+    const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
     
-    // Debug logging as required by Task 7
-    console.log('[Auth Debug] Google Login Success');
-    console.log('[Auth Debug] Firebase currentUser:', auth.currentUser?.email);
+    console.log('Authentication successful');
+    console.log('User email received:', user.email);
     console.log('[Auth Debug] UID:', user.uid);
-    console.log('[Auth Debug] Email:', user.email);
     console.log('[Auth Debug] Display Name:', user.displayName);
     console.log('[Auth Debug] Provider:', user.providerData?.[0]?.providerId || 'google.com');
 
@@ -270,7 +275,7 @@ export async function loginWithGoogle(): Promise<{ user: User }> {
     if (code === 'auth/popup-blocked' || code === 'auth/internal-error') {
       console.log(`[Firebase Auth] Popup blocked or internal error (${code}). Falling back to signInWithRedirect...`);
       try {
-        await signInWithRedirect(auth, googleProvider, browserPopupRedirectResolver);
+        await signInWithRedirect(auth, googleProvider);
         return new Promise(() => {}); // Wait for browser redirect
       } catch (redirectError: any) {
         console.error('[Firebase Auth] signInWithRedirect error:', redirectError);

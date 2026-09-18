@@ -1625,30 +1625,51 @@ startScheduledReportsWorker();
 
   app.post('/api/security/notify-login', async (req, res) => {
     try {
-      const { email, time, device, browser, os, location, ip } = req.body;
+      const { email, userName, method, time, device, browser, os, location, ip } = req.body;
       if (!email) return res.status(400).json({ success: false, error: 'Email required' });
 
-      console.log('Login successful');
-      console.log(`Sending login alert to: ${email}`);
+      // Calculate accurate client IP
+      const resolvedIp = ip && ip !== '127.0.0.1' && ip !== '::1' ? ip : extractClientIp(req);
 
-      const result = await sendLoginSuccessEmail(email, {
-        time: time || new Date().toLocaleString(),
-        device: device || 'Desktop',
+      // Format current timestamp in Indian Standard Time (IST) if not supplied
+      const istTime = time || new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        dateStyle: 'full',
+        timeStyle: 'medium'
+      }).format(new Date()) + ' (IST)';
+
+      // Recipient list: user's email + Admin email
+      const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || "souvikbbsr811@gmail.com";
+      const recipientSet = new Set<string>();
+      if (email) recipientSet.add(email);
+      if (adminEmail) recipientSet.add(adminEmail);
+      const recipients = Array.from(recipientSet);
+
+      console.log(`[AuthNotification] User logged in: ${userName || email} (${method || 'Google OAuth'})`);
+      console.log(`[AuthNotification] Sending login alert to: ${recipients.join(', ')}`);
+
+      const result = await sendLoginSuccessEmail(recipients, {
+        userName: userName || email.split('@')[0],
+        userEmail: email,
+        method: method || 'Google Sign-In (OAuth)',
+        time: istTime,
+        device: device || 'Desktop Device',
         browser: `${browser || 'Web Browser'}${os ? ` (${os})` : ''}`,
-        location: location || 'Online',
-        ip: ip || '127.0.0.1'
+        location: location || 'Online Session',
+        ip: resolvedIp || '127.0.0.1'
       });
 
       if (result.success) {
-        console.log('Login alert sent successfully');
+        console.log('[AuthNotification] Login alert sent successfully');
       } else {
-        console.log(`Login alert failed: ${result.error || 'Unknown Resend error'}`);
+        console.warn(`[AuthNotification] Login alert skipped or failed: ${result.error || 'Check RESEND_API_KEY'}`);
       }
 
-      return res.json(result);
+      // Return 200 with result so login is never blocked
+      return res.status(200).json(result);
     } catch (e: any) {
-      console.log(`Login alert failed: ${e.message || 'Unknown error'}`);
-      return res.status(500).json({ success: false, error: e.message });
+      console.warn(`[AuthNotification] Non-blocking error handling login alert: ${e.message || 'Unknown error'}`);
+      return res.status(200).json({ success: false, error: e.message });
     }
   });
 

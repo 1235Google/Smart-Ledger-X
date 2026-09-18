@@ -32,6 +32,23 @@ export default function Login() {
   const [resetSent, setResetSent] = useState(false);
   const navigate = useNavigate();
 
+  // Dispatch non-blocking login notification to backend Resend email API
+  const sendLoginNotification = (user: { email?: string | null; displayName?: string | null }) => {
+    if (!user?.email) return;
+    fetch('/api/security/notify-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: user.email,
+        userName: user.displayName || user.email.split('@')[0],
+        method: 'Google Sign-In',
+        time: new Date().toISOString()
+      })
+    }).catch((err) => {
+      console.warn('[LoginNotification] Non-blocking alert error:', err?.message);
+    });
+  };
+
   // Handle redirect sign-in results on initial mount
   useEffect(() => {
     let isMounted = true;
@@ -42,6 +59,17 @@ export default function Login() {
           try {
             sessionStorage.setItem('isUnlocked', 'true');
           } catch (e) {}
+
+          // Send login notification to backend
+          sendLoginNotification(user);
+
+          await recordLoginActivity(user.uid, {
+            method: 'Google',
+            status: 'Success',
+            email: user.email || '',
+            userName: user.displayName || '',
+            userAvatar: user.photoURL || ''
+          });
           navigate('/', { replace: true });
         }
       } catch (err: any) {
@@ -63,6 +91,10 @@ export default function Login() {
       const result = await loginWithGoogle();
       if (result?.user) {
         try { sessionStorage.setItem('isUnlocked', 'true'); } catch (e) {}
+
+        // Send login notification to backend
+        sendLoginNotification(result.user);
+
         await recordLoginActivity(result.user.uid, {
           method: 'Google',
           status: 'Success',

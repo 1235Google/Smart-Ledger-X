@@ -312,8 +312,10 @@ export async function loginWithGoogleCredential(idToken: string): Promise<{ user
  * Check if the user is returning from a Google redirect sign-in
  */
 export async function checkRedirectResult(): Promise<User | null> {
+  console.log('[Firebase Auth] Checking for redirect result...');
   try {
     const result = await getRedirectResult(auth);
+    console.log('[Firebase Auth] Redirect result received:', result ? 'User found' : 'No user result');
     if (result && result.user) {
       console.log('[Firebase Auth] Successfully processed redirect sign-in for:', result.user.uid);
       console.log('[Auth Debug] Redirect User UID:', result.user.uid);
@@ -324,7 +326,7 @@ export async function checkRedirectResult(): Promise<User | null> {
       return result.user;
     }
   } catch (err: any) {
-    console.warn('[Firebase Auth] getRedirectResult notice:', err?.code, err?.message);
+    console.error('[Firebase Auth] getRedirectResult error:', err?.code, err?.message);
   }
   return null;
 }

@@ -635,12 +635,14 @@ export default function Layout() {
           <div className="flex items-center gap-3">
             <button 
                 onClick={() => setAurexPanelState('full')}
-                className="p-2 rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-[#A78BFA] transition-all"
+                className="p-2 rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-[#A78BFA] transition-all cursor-pointer pointer-events-auto"
                 aria-label="Open Aurex AI"
             >
                 <Sparkles size={16} />
             </button>
-            <SyncStatusBadge />
+            <button onClick={() => {}} className="cursor-pointer pointer-events-auto">
+              <SyncStatusBadge />
+            </button>
             <NotificationDropdown ref={desktopNotifRef} />
             <UserProfileDropdown onOpenNotifications={() => desktopNotifRef.current?.open()} />
           </div>

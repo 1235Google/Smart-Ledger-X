@@ -29,8 +29,24 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+
+  // 1. Ignore chrome-extension://, chrome://
+  if (event.request.url.startsWith("chrome-extension://") || event.request.url.startsWith("chrome://")) return;
+
+  // 2. Only cache GET requests
   if (event.request.method !== 'GET') return;
-  
+
+  // 3. Never cache external auth, fonts, or APIs
+  if (
+    url.hostname === 'apis.google.com' ||
+    url.hostname === 'fonts.gstatic.com' ||
+    event.request.url.includes('firebase') ||
+    event.request.url.includes('google.com')
+  ) {
+    return;
+  }
+
   // Stale-while-revalidate strategy
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
@@ -39,7 +55,11 @@ self.addEventListener('fetch', (event) => {
         if (networkResponse.ok) {
           const responseClone = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
+            try {
+              cache.put(event.request, responseClone);
+            } catch (error) {
+              console.warn("Cache skipped", error);
+            }
           });
         }
         return networkResponse;

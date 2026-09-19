@@ -63,13 +63,16 @@ export default function Login() {
       const result = await loginWithGoogle();
       if (result?.user) {
         try { sessionStorage.setItem('isUnlocked', 'true'); } catch (e) {}
-        await recordLoginActivity(result.user.uid, {
+        
+        // Asynchronous non-blocking login record
+        recordLoginActivity(result.user.uid, {
           method: 'Google',
           status: 'Success',
           email: result.user.email || '',
           userName: result.user.displayName || '',
           userAvatar: result.user.photoURL || ''
-        });
+        }).catch(err => console.warn('[Security] Async login record failed', err));
+        
         navigate('/', { replace: true });
       }
     } catch (err: any) {

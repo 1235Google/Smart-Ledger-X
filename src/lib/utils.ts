@@ -6,6 +6,13 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export function sanitizeFirestoreData<T = Record<string, any>>(data: T): T {
+  return JSON.parse(JSON.stringify(data, (key, value) => {
+    if (value === undefined) return null;
+    return value;
+  }));
+}
+
 export function formatName(name: string | undefined): string {
   if (!name) return '';
   return name

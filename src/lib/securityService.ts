@@ -11,6 +11,7 @@ import {
   Unsubscribe 
 } from 'firebase/firestore';
 import { db, auth, OperationType, handleFirestoreError } from './firebase';
+import { sanitizeFirestoreData } from './utils';
 import { LoginHistoryEntry, UserDevice } from '../types';
 import CryptoJS from 'crypto-js';
 
@@ -696,7 +697,8 @@ export async function recordLoginActivity(
     // 3. If authenticated in Firebase, save to remote Firestore
     if (userId && userId !== 'anonymous' && userId !== 'local_user' && auth.currentUser) {
       const historyRef = doc(db, 'users', userId, 'loginHistory', historyId);
-      await setDoc(historyRef, entry);
+      const sanitizedEntry = sanitizeFirestoreData(entry);
+      await setDoc(historyRef, sanitizedEntry);
       console.log(`[Security] Login activity logged in cloud for ${userId} (${options.email}): ${options.method} -> ${options.status}`);
     }
 
@@ -857,7 +859,8 @@ export async function registerOrUpdateDevice(
   if (userId && userId !== 'anonymous' && userId !== 'local_user' && auth.currentUser) {
     try {
       const deviceRef = doc(db, 'users', userId, 'devices', deviceId);
-      await setDoc(deviceRef, deviceData, { merge: true });
+      const sanitizedDeviceData = JSON.parse(JSON.stringify(deviceData));
+      await setDoc(deviceRef, sanitizedDeviceData, { merge: true });
       console.log(`[Security] Registered active device ${deviceId} in cloud for user ${userId}`);
     } catch (err) {
       console.warn('[Security] Failed to register device in cloud:', err);

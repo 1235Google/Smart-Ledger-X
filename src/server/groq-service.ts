@@ -89,7 +89,7 @@ export async function callGroq(prompt: string, history: any[], context?: any[]) 
         messages: [
             { role: 'system', content: buildSystemPrompt(ledgerData) },
             ...history.map(h => ({
-              role: h.role === 'assistant' ? 'assistant' : 'user',
+              role: (h.role === 'assistant' ? 'assistant' : 'user') as 'assistant' | 'user',
               content: h.content
             })),
             { role: 'user', content: prompt }

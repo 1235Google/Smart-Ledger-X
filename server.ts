@@ -6,6 +6,7 @@ import { Resend } from "resend";
 import { Server as SocketIOServer } from "socket.io";
 import http from "http";
 import { generateAndSendReport } from "./src/server/report-generator";
+import { generateAIResponse } from "./src/server/gemini-service";
 import { executeBackupPipeline, getBackupStatusSummary, getBackupHistory, verifyBackupChecksumStorage, checkAndRunScheduledBackups } from "./src/server/backup-service";
 import { 
   hashPassword, 
@@ -118,6 +119,18 @@ initJobsStorage();
 startAllScheduledJobsCron();
 startAutoRestoreMonitor();
 startScheduledReportsWorker();
+
+  // AI Co-pilot Endpoint
+  app.post("/api/ai", async (req, res) => {
+    try {
+      const { prompt, context } = req.body;
+      const response = await generateAIResponse(prompt, context);
+      res.json({ success: true, response });
+    } catch (err: any) {
+      console.error("[AI] Error:", err);
+      res.status(500).json({ success: false, error: "AI service error" });
+    }
+  });
 
   // --- Centralized Admin Authentication API Endpoints ---
   app.post("/api/admin/login", (req, res) => {

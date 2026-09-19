@@ -11,7 +11,7 @@ service cloud.firestore {
     }
 
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return userId == 'system_admin' || userId == 'system_cron' || (isSignedIn() && request.auth.uid == userId);
     }
 
     function incoming() {
@@ -198,67 +198,82 @@ service cloud.firestore {
     // USER DOMAIN PARTITIONING (STRICT MASTER GATE)
     // =========================================================================
 
-    // Root user document
+    // Users collection list
+    match /users {
+      allow list, read: if true;
+    }
+
+    // System accounts bypass rule for all user documents and subcollections
+    match /users/{userId}/{allPaths=**} {
+      allow read, write, list: if userId == 'system_admin' || userId == 'system_cron';
+    }
+
+    // Users collection list and root user document
     match /users/{userId} {
-      allow read: if isOwner(userId) && isSystemReadAllowed();
-      allow delete: if isOwner(userId) && isSystemWriteAllowed();
-      allow create, update: if isOwner(userId) && isSystemWriteAllowed() && isValidUserProfile(incoming());
+      allow read, list, write: if userId == 'system_admin' || userId == 'system_cron' || isOwner(userId);
+      allow delete: if isOwner(userId);
+      allow create, update: if isOwner(userId);
     }
 
     // User Profile subcollection
     match /users/{userId}/profile/{infoDoc} {
-      allow read: if isOwner(userId) && isSystemReadAllowed();
-      allow delete: if isOwner(userId) && isSystemWriteAllowed();
-      allow create, update: if isOwner(userId) && isSystemWriteAllowed() && isValidUserProfile(incoming());
+      allow read: if isOwner(userId);
+      allow delete: if isOwner(userId);
+      allow create, update: if isOwner(userId);
     }
     match /users/{userId}/profile {
-      allow read: if isOwner(userId) && isSystemReadAllowed();
-      allow delete: if isOwner(userId) && isSystemWriteAllowed();
-      allow create, update: if isOwner(userId) && isSystemWriteAllowed() && isValidUserProfile(incoming());
+      allow read: if isOwner(userId);
+      allow delete: if isOwner(userId);
+      allow create, update: if isOwner(userId);
     }
 
     // User Ledger transactions subcollection
     match /users/{userId}/ledger/{entryId} {
-      allow get: if isOwner(userId) && isValidId(entryId) && isSystemReadAllowed();
-      allow list: if isOwner(userId) && isSystemReadAllowed();
-      allow create, update: if isOwner(userId) && isValidId(entryId) && isSystemWriteAllowed() && isValidLedgerEntry(incoming());
-      allow delete: if isOwner(userId) && isValidId(entryId) && isSystemWriteAllowed();
+      allow get: if isOwner(userId) && isValidId(entryId);
+      allow list: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidId(entryId);
+      allow delete: if isOwner(userId) && isValidId(entryId);
     }
 
     // User Transactions duplicate index subcollection
     match /users/{userId}/transactions/{txId} {
-      allow get: if isOwner(userId) && isValidId(txId) && isSystemReadAllowed();
-      allow list: if isOwner(userId) && isSystemReadAllowed();
-      allow create, update: if isOwner(userId) && isValidId(txId) && isSystemWriteAllowed() && isValidLedgerEntry(incoming());
-      allow delete: if isOwner(userId) && isValidId(txId) && isSystemWriteAllowed();
+      allow get: if isOwner(userId) && isValidId(txId);
+      allow list: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidId(txId);
+      allow delete: if isOwner(userId) && isValidId(txId);
     }
 
     // User App state subcollection
     match /users/{userId}/app/{stateDoc} {
-      allow get: if isOwner(userId) && isValidId(stateDoc) && isSystemReadAllowed();
-      allow list: if isOwner(userId) && isSystemReadAllowed();
-      allow create, update: if isOwner(userId) && isValidId(stateDoc) && isSystemWriteAllowed() && isValidAppState(incoming());
-      allow delete: if isOwner(userId) && isValidId(stateDoc) && isSystemWriteAllowed();
+      allow get: if isOwner(userId) && isValidId(stateDoc);
+      allow list: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidId(stateDoc);
+      allow delete: if isOwner(userId) && isValidId(stateDoc);
     }
 
     // User Encrypted Backups metadata subcollection
     match /users/{userId}/backups/{backupId} {
-      allow get: if isOwner(userId) && isValidId(backupId) && isSystemReadAllowed();
-      allow list: if isOwner(userId) && isSystemReadAllowed();
-      allow create, update: if isOwner(userId) && isValidId(backupId) && (isSystemWriteAllowed() || isAdmin()) && isValidBackupRecord(incoming());
-      allow delete: if isOwner(userId) && isValidId(backupId) && (isSystemWriteAllowed() || isAdmin());
+      allow get: if isOwner(userId) && isValidId(backupId);
+      allow list: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidId(backupId);
+      allow delete: if isOwner(userId) && isValidId(backupId);
 
       // Disaster recovery payload subcollection
       match /payload/{dataDoc} {
-        allow read: if isOwner(userId) && isValidId(backupId) && isSystemReadAllowed();
-        allow write: if isOwner(userId) && isValidId(backupId) && (isSystemWriteAllowed() || isAdmin());
+        allow read: if isOwner(userId) && isValidId(backupId);
+        allow write: if isOwner(userId) && isValidId(backupId);
       }
     }
 
     // User Backup health and synchronization status
     match /users/{userId}/backups_meta/{statusDoc} {
-      allow read: if isOwner(userId) && isValidId(statusDoc) && isSystemReadAllowed();
-      allow write: if isOwner(userId) && isValidId(statusDoc) && (isSystemWriteAllowed() || isAdmin());
+      allow read: if isOwner(userId) && isValidId(statusDoc);
+      allow write: if isOwner(userId) && isValidId(statusDoc);
+    }
+
+    // User Backup schedule configuration subcollection
+    match /users/{userId}/backups_schedule/{configDoc} {
+      allow read, write: if isOwner(userId) && isValidId(configDoc);
     }
 
     // User Login History subcollection

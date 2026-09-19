@@ -37,6 +37,8 @@ import { cn } from '../lib/utils';
 import Lenis from 'lenis';
 import { useStore } from '../context/StoreContext';
 
+import { AurexPanelContainer, PanelState } from './ai/AurexPanelContainer';
+
 import NotificationDropdown, { NotificationDropdownRef } from './NotificationDropdown';
 import UserProfileDropdown from './UserProfileDropdown';
 import SyncStatusBadge from './SyncStatusBadge';
@@ -99,8 +101,10 @@ const navCategories = [
 
 export default function Layout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [aurexPanelState, setAurexPanelState] = useState<PanelState>('closed');
   const location = useLocation();
   const navigate = useNavigate();
+
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [location.pathname]);
@@ -271,9 +275,9 @@ export default function Layout() {
         <div className="absolute inset-0 bg-noise mix-blend-overlay z-[1] opacity-25" />
         
         {/* Soft, minimal radial ambient lights with organic drift */}
-        <div className="absolute -top-[15%] left-1/4 w-[600px] h-[450px] bg-[#0a84ff]/[0.07] rounded-full blur-[150px] animate-orb-1" />
-        <div className="absolute bottom-[-10%] right-[5%] w-[550px] h-[550px] bg-[#5e5ce6]/[0.06] rounded-full blur-[160px] animate-orb-2" />
-        <div className="absolute top-1/2 left-[-10%] w-[450px] h-[450px] bg-[#bf5af2]/[0.035] rounded-full blur-[140px] animate-aurora-1" />
+        <div className="absolute -top-[10%] left-[10%] w-[500px] h-[500px] bg-[#7C5CFF]/[0.18] rounded-full blur-[120px] animate-orb-1" />
+        <div className="absolute bottom-[-5%] right-[5%] w-[600px] h-[600px] bg-[#3E8EFF]/[0.15] rounded-full blur-[130px] animate-orb-2" />
+        <div className="absolute top-[40%] left-[-5%] w-[400px] h-[400px] bg-[#20E3B2]/[0.15] rounded-full blur-[100px] animate-aurora-1" />
         
         {/* Subtle Matte Optical Vignette */}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_transparent_45%,_rgba(0,0,0,0.75)_100%)]" />
@@ -286,7 +290,7 @@ export default function Layout() {
         transition={{ type: 'spring', stiffness: 420, damping: 35 }}
         onWheel={handleSidebarWheel}
         data-lenis-prevent="true"
-        className="hidden md:flex flex-col h-screen max-h-screen sticky top-0 bg-black/40 backdrop-blur-[20px] border-r border-white/[0.08] flex-shrink-0 z-20 overflow-hidden select-none shadow-[4px_0_35px_rgba(0,0,0,0.85)] relative"
+        className="hidden md:flex flex-col h-screen max-h-screen sticky top-0 bg-[#0A0A0B] border-r border-white/[0.06] flex-shrink-0 z-20 overflow-hidden select-none relative"
         aria-label="Main Navigation"
       >
         {/* Top Rim Specular Highlight Line */}
@@ -604,7 +608,7 @@ export default function Layout() {
       {/* Main Content Viewport */}
       <main className="flex-1 flex flex-col min-h-[100dvh] z-10 relative w-full min-w-0 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] md:pb-8">
         {/* Desktop Top Header - Floating Apple VisionOS Glass Navigation */}
-        <header className="hidden md:flex h-16 items-center justify-between px-8 border-b border-white/[0.08] bg-black/40 backdrop-blur-[20px] flex-shrink-0 sticky top-0 z-30 shadow-[0_4px_30px_rgba(0,0,0,0.6)] relative">
+        <header className="hidden md:flex h-16 items-center justify-between px-8 border-b border-white/[0.06] bg-[#0A0A0B] flex-shrink-0 sticky top-0 z-30 relative">
           {/* Specular Top Rim */}
           <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
 
@@ -629,6 +633,13 @@ export default function Layout() {
           </div>
 
           <div className="flex items-center gap-3">
+            <button 
+                onClick={() => setAurexPanelState('full')}
+                className="p-2 rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-[#A78BFA] transition-all"
+                aria-label="Open Aurex AI"
+            >
+                <Sparkles size={16} />
+            </button>
             <SyncStatusBadge />
             <NotificationDropdown ref={desktopNotifRef} />
             <UserProfileDropdown onOpenNotifications={() => desktopNotifRef.current?.open()} />
@@ -649,6 +660,8 @@ export default function Layout() {
           </div>
         </div>
       </main>
+
+      <AurexPanelContainer state={aurexPanelState} setState={setAurexPanelState} />
 
       {/* ========================================================================= */}
       {/* APPLE-STYLE FLOATING BOTTOM CAPSULE TAB BAR (Mobile & Tablet)             */}

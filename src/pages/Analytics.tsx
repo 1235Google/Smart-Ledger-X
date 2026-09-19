@@ -5,7 +5,7 @@ import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Toolti
 import { formatCurrency, cn } from '../lib/utils';
 import { motion } from 'motion/react';
 import { startOfDay, startOfWeek, startOfMonth, startOfYear, subMonths, isWithinInterval, parseISO, format, endOfDay, endOfMonth } from 'date-fns';
-import GlassCard from '../components/ui/GlassCard';
+import EnterpriseCard from '../components/ui/EnterpriseCard';
 import CountUp from '../components/ui/CountUp';
 import AnimatedButton from '../components/ui/AnimatedButton';
 import DataStateGuard from '../components/ui/DataStateGuard';

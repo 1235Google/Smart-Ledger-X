@@ -5,7 +5,7 @@ import { ArrowDownLeft, Clock, Users, ArrowUpRight, CheckCircle2, ChevronRight }
 import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { Link, useNavigate } from 'react-router-dom';
 import BalanceCard from '../components/BalanceCard';
-import GlassCard from '../components/ui/GlassCard';
+import EnterpriseCard from '../components/ui/EnterpriseCard';
 import CountUp from '../components/ui/CountUp';
 import AnimatedButton from '../components/ui/AnimatedButton';
 import DataStateGuard from '../components/ui/DataStateGuard';
@@ -128,9 +128,8 @@ export default function CurrentBalance() {
       {/* Stats Grid with VisionOS Liquid Glass Styling */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
         {/* Total Received Card */}
-        <GlassCard 
+        <EnterpriseCard 
           delay={0.08} 
-          glowColor="rgba(48, 209, 88, 0.25)"
           className="p-4 sm:p-6 md:p-7 relative select-none flex flex-col justify-between cursor-pointer group rounded-[22px] sm:rounded-[24px]"
           onClick={() => navigate('/received')}
         >
@@ -178,12 +177,11 @@ export default function CurrentBalance() {
               View History <ChevronRight size={13} />
             </span>
           </div>
-        </GlassCard>
+        </EnterpriseCard>
 
         {/* Total Pending Card */}
-        <GlassCard 
+        <EnterpriseCard 
           delay={0.16} 
-          glowColor="rgba(255, 214, 10, 0.25)"
           className="p-4 sm:p-6 md:p-7 relative select-none flex flex-col justify-between cursor-pointer group rounded-[22px] sm:rounded-[24px]"
           onClick={() => navigate('/pending')}
         >
@@ -238,7 +236,7 @@ export default function CurrentBalance() {
               Collect Now <ChevronRight size={13} />
             </span>
           </div>
-        </GlassCard>
+        </EnterpriseCard>
       </div>
 
       {/* Recent Activity */}

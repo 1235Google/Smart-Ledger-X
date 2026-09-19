@@ -13,7 +13,7 @@ import { formatCurrency, formatDate, cn, calculateReminderDetails } from '../lib
 import { Link, useNavigate } from 'react-router-dom';
 import { PendingMoney, ReceivedMoney } from '../types';
 import BalanceCard from '../components/BalanceCard';
-import GlassCard from '../components/ui/GlassCard';
+import EnterpriseCard from '../components/ui/EnterpriseCard';
 import CountUp from '../components/ui/CountUp';
 import DataStateGuard from '../components/ui/DataStateGuard';
 
@@ -231,8 +231,8 @@ export default function Dashboard() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Primary Apple Titanium Card */}
-                <motion.div whileHover={{ scale: 1.01, y: -2 }} onClick={() => navigate('/balance')} className="lg:col-span-2 cursor-pointer transition-all duration-300">
+                {/* Primary Enterprise Card */}
+                <motion.div whileHover={{ scale: 1.01 }} onClick={() => navigate('/balance')} className="lg:col-span-2 cursor-pointer transition-all duration-300">
                   <BalanceCard
                     currentBalance={currentBalance}
                     startingBalance={startingBalance}
@@ -240,69 +240,55 @@ export default function Dashboard() {
                   />
                 </motion.div>
 
-                {/* Secondary Liquidity Caps in VisionOS Liquid Glass */}
+                {/* Secondary Liquidity Caps in Enterprise Style */}
                 <div className="lg:col-span-1 flex flex-col sm:flex-row lg:flex-col gap-3 sm:gap-4 justify-between">
                   {/* Total Received Capsule */}
                   <motion.div 
-                    whileHover={{ y: -5, scale: 1.02, boxShadow: "0 10px 30px -10px rgba(48, 209, 88, 0.3)" }}
-                    whileTap={{ scale: 0.985 }}
+                    whileHover={{ scale: 1.01 }}
                     onClick={() => navigate('/received')}
-                    className="flex-1 vision-glass hover:border-[#30d158]/50 rounded-[22px] sm:rounded-[26px] p-4 sm:p-6 cursor-pointer transition-all duration-300 relative overflow-hidden group flex flex-col justify-between"
+                    className="flex-1 enterprise-card p-6 cursor-pointer transition-all duration-300 flex flex-col justify-between"
                   >
-                    {/* Top Specular Line */}
-                    <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
-                    
-                    {/* Ambient Glow */}
-                    <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#30d158]/10 rounded-full blur-2xl pointer-events-none group-hover:bg-[#30d158]/30 transition-all duration-500" />
-
-                    <div className="flex items-center justify-between mb-2.5 sm:mb-3 relative z-10">
-                      <div className="flex items-center gap-1.5 sm:gap-2 text-xs font-bold text-[#30d158] uppercase tracking-wider">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#22C55E] uppercase tracking-wider">
                         <ArrowDownLeft size={15} /> Total Received
                       </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#30d158]/15 text-[#30d158] border border-[#30d158]/30 shadow-sm">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#22C55E]/10 text-[#22C55E]">
                         {receivedCount} clients
                       </span>
                     </div>
 
-                    <div className="text-2xl min-[380px]:text-3xl sm:text-4xl font-extrabold text-white font-tabular relative z-10 tracking-tight group-hover:text-[#30d158] transition-colors duration-300">
+                    <div className="text-4xl font-semibold text-[#FAFAFA] font-tabular tracking-tight">
                       <CountUp value={totalReceived} formatter={(v) => formatCurrency(v)} />
                     </div>
 
-                    <div className="text-[11px] sm:text-xs text-[#86868b] mt-2.5 sm:mt-3 flex items-center justify-between relative z-10 pt-2 border-t border-white/[0.06]">
+                    <div className="text-xs text-[#8B8FA3] mt-3 pt-3 border-t border-white/[0.06] flex items-center justify-between">
                       <span>Inflow Velocity</span>
-                      <span className="text-[#30d158] font-bold drop-shadow-[0_0_8px_rgba(48,209,88,0.5)]">100% Settled</span>
+                      <span className="text-[#22C55E] font-medium">100% Settled</span>
                     </div>
                   </motion.div>
 
                   {/* Total Pending Capsule */}
                   <motion.div 
-                    whileHover={{ y: -5, scale: 1.02, boxShadow: "0 10px 30px -10px rgba(255, 214, 10, 0.3)" }}
-                    whileTap={{ scale: 0.985 }}
+                    whileHover={{ scale: 1.01 }}
                     onClick={() => navigate('/pending')}
-                    className="flex-1 vision-glass hover:border-[#ffd60a]/50 rounded-[22px] sm:rounded-[26px] p-4 sm:p-6 cursor-pointer transition-all duration-300 relative overflow-hidden group flex flex-col justify-between"
+                    className="flex-1 enterprise-card p-6 cursor-pointer transition-all duration-300 flex flex-col justify-between"
                   >
-                    {/* Top Specular Line */}
-                    <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/30 to-transparent pointer-events-none" />
-                    
-                    {/* Ambient Glow */}
-                    <div className="absolute -top-12 -right-12 w-36 h-36 bg-[#ffd60a]/10 rounded-full blur-2xl pointer-events-none group-hover:bg-[#ffd60a]/30 transition-all duration-500" />
-
-                    <div className="flex items-center justify-between mb-2.5 sm:mb-3 relative z-10">
-                      <div className="flex items-center gap-1.5 sm:gap-2 text-xs font-bold text-[#ffd60a] uppercase tracking-wider">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#F59E0B] uppercase tracking-wider">
                         <Clock size={15} /> Total Pending
                       </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#ffd60a]/15 text-[#ffd60a] border border-[#ffd60a]/30 shadow-sm">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#F59E0B]/10 text-[#F59E0B]">
                         {pendingCount} parties
                       </span>
                     </div>
 
-                    <div className="text-2xl min-[380px]:text-3xl sm:text-4xl font-extrabold text-[#ffd60a] font-tabular relative z-10 tracking-tight group-hover:drop-shadow-[0_0_12px_rgba(255,214,10,0.6)] transition-all duration-300">
+                    <div className="text-4xl font-semibold text-[#FAFAFA] font-tabular tracking-tight">
                       <CountUp value={totalPending} formatter={(v) => formatCurrency(v)} />
                     </div>
 
-                    <div className="text-[11px] sm:text-xs text-[#86868b] mt-2.5 sm:mt-3 flex items-center justify-between relative z-10 pt-2 border-t border-white/[0.06]">
+                    <div className="text-xs text-[#8B8FA3] mt-3 pt-3 border-t border-white/[0.06] flex items-center justify-between">
                       <span>Outstanding Receivables</span>
-                      <span className="text-xs text-[#ffd60a] font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 drop-shadow-[0_0_8px_rgba(255,214,10,0.5)]">
+                      <span className="text-xs text-[#F59E0B] font-medium flex items-center gap-1">
                         View List <ChevronRight size={12} />
                       </span>
                     </div>
@@ -479,7 +465,7 @@ export default function Dashboard() {
                 </motion.button>
               </div>
 
-              <div className="vision-glass-elevated rounded-[28px] p-5 sm:p-6 relative overflow-hidden">
+              <div className="enterprise-card p-6 relative overflow-hidden">
                 <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
                 {recentTransactions.length === 0 ? (
                   <div className="text-center py-12 text-[#86868b]">

@@ -7,7 +7,7 @@ import { formatCurrency, formatDate } from '../lib/utils';
 import { ReceivedMoney } from '../types';
 import AnimatedInput from '../components/ui/AnimatedInput';
 import AnimatedButton from '../components/ui/AnimatedButton';
-import GlassCard from '../components/ui/GlassCard';
+import EnterpriseCard from '../components/ui/EnterpriseCard';
 import DataStateGuard from '../components/ui/DataStateGuard';
 
 export default function MoneyReceived() {

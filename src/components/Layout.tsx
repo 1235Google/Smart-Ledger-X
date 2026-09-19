@@ -608,7 +608,7 @@ export default function Layout() {
       {/* Main Content Viewport */}
       <main className="flex-1 flex flex-col min-h-[100dvh] z-10 relative w-full min-w-0 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] md:pb-8">
         {/* Desktop Top Header - Floating Apple VisionOS Glass Navigation */}
-        <header className="hidden md:flex h-16 items-center justify-between px-8 border-b border-white/[0.06] bg-[#0A0A0B] flex-shrink-0 sticky top-0 z-30 relative">
+        <header className="hidden md:flex h-16 items-center justify-between px-8 border-b border-white/[0.06] bg-[#0A0A0B] flex-shrink-0 sticky top-0 z-50 relative">
           {/* Specular Top Rim */}
           <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
 
@@ -635,12 +635,16 @@ export default function Layout() {
           <div className="flex items-center gap-3">
             <button 
                 onClick={() => setAurexPanelState('full')}
-                className="p-2 rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-[#A78BFA] transition-all cursor-pointer pointer-events-auto"
+                className="p-2 rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-[#A78BFA] transition-all cursor-pointer pointer-events-auto hover:scale-105 active:scale-95"
                 aria-label="Open Aurex AI"
             >
                 <Sparkles size={16} />
             </button>
-            <button onClick={() => {}} className="cursor-pointer pointer-events-auto">
+            <button 
+                onClick={() => console.log('Sync status clicked')} 
+                className="cursor-pointer pointer-events-auto rounded-full transition-all hover:bg-white/[0.05] p-1 hover:scale-105 active:scale-95"
+                aria-label="Check Sync Status"
+            >
               <SyncStatusBadge />
             </button>
             <NotificationDropdown ref={desktopNotifRef} />

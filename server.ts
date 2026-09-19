@@ -124,20 +124,31 @@ try {
   console.error("SERVER INITIALIZATION ERROR:", e);
 }
 
-// Routes now handled by standalone serverless functions in /api/
 
-  // Debug Endpoint to list available models
-  app.get("/api/list-models", async (req, res) => {
+
+  // AI Co-pilot Endpoint
+  app.post("/api/ai", async (req, res) => {
     try {
-      console.log("[AI-Debug] Listing available models...");
-      const models = await listAvailableModels();
-      res.json(models);
+      const { prompt, context, history } = req.body;
+      
+      console.log(`[AI] Received prompt: "${prompt}"`);
+      
+      if (!process.env.GROQ_API_KEY) {
+        console.error("[AI] GROQ_API_KEY is missing in environment");
+        return res.status(500).json({ success: false, error: "AI service not configured on server" });
+      }
+
+      const response = await callGroqWithRetry(prompt, history || [], context);
+      if (!response) {
+        return res.status(500).json({ success: false, error: "AI service returned no response" });
+      }
+
+      res.json({ success: true, response });
     } catch (err: any) {
-      console.error("[AI-Debug] List models error:", err);
-      res.status(500).json({
-        success: false,
-        error: "Failed to list models",
-        message: err.message
+      console.error("SERVER FUNCTION ERROR:", err);
+      res.status(500).json({ 
+        success: false, 
+        error: err.message || "Unknown server error"
       });
     }
   });

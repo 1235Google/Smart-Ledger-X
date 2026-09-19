@@ -52,11 +52,14 @@ export const AurexPanelContainer: React.FC<{ state: PanelState, setState: (s: Pa
             body: JSON.stringify({ prompt: isRetry ? userMsg.content : text, context: transactions, history: isRetry ? messages.slice(0, -1) : messages })
         });
         
-        const data = await response.json();
-        
+        // Handle response robustly
         if (!response.ok) {
-            throw new Error(data.message || 'AI API Error');
+            const errorText = await response.text();
+            console.error('[AI API Error] Status:', response.status, 'Body:', errorText);
+            throw new Error(`Server returned ${response.status}: ${errorText.substring(0, 100)}`);
         }
+        
+        const data = await response.json();
         
         const assistantMsg: Message = { id: (Date.now() + 1).toString(), role: 'assistant', content: data.response, timestamp: Date.now() };
         setMessages(prev => [...prev, assistantMsg]);

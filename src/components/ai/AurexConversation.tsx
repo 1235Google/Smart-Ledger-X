@@ -8,6 +8,7 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
+  isError?: boolean;
 }
 
 const renderWithChips = (text: string) => {
@@ -20,7 +21,7 @@ const renderWithChips = (text: string) => {
     });
 };
 
-export const AurexConversation: React.FC<{ messages: Message[], isThinking: boolean }> = ({ messages, isThinking }) => {
+export const AurexConversation: React.FC<{ messages: Message[], isThinking: boolean, onRetry: () => void }> = ({ messages, isThinking, onRetry }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
@@ -40,6 +41,11 @@ export const AurexConversation: React.FC<{ messages: Message[], isThinking: bool
           )}
           <div className={cn("p-3 rounded-xl max-w-[85%] text-sm", m.role === 'user' ? 'bg-[#635BFF]/10 text-white' : 'text-[#FAFAFA]/90')}>
             {renderWithChips(m.content)}
+            {m.isError && (
+                <button onClick={onRetry} className="mt-2 block w-full text-xs text-[#A78BFA] hover:text-white underline">
+                    Retry
+                </button>
+            )}
           </div>
         </div>
       ))}
@@ -48,10 +54,15 @@ export const AurexConversation: React.FC<{ messages: Message[], isThinking: bool
           <div className="w-8 h-8 rounded-full bg-white/[0.03] border border-white/[0.08] flex items-center justify-center shrink-0">
             <Sparkles size={16} className="text-[#A78BFA]" />
           </div>
-          <div className="p-4 rounded-xl bg-white/[0.03] flex gap-1">
-            <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1 }} className="w-1.5 h-1.5 rounded-full bg-[#A78BFA]" />
-            <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1, delay: 0.2 }} className="w-1.5 h-1.5 rounded-full bg-[#A78BFA]" />
-            <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1, delay: 0.4 }} className="w-1.5 h-1.5 rounded-full bg-[#A78BFA]" />
+          <div className="p-4 rounded-xl bg-white/[0.03] flex items-center gap-3">
+            <div className="flex gap-1">
+                <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1 }} className="w-1.5 h-1.5 rounded-full bg-[#A78BFA]" />
+                <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1, delay: 0.2 }} className="w-1.5 h-1.5 rounded-full bg-[#A78BFA]" />
+                <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1, delay: 0.4 }} className="w-1.5 h-1.5 rounded-full bg-[#A78BFA]" />
+            </div>
+            <span className="text-xs text-[#FAFAFA]/60">
+                {isThinking && messages.length > 1 && messages[messages.length - 1].role === 'assistant' && messages[messages.length - 1].isError ? 'Aurex is a bit busy, retrying...' : 'Aurex is thinking...'}
+            </span>
           </div>
         </div>
       )}

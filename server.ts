@@ -6,7 +6,7 @@ import { Resend } from "resend";
 import { Server as SocketIOServer } from "socket.io";
 import http from "http";
 import { generateAndSendReport } from "./src/server/report-generator";
-import { generateAIResponse } from "./src/server/gemini-service";
+import { callGroqWithRetry, listAvailableModels } from "./src/server/groq-service";
 import { executeBackupPipeline, getBackupStatusSummary, getBackupHistory, verifyBackupChecksumStorage, checkAndRunScheduledBackups } from "./src/server/backup-service";
 import { 
   hashPassword, 
@@ -123,12 +123,56 @@ startScheduledReportsWorker();
   // AI Co-pilot Endpoint
   app.post("/api/ai", async (req, res) => {
     try {
-      const { prompt, context } = req.body;
-      const response = await generateAIResponse(prompt, context);
+      const { prompt, context, history } = req.body;
+      
+      console.log(`[AI] Received prompt: "${prompt}"`);
+      
+      const response = await callGroqWithRetry(prompt, history || [], context);
       res.json({ success: true, response });
     } catch (err: any) {
-      console.error("[AI] Error:", err);
-      res.status(500).json({ success: false, error: "AI service error" });
+      console.error("[AI] Error details:", {
+        message: err.message,
+        stack: err.stack,
+        fullError: err
+      });
+      res.status(500).json({ 
+        success: false, 
+        error: "AI service error", 
+        message: err.message, 
+        details: err.toString() 
+      });
+    }
+  });
+
+  // Debug Endpoint to list available models
+  app.get("/api/list-models", async (req, res) => {
+    try {
+      console.log("[AI-Debug] Listing available models...");
+      const models = await listAvailableModels();
+      res.json(models);
+    } catch (err: any) {
+      console.error("[AI-Debug] List models error:", err);
+      res.status(500).json({
+        success: false,
+        error: "Failed to list models",
+        message: err.message
+      });
+    }
+  });
+
+  // Debug Endpoint to list available models
+  app.get("/api/list-models", async (req, res) => {
+    try {
+      console.log("[AI-Debug] Listing available models...");
+      const models = await listAvailableModels();
+      res.json(models);
+    } catch (err: any) {
+      console.error("[AI-Debug] List models error:", err);
+      res.status(500).json({
+        success: false,
+        error: "Failed to list models",
+        message: err.message
+      });
     }
   });
 

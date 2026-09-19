@@ -1,13 +1,21 @@
-import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
+let groq: OpenAI | null = null;
+
+function getGroqClient() {
+  if (!groq) {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) {
+      console.warn("GROQ_API_KEY is not set. Aurex AI will not function.");
+      return null;
     }
+    groq = new OpenAI({
+      apiKey,
+      baseURL: "https://api.groq.com/openai/v1",
+    });
   }
-});
+  return groq;
+}
 
 function buildSystemPrompt(ledgerData: any) {
   return `You are Aurex AI, an intelligent financial assistant embedded inside a personal/business ledger dashboard called Smart Ledger X.
@@ -43,16 +51,15 @@ RULES:
 `;
 }
 
-export async function generateAIResponse(prompt: string, context?: any[]) {
-  // Transform context (transactions) to ledgerData
+export async function callGroq(prompt: string, history: any[], context?: any[]) {
   const transactions = context || [];
   
   const ledgerData = {
     totalBalance: transactions.filter((t: any) => t.type === 'balance').reduce((sum: number, t: any) => sum + t.amount, 0),
-    startingVault: 0, // Placeholder
+    startingVault: 0,
     totalReceived: transactions.filter((t: any) => t.type === 'received').reduce((sum: number, t: any) => sum + t.amount, 0),
     receivedClients: new Set(transactions.filter((t: any) => t.type === 'received').map((t: any) => t.name)).size,
-    inflowVelocity: 100, // Placeholder
+    inflowVelocity: 100,
     totalPending: transactions.filter((t: any) => t.type === 'pending').reduce((sum: number, t: any) => sum + t.amount, 0),
     pendingParties: new Set(transactions.filter((t: any) => t.type === 'pending').map((t: any) => t.name)).size,
     dueItems: transactions.filter((t: any) => t.type === 'pending').map((t: any) => ({
@@ -63,12 +70,61 @@ export async function generateAIResponse(prompt: string, context?: any[]) {
     }))
   };
 
-  const response = await ai.models.generateContent({
-    model: "gemini-1.5-flash",
-    contents: prompt,
-    config: {
-        systemInstruction: buildSystemPrompt(ledgerData),
+  const groqClient = getGroqClient();
+  if (!groqClient) {
+    throw new Error("GROQ_API_KEY is not set.");
+  }
+
+  const client = getGroqClient();
+  if (!client) throw new Error("Groq client not initialized");
+  
+  const modelsData = await client.models.list();
+  const availableModelIds = modelsData.data.map(m => m.id);
+
+  let lastError;
+  for (const modelId of availableModelIds) {
+    try {
+      const response = await groqClient.chat.completions.create({
+        model: modelId,
+        messages: [
+            { role: 'system', content: buildSystemPrompt(ledgerData) },
+            ...history.map(h => ({
+              role: h.role === 'assistant' ? 'assistant' : 'user',
+              content: h.content
+            })),
+            { role: 'user', content: prompt }
+        ]
+      });
+      return response.choices[0].message.content;
+    } catch (err: any) {
+      console.warn(`Model ${modelId} failed: ${err.message}. Trying next...`);
+      lastError = err;
+      continue;
     }
-  });
-  return response.text;
+  }
+
+  throw lastError || new Error("All available models failed.");
+}
+
+export async function callGroqWithRetry(prompt: string, history: any[], context?: any[], maxRetries = 3) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await callGroq(prompt, history, context);
+    } catch (error: any) {
+      // Groq uses standard HTTP codes. 503 is for rate limits/overload.
+      const is503 = error.status === 503 || error.message.includes('503') || error.message.includes('UNAVAILABLE') || error.message.includes('rate limit');
+      if (is503 && attempt < maxRetries - 1) {
+        const delay = Math.pow(2, attempt) * 1000;
+        console.log(`Model overloaded, retrying in ${delay}ms... (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
+export async function listAvailableModels() {
+  const models = await groq.models.list();
+  return models;
 }

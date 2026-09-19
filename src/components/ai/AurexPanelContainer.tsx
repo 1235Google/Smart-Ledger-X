@@ -33,26 +33,46 @@ export const AurexPanelContainer: React.FC<{ state: PanelState, setState: (s: Pa
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [state, setState]);
 
-  const handleSend = async (text: string) => {
-    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: text, timestamp: Date.now() };
-    setMessages(prev => [...prev, userMsg]);
+  const handleSend = async (text: string, isRetry = false) => {
+    let userMsg: Message;
+    if (!isRetry) {
+        userMsg = { id: Date.now().toString(), role: 'user', content: text, timestamp: Date.now() };
+        setMessages(prev => [...prev, userMsg]);
+    } else {
+        // Just use the last message if retrying
+        userMsg = messages[messages.length - 1];
+    }
+    
     setIsThinking(true);
 
     try {
         const response = await fetch('/api/ai', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: text, context: transactions })
+            body: JSON.stringify({ prompt: isRetry ? userMsg.content : text, context: transactions, history: isRetry ? messages.slice(0, -1) : messages })
         });
         
-        if (!response.ok) throw new Error('AI API Error');
-        
         const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.message || 'AI API Error');
+        }
+        
         const assistantMsg: Message = { id: (Date.now() + 1).toString(), role: 'assistant', content: data.response, timestamp: Date.now() };
         setMessages(prev => [...prev, assistantMsg]);
-    } catch (err) {
+    } catch (err: any) {
         console.error(err);
-        setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: "I'm having trouble processing that right now. Could you try rephrasing your question?", timestamp: Date.now() }]);
+        const errorMessage = err.message.includes('503') || err.message.includes('UNAVAILABLE')
+            ? "I'm experiencing high demand right now. Please try your question again in a few seconds."
+            : `Error: ${err.message}`;
+        
+        setMessages(prev => [...prev, { 
+            id: Date.now().toString(), 
+            role: 'assistant', 
+            content: errorMessage, 
+            timestamp: Date.now(),
+            isError: true // We'll need to pass this to AurexConversation to render the retry button
+        } as Message]);
     } finally {
         setIsThinking(false);
     }
@@ -90,7 +110,7 @@ export const AurexPanelContainer: React.FC<{ state: PanelState, setState: (s: Pa
         onCollapse={() => setState('rail')} 
         onClose={() => setState('closed')} 
       />
-      <AurexConversation messages={messages} isThinking={isThinking} />
+      <AurexConversation messages={messages} isThinking={isThinking} onRetry={() => handleSend("", true)} />
       <AurexInput onSend={handleSend} />
     </motion.div>
   );

@@ -1,4 +1,4 @@
-import { getSystemConfig } from "../src/server/system-mode-service.js";
+import { getSystemConfig } from "../../src/server/system-mode-service.js";
 
 export default async function handler(req, res) {
   try {

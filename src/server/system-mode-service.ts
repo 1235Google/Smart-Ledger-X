@@ -22,7 +22,7 @@ let currentConfig: SystemConfig = { ...DEFAULT_CONFIG };
 
 // Load persisted configuration from disk on server startup
 try {
-  if (fs.existsSync(CONFIG_FILE)) {
+  if (CONFIG_FILE && fs.existsSync(CONFIG_FILE)) {
     const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
     const parsed = JSON.parse(raw);
     if (parsed && ['normal', 'readonly', 'maintenance'].includes(parsed.mode)) {
@@ -38,7 +38,12 @@ try {
       console.log(`[SystemMode] Initialized with Mode: ${currentConfig.mode.toUpperCase()}`);
     }
   } else {
-    saveConfigToDisk(currentConfig);
+    // If file doesn't exist, try to save default, but catch if read-only
+    try {
+      saveConfigToDisk(currentConfig);
+    } catch (e) {
+      console.log('[SystemMode] Running in read-only environment, skipping initial save.');
+    }
   }
 } catch (e) {
   console.warn('[SystemMode] Could not read system config file, using default:', e);

@@ -115,10 +115,14 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 // Initialize server-side scheduled jobs registry & continuous 24/7 background cron
-initJobsStorage();
-startAllScheduledJobsCron();
-startAutoRestoreMonitor();
-startScheduledReportsWorker();
+try {
+  initJobsStorage();
+  startAllScheduledJobsCron();
+  startAutoRestoreMonitor();
+  startScheduledReportsWorker();
+} catch (e) {
+  console.error("SERVER INITIALIZATION ERROR:", e);
+}
 
   // AI Co-pilot Endpoint
   app.post("/api/ai", async (req, res) => {
@@ -127,19 +131,22 @@ startScheduledReportsWorker();
       
       console.log(`[AI] Received prompt: "${prompt}"`);
       
+      if (!process.env.GROQ_API_KEY) {
+        console.error("[AI] GROQ_API_KEY is missing in environment");
+        return res.status(500).json({ success: false, error: "AI service not configured on server" });
+      }
+
       const response = await callGroqWithRetry(prompt, history || [], context);
+      if (!response) {
+        return res.status(500).json({ success: false, error: "AI service returned no response" });
+      }
+
       res.json({ success: true, response });
     } catch (err: any) {
-      console.error("[AI] Error details:", {
-        message: err.message,
-        stack: err.stack,
-        fullError: err
-      });
+      console.error("SERVER FUNCTION ERROR:", err);
       res.status(500).json({ 
         success: false, 
-        error: "AI service error", 
-        message: err.message, 
-        details: err.toString() 
+        error: err.message || "Unknown server error"
       });
     }
   });
@@ -905,9 +912,13 @@ startScheduledReportsWorker();
   app.get("/api/system/mode", (req, res) => {
     try {
       const config = getSystemConfig();
-      return res.json({ success: true, config });
+      return res.json({ success: true, mode: config.mode || "production" });
     } catch (err: any) {
-      return res.json({ success: true, config: { mode: "production", maintenance: false } });
+      console.error("SERVER FUNCTION ERROR:", err);
+      return res.status(500).json({
+        success: false,
+        error: err.message || "Unknown server error"
+      });
     }
   });
 

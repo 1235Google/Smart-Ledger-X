@@ -162,9 +162,17 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
     );
   }
 
-  // Priority B: NO Firebase user -> render Google Sign-In page
-  // (AppRoutes renders LoginRoute/Login; ProtectedRoute redirects to /login)
+  // Priority B: There IS a Firebase user -> Proceed to lock or dashboard
+  // Priority C: NO Firebase user, BUT we have a local biometric credential ->
+  // try to unlock via biometric first, then auto-login.
+  // Priority D: NO Firebase user AND no biometric -> render Google Sign-In page
+  
   if (!currentUser) {
+    // If biometric credential exists, try to unlock via biometric first
+    const hasBiometricConfigured = localStorage.getItem('biometricCredentialId');
+    if (hasBiometricConfigured && !isUnlocked) {
+        return <LockScreen onUnlock={handleUnlock} />;
+    }
     return <>{children}</>;
   }
 

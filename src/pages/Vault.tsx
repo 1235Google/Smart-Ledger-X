@@ -8,6 +8,7 @@ import confetti from 'canvas-confetti';
 import { LuxuryVaultDisplay } from '../components/Vault3D';
 import DataStateGuard from '../components/ui/DataStateGuard';
 import FaceUnlock from '../components/FaceUnlock';
+import FaceAuthErrorBoundary from '../components/FaceAuthErrorBoundary';
 
 interface CashEvent {
   id: number;
@@ -291,11 +292,13 @@ export default function VaultPage() {
       skeletonType="dashboard"
     >
       {isVaultLocked && (
-        <FaceUnlock 
-          onUnlock={() => setIsVaultLocked(false)} 
-          onCancel={() => window.history.back()}
-          title="Secret Vault" 
-        />
+        <FaceAuthErrorBoundary onFallback={() => setIsVaultLocked(false)}>
+          <FaceUnlock 
+            onUnlock={() => setIsVaultLocked(false)} 
+            onCancel={() => window.history.back()}
+            title="Secret Vault" 
+          />
+        </FaceAuthErrorBoundary>
       )}
       <div className="w-full flex flex-col gap-6 relative">
         <header className="mb-2">

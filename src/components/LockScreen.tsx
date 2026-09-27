@@ -43,6 +43,7 @@ import { createNotification } from '../lib/notificationService';
 import CryptoJS from 'crypto-js';
 import { recordLoginActivity } from '../lib/securityService';
 import FaceUnlock from './FaceUnlock';
+import FaceAuthErrorBoundary from './FaceAuthErrorBoundary';
 
 interface LockScreenProps {
   onUnlock: () => void;
@@ -514,13 +515,15 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
               transition={{ duration: 0.2 }}
               className="w-full flex flex-col items-center"
             >
-              <FaceUnlock
-                embedded={true}
-                onUnlock={handleFaceUnlockSuccess}
-                onUsePin={handleUsePinManual}
-                onFallbackToPin={handleFallbackToPin}
-                title="Face Unlock"
-              />
+              <FaceAuthErrorBoundary onFallback={(reason) => handleFallbackToPin(reason || "Biometric scanner error, switching to PIN")}>
+                <FaceUnlock
+                  embedded={true}
+                  onUnlock={handleFaceUnlockSuccess}
+                  onUsePin={handleUsePinManual}
+                  onFallbackToPin={handleFallbackToPin}
+                  title="Face Unlock"
+                />
+              </FaceAuthErrorBoundary>
             </motion.div>
           ) : (
             /* ===============================================================

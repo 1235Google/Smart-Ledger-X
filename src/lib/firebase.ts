@@ -30,13 +30,13 @@ import rawConfig from '../../firebase-applet-config.json';
 
 // Validated Firebase Configuration object
 export const firebaseConfig = {
-  apiKey: rawConfig.apiKey || (import.meta.env?.VITE_FIREBASE_API_KEY as string) || '',
-  authDomain: rawConfig.authDomain || (import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN as string) || `${rawConfig.projectId}.firebaseapp.com`,
-  projectId: rawConfig.projectId || (import.meta.env?.VITE_FIREBASE_PROJECT_ID as string) || '',
-  storageBucket: rawConfig.storageBucket || (import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET as string) || `${rawConfig.projectId}.firebasestorage.app`,
-  messagingSenderId: rawConfig.messagingSenderId || (import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID as string) || '',
-  appId: rawConfig.appId || (import.meta.env?.VITE_FIREBASE_APP_ID as string) || '',
-  measurementId: rawConfig.measurementId || '',
+  apiKey: (import.meta.env?.VITE_FIREBASE_API_KEY as string) || rawConfig.apiKey || '',
+  authDomain: (import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN as string) || rawConfig.authDomain || `${rawConfig.projectId || 'studio-3200340687-9f052'}.firebaseapp.com`,
+  projectId: (import.meta.env?.VITE_FIREBASE_PROJECT_ID as string) || rawConfig.projectId || '',
+  storageBucket: (import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET as string) || rawConfig.storageBucket || `${rawConfig.projectId || 'studio-3200340687-9f052'}.firebasestorage.app`,
+  messagingSenderId: (import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID as string) || rawConfig.messagingSenderId || '',
+  appId: (import.meta.env?.VITE_FIREBASE_APP_ID as string) || rawConfig.appId || '',
+  measurementId: (import.meta.env?.VITE_FIREBASE_MEASUREMENT_ID as string) || rawConfig.measurementId || '',
 };
 
 console.log('[Firebase Init] Initializing Firebase App for project:', firebaseConfig.projectId);
@@ -53,15 +53,27 @@ console.log('[Firebase Init] Firestore instance ready. DB ID:', firestoreDbId ||
 const auth = getAuth(app);
 console.log('[Firebase Init] Auth instance ready');
 
-// Enable browser local persistence to maintain session across reloads
+// Dedicated persistence lock to guarantee browserLocalPersistence is set once and awaited before logins
+let persistencePromise: Promise<void> | null = null;
+export async function ensureAuthPersistence(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  if (!persistencePromise) {
+    persistencePromise = setPersistence(auth, browserLocalPersistence)
+      .then(() => {
+        console.log('[Firebase Auth] Persistence verified as browserLocalPersistence');
+      })
+      .catch((err) => {
+        console.warn('[Firebase Auth] Persistence configuration notice:', err);
+        // Allow retry on next login attempt if it failed
+        persistencePromise = null;
+      });
+  }
+  return persistencePromise;
+}
+
+// Immediate eager execution on module load
 if (typeof window !== 'undefined') {
-  setPersistence(auth, browserLocalPersistence)
-    .then(() => {
-      console.log('[Firebase Auth] Persistence set to browserLocalPersistence');
-    })
-    .catch((err) => {
-      console.warn('[Firebase Auth] Persistence notice:', err);
-    });
+  ensureAuthPersistence();
 }
 
 const storage = getStorage(app);
@@ -235,6 +247,8 @@ export async function ensureUserProfileDoc(user: User, customFullName?: string):
  * Task 1, 4, 7: Audit Google auth flow, handle popup-closed-by-user, log details
  */
 export async function loginWithGoogle(): Promise<{ user: User }> {
+  console.log('[Firebase Auth] Ensuring browserLocalPersistence before Google sign in...');
+  await ensureAuthPersistence();
   console.log('[Firebase Auth] Launching signInWithPopup for Google...');
   try {
     const result = await signInWithPopup(auth, googleProvider, browserPopupRedirectResolver);
@@ -287,6 +301,7 @@ export async function loginWithGoogle(): Promise<{ user: User }> {
  */
 export async function loginWithGoogleCredential(idToken: string): Promise<{ user: User }> {
   console.log('[Firebase Auth] Initiating signInWithCredential with Google ID token...');
+  await ensureAuthPersistence();
   try {
     const credential = GoogleAuthProvider.credential(idToken);
     const result = await signInWithCredential(auth, credential);
@@ -335,6 +350,7 @@ export async function checkRedirectResult(): Promise<User | null> {
  * Email & Password sign in
  */
 export async function loginWithEmail(email: string, pass: string) {
+  await ensureAuthPersistence();
   const cleanEmail = email.trim().toLowerCase();
   const cleanPass = pass.trim();
   
@@ -360,6 +376,7 @@ export async function loginWithEmail(email: string, pass: string) {
  * Email & Password registration
  */
 export async function registerWithEmail(email: string, pass: string, fullName?: string) {
+  await ensureAuthPersistence();
   const cleanEmail = email.trim().toLowerCase();
   const cleanPass = pass.trim();
   const cleanName = fullName?.trim();

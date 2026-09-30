@@ -1,8 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
 import { useToast } from '../context/ToastContext';
-import { Download, Upload, Wallet, Trash2, Lock, Shield, Mail, Smartphone, Globe, User, Search, CheckCircle, Send, Loader2, Cloud, Database, ArrowUpRight, Bell, Receipt } from 'lucide-react';
+import { Download, Upload, Wallet, Trash2, Lock, Shield, Mail, Smartphone, Globe, User, Search, CheckCircle, Send, Loader2, Cloud, Database, ArrowUpRight, Bell, Receipt, ScanFace, X } from 'lucide-react';
 import { ReceivedMoney } from '../types';
 import { motion } from 'motion/react';
 import { cn, formatDate } from '../lib/utils';
@@ -29,6 +29,8 @@ export default function Settings() {
     securitySettings, 
     emailSettings, 
     updateEmailSettings, 
+    reportSettings,
+    updateReportSettings,
     generalSettings, 
     transactions, 
     currentBalance, 
@@ -55,28 +57,46 @@ export default function Settings() {
   const [showPinSetup, setShowPinSetup] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
-  const [emailInput, setEmailInput] = useState(emailSettings.emailAddress || '');
+  const [showBiometricModal, setShowBiometricModal] = useState(false);
+  
+  const configuredEmail = (reportSettings?.emailAddress || emailSettings?.emailAddress || '').trim();
+  const [emailInput, setEmailInput] = useState(configuredEmail);
+
+  useEffect(() => {
+    if (configuredEmail) {
+      setEmailInput(configuredEmail);
+    }
+  }, [configuredEmail]);
+
   const [statusMessage, setStatusMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
 
   const handleSaveEmail = () => {
-    if (!/^\S+@\S+\.\S+$/.test(emailInput)) {
+    const cleanEmail = emailInput.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       setStatusMessage("Invalid email format.");
       setTimeout(() => setStatusMessage(''), 3000);
       return;
     }
-    updateEmailSettings({ ...emailSettings, emailAddress: emailInput });
+    updateEmailSettings({ ...emailSettings, emailAddress: cleanEmail, enabled: true });
+    updateReportSettings({ emailAddress: cleanEmail, verificationStatus: 'verified' });
     setStatusMessage('Email saved successfully');
     setTimeout(() => setStatusMessage(''), 3000);
   };
 
   const handleSendManualReport = async () => {
-    if (!/^\S+@\S+\.\S+$/.test(emailInput)) {
+    const cleanEmail = emailInput.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       setStatusMessage("Invalid email format.");
       setTimeout(() => setStatusMessage(''), 3000);
       return;
     }
+
+    // Ensure settings are kept updated with current email
+    updateEmailSettings({ ...emailSettings, emailAddress: cleanEmail, enabled: true });
+    updateReportSettings({ emailAddress: cleanEmail, verificationStatus: 'verified' });
+
     setIsSending(true);
     setStatusMessage('Sending...');
     
@@ -108,7 +128,7 @@ export default function Settings() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: emailInput,
+          email: cleanEmail,
           month: currentMonth,
           currentBalance: currentBalance,
           incomeThisMonth: incomeThisMonth,
@@ -118,11 +138,11 @@ export default function Settings() {
       });
 
       if (res.ok) {
-        setStatusMessage(`Monthly report sent to ${emailInput} successfully!`);
+        setStatusMessage(`Monthly report sent to ${cleanEmail} successfully!`);
         addEmailHistoryLog({
           date: new Date().toISOString(),
           month: currentMonth,
-          recipient: emailInput,
+          recipient: cleanEmail,
           status: 'success'
         });
       } else {
@@ -240,7 +260,23 @@ export default function Settings() {
                 
                 <SettingsSection title="Security" delay={0.2}>
                     <SettingsItem icon={Lock} title="Change PIN" description="Update your security PIN" onClick={() => setShowPinSetup(true)} />
-                    <SettingsItem icon={Smartphone} title="Biometric Unlock" description="Use fingerprint or face ID" action={<BiometricSettings />} />
+                    <SettingsItem 
+                      icon={ScanFace} 
+                      title="Face Unlock & Biometrics" 
+                      description={securitySettings.faceUnlockEnabled ? "Face Unlock is Active (Native Face ID / Windows Hello)" : "Configure Face ID, Windows Hello, or Passkeys"} 
+                      onClick={() => setShowBiometricModal(true)}
+                      action={
+                        securitySettings.faceUnlockEnabled ? (
+                          <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            Active ✅
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                            Configure
+                          </span>
+                        )
+                      }
+                    />
                 </SettingsSection>
                 
                 <SettingsSection title="Notifications & Alerts" delay={0.25}>
@@ -395,6 +431,31 @@ export default function Settings() {
           isOpen={showNotificationSettings} 
           onClose={() => setShowNotificationSettings(false)} 
         />
+        {showBiometricModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md select-none">
+            <div className="relative w-full max-w-lg bg-[#14151b] border border-white/10 rounded-3xl p-6 sm:p-7 shadow-2xl overflow-y-auto max-h-[90vh]">
+              <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                    <ScanFace size={22} />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-white">Face Unlock & Biometrics</h2>
+                    <p className="text-xs text-slate-400">Native device authentication for SmartLedgerX</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowBiometricModal(false)}
+                  className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/15 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <BiometricSettings />
+            </div>
+          </div>
+        )}
     </div>
   );
 }

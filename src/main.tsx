@@ -3,12 +3,16 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
-// Register Service Worker for PWA & Background Sync
-if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
-      console.log('[PWA] ServiceWorker registration notice:', err?.message);
+// Immediate safety fix: unregister service workers so stale or broken caches never break page load
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    registrations.forEach((reg) => {
+      reg.unregister().catch((err) => {
+        console.warn('[PWA] Service worker unregister error:', err);
+      });
     });
+  }).catch((err) => {
+    console.warn('[PWA] Could not get service worker registrations:', err);
   });
 }
 

@@ -38,7 +38,6 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { cn, formatDate } from '../lib/utils';
-import { startAuthentication } from '@simplewebauthn/browser';
 import { createNotification } from '../lib/notificationService';
 import CryptoJS from 'crypto-js';
 import { recordLoginActivity } from '../lib/securityService';
@@ -60,21 +59,17 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
 
   // ---------------------------------------------------------------------------
   // STATE MANAGEMENT: Priority Flow ('face' | 'pin')
-  // Checks localStorage for saved "faceDescriptor" on mount
+  // Prioritizes Face Unlock if enabled in user settings or passkey exists
   // ---------------------------------------------------------------------------
+  const isFaceUnlockConfigured = Boolean(
+    securitySettings?.faceUnlockEnabled ||
+    localStorage.getItem('faceUnlockEnabled') === 'true' ||
+    (securitySettings?.registeredDevices && securitySettings.registeredDevices.length > 0) ||
+    localStorage.getItem('biometricCredentialId')
+  );
+
   const [unlockMethod, setUnlockMethod] = useState<'face' | 'pin'>(() => {
-    try {
-      const raw = localStorage.getItem('faceDescriptor');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length === 128) {
-          return 'face';
-        }
-      }
-    } catch (e) {
-      console.warn("Error reading faceDescriptor on mount:", e);
-    }
-    return 'pin';
+    return isFaceUnlockConfigured ? 'face' : 'pin';
   });
 
   // Dynamic feedback notice when falling back from Face Unlock to PIN
@@ -86,11 +81,6 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
   const [pinInput, setPinInput] = useState('');
   const [error, setError] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
-  const [showBiometric, setShowBiometric] = useState(securitySettings.biometricEnabled);
-  const [isBiometricSupported, setIsBiometricSupported] = useState(true);
-  const [biometricError, setBiometricError] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [isAuthenticating, setIsAuthenticating] = useState(false);
   
   // Forgot PIN modal
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -108,10 +98,10 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
 
   // Focus hidden input for physical keyboard entry only when on PIN screen
   useEffect(() => {
-    if (unlockMethod === 'pin' && securitySettings.pinEnabled && !showBiometric && !showForgotModal) {
+    if (unlockMethod === 'pin' && securitySettings.pinEnabled && !showForgotModal) {
       setTimeout(() => inputRef.current?.focus(), 100);
     }
-  }, [unlockMethod, securitySettings.pinEnabled, showBiometric, showForgotModal]);
+  }, [unlockMethod, securitySettings.pinEnabled, showForgotModal]);
 
   // Lockout countdown timer
   useEffect(() => {
@@ -125,26 +115,6 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     }
     return () => clearInterval(timer);
   }, [lockoutTime, failedAttempts]);
-
-  // Biometric support detection
-  useEffect(() => {
-    const checkSupport = async () => {
-      if (window.PublicKeyCredential) {
-        try {
-          const available = await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-          setIsBiometricSupported(available);
-          if (available && showBiometric && !isAuthenticating && !biometricError && (securitySettings.registeredDevices?.length ?? 0) > 0) {
-            handleBiometricAuth();
-          }
-        } catch (e) {
-          setIsBiometricSupported(false);
-        }
-      } else {
-        setIsBiometricSupported(false);
-      }
-    };
-    checkSupport();
-  }, [showBiometric, isAuthenticating, biometricError]);
 
   const triggerHaptic = () => {
     try {
@@ -177,101 +147,6 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
   const handleUsePinManual = () => {
     setPinNotice(null);
     setUnlockMethod('pin');
-  };
-
-  // ---------------------------------------------------------------------------
-  // WEBAUTHN BIOMETRIC AUTH HANDLER
-  // ---------------------------------------------------------------------------
-  const handleBiometricAuth = async () => {
-    if (isAuthenticating || lockoutTime > 0) return;
-    setIsAuthenticating(true);
-    setErrorMsg(null);
-    setBiometricError(false);
-
-    try {
-      if (!securitySettings.registeredDevices || securitySettings.registeredDevices.length === 0) {
-        throw new Error("No registered devices");
-      }
-
-      const userId = "user123";
-
-      const resp = await fetch('/api/webauthn/generate-authentication-options', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          userId,
-          allowCredentials: securitySettings.registeredDevices.map(d => ({
-            id: d.id,
-            transports: d.transports
-          }))
-        }),
-      });
-
-      if (!resp.ok) throw new Error("Failed to get auth options");
-
-      const options = await resp.json();
-
-      let asseResp;
-      try {
-        asseResp = await startAuthentication(options);
-      } catch (err: any) {
-        console.error("StartAuthentication error:", err);
-        throw new Error("Authentication cancelled");
-      }
-
-      const matchedDevice = securitySettings.registeredDevices.find(d => d.id === asseResp.id);
-      if (!matchedDevice) throw new Error("Unregistered device used");
-
-      const verifyResp = await fetch('/api/webauthn/verify-authentication', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          userId,
-          response: asseResp,
-          authenticator: matchedDevice
-        }),
-      });
-
-      const verificationResult = await verifyResp.json();
-      if (verificationResult.verified) {
-        const updatedDevices = securitySettings.registeredDevices.map(d =>
-          d.id === matchedDevice.id ? { ...d, lastUsedAt: new Date().toISOString() } : d
-        );
-        updateSecuritySettings({ registeredDevices: updatedDevices });
-        recordLoginActivity(currentUser?.uid || 'local_user', {
-          method: 'Biometric',
-          status: 'Success',
-          email: currentUser?.email || userProfile?.email || '',
-          userName: currentUser?.displayName || userProfile?.fullName || '',
-          userAvatar: currentUser?.photoURL || userProfile?.profilePhoto || ''
-        });
-        try {
-          sessionStorage.setItem('isUnlocked', 'true');
-        } catch (e) {}
-        setIsUnlocking(true);
-        triggerHaptic();
-        setTimeout(onUnlock, 400);
-      } else {
-        throw new Error("Verification failed on server");
-      }
-    } catch (err: any) {
-      console.warn('Biometric auth failed:', err);
-      setBiometricError(true);
-      setErrorMsg(err.message || 'Authentication failed');
-      recordLoginActivity(currentUser?.uid || 'local_user', {
-        method: 'Biometric',
-        status: 'Failed',
-        email: currentUser?.email || userProfile?.email || '',
-        userName: currentUser?.displayName || userProfile?.fullName || '',
-        userAvatar: currentUser?.photoURL || userProfile?.profilePhoto || '',
-        failureReason: err?.message || 'Biometric verification failed'
-      });
-      setTimeout(() => setBiometricError(false), 3000);
-    } finally {
-      setIsAuthenticating(false);
-    }
   };
 
   // ---------------------------------------------------------------------------
@@ -404,72 +279,6 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     } catch (e) {}
     onUnlock();
   };
-
-  // Biometric fallback modal screen
-  if (showBiometric) {
-    return (
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 bg-[#111318] text-[#e2e2e9] flex flex-col items-center justify-center p-6 select-none"
-      >
-        {/* Ambient M3 Glow */}
-        <div className="absolute w-[360px] h-[360px] rounded-full bg-[#a8c7fa]/10 blur-[120px] pointer-events-none" />
-
-        <div className="flex flex-col items-center max-w-sm w-full bg-[#1e1f24] border border-[#33353a] rounded-[32px] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.5)] relative z-10">
-          <motion.div 
-            initial={{ scale: 0.8 }}
-            animate={{ scale: 1 }}
-            className="w-20 h-20 bg-[#282a30] text-[#a8c7fa] rounded-full flex items-center justify-center mb-6 shadow-inner border border-[#3c3f46]"
-          >
-            {securitySettings.faceUnlockEnabled ? <ScanFace size={38} /> : <Fingerprint size={38} />}
-          </motion.div>
-
-          <h2 className="text-2xl font-bold tracking-tight text-[#e2e2e9] mb-1.5 text-center">
-            {securitySettings.faceUnlockEnabled ? 'Face Authentication' : 'Fingerprint Unlock'}
-          </h2>
-          <p className="text-[#90909a] mb-8 text-center text-sm font-medium leading-relaxed">
-            {isAuthenticating ? 'Scanning biometrics...' : (isBiometricSupported ? 'Touch sensor or glance to continue' : 'Biometrics not supported on this device')}
-          </p>
-          
-          {biometricError && (
-            <motion.p 
-              initial={{ opacity: 0, y: -6 }} 
-              animate={{ opacity: 1, y: 0 }}
-              className="text-[#ffb4ab] mb-4 text-xs font-semibold flex items-center gap-1.5 bg-[#93000a]/20 px-3 py-1.5 rounded-full border border-[#ffb4ab]/30"
-            >
-              <XCircle size={14} /> {errorMsg || 'Authentication Failed'}
-            </motion.p>
-          )}
-
-          <div className="w-full flex flex-col gap-3">
-            {isBiometricSupported && (
-              <button
-                type="button"
-                disabled={isAuthenticating}
-                onClick={handleBiometricAuth}
-                className="w-full py-3.5 bg-[#a8c7fa] text-[#042e6f] hover:bg-[#c2e7ff] font-bold rounded-2xl transition-all shadow-md active:scale-98 disabled:opacity-50"
-              >
-                {isAuthenticating ? 'Authenticating...' : 'Try Again'}
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => {
-                setShowBiometric(false);
-                setUnlockMethod('pin');
-              }}
-              className="w-full py-3.5 bg-transparent hover:bg-white/5 text-[#a8c7fa] font-semibold text-sm rounded-2xl transition-colors border border-[#33353a]"
-            >
-              Use PIN Code Instead
-            </button>
-          </div>
-        </div>
-      </motion.div>
-    );
-  }
 
   // ---------------------------------------------------------------------------
   // MAIN RENDER SURFACE (Seamless Container swapping between Face and PIN)
@@ -699,18 +508,22 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
                       ))}
 
                       {/* Bottom Row: Biometric Shortcut / Blank, 0, and Delete Button */}
-                      {securitySettings.biometricEnabled && isBiometricSupported ? (
+                      {isFaceUnlockConfigured ? (
                         <motion.button
                           type="button"
                           disabled={lockoutTime > 0 || isVerifying || isUnlocking}
-                          onClick={() => setShowBiometric(true)}
+                          onClick={() => {
+                            setPinNotice(null);
+                            setUnlockMethod('face');
+                          }}
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.92 }}
-                          aria-label="Use Biometrics"
-                          title="Unlock with Biometrics"
-                          className="w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-full flex items-center justify-center bg-[#20232b] hover:bg-[#2c303a] text-[#a8c7fa] border border-[#343740] transition-colors select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa]"
+                          aria-label="Use Face Unlock"
+                          title="Unlock with Face ID"
+                          className="w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-full flex flex-col items-center justify-center bg-[#20232b] hover:bg-[#2c303a] text-[#a8c7fa] border border-[#343740] transition-colors select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#a8c7fa]"
                         >
-                          {securitySettings.faceUnlockEnabled ? <ScanFace size={22} /> : <Fingerprint size={22} />}
+                          <ScanFace size={22} />
+                          <span className="text-[9px] text-slate-400 mt-0.5 font-medium">Face ID</span>
                         </motion.button>
                       ) : (
                         <div className="w-14 h-14 sm:w-[72px] sm:h-[72px]" />

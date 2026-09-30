@@ -1,0 +1,44 @@
+[
+  {
+    "id": "weekly_system_report",
+    "name": "Weekly System Health Report",
+    "reportType": "weekly_system",
+    "frequency": "weekly",
+    "dayOfWeek": 1,
+    "time": "09:00",
+    "deliveryEmail": "admin@smartledgerx.io",
+    "verifiedAdmin": true,
+    "format": "pdf",
+    "enabled": true,
+    "createdAt": "2026-09-30T10:34:38.872Z",
+    "nextRunAt": "2026-10-05T09:00:00.000Z"
+  },
+  {
+    "id": "monthly_security_report",
+    "name": "Monthly Security Activity Report",
+    "reportType": "monthly_security",
+    "frequency": "monthly",
+    "dayOfMonth": 1,
+    "time": "09:00",
+    "deliveryEmail": "admin@smartledgerx.io",
+    "verifiedAdmin": true,
+    "format": "pdf",
+    "enabled": true,
+    "createdAt": "2026-09-30T10:34:38.872Z",
+    "nextRunAt": "2026-10-01T09:00:00.000Z"
+  },
+  {
+    "id": "monthly_backup_report",
+    "name": "Monthly Disaster Recovery Backup Report",
+    "reportType": "monthly_backup",
+    "frequency": "monthly",
+    "dayOfMonth": 1,
+    "time": "09:00",
+    "deliveryEmail": "admin@smartledgerx.io",
+    "verifiedAdmin": true,
+    "format": "both",
+    "enabled": true,
+    "createdAt": "2026-09-30T10:34:38.872Z",
+    "nextRunAt": "2026-10-01T09:00:00.000Z"
+  }
+]

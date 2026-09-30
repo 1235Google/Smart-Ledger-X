@@ -44,12 +44,11 @@ export default function BiometricLock({ onUnlock, title = "Secret Vault" }: Biom
   const [isUnlockedState, setIsUnlockedState] = useState(false);
   const [hasBiometricConfigured, setHasBiometricConfigured] = useState(false);
 
-  // Check if biometric credential exists on mount
+  // Check if biometric credential exists on mount without auto-prompting
   useEffect(() => {
     const credId = localStorage.getItem('biometricCredentialId');
     if (credId) {
       setHasBiometricConfigured(true);
-      handleBiometricAuth(credId);
     } else {
       setShowPinFallback(true);
     }

@@ -191,7 +191,18 @@ export async function generateAndSendReport(
     </html>
   `;
 
-  let fromAddress = 'SmartLedger <onboarding@resend.dev>';
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+    return {
+      success: false,
+      deliveredTo: cleanEmail,
+      error: { message: `Invalid recipient email address format: ${cleanEmail}` },
+      fileSizeXlsx: 0,
+      fileSizePdf: 0
+    };
+  }
+
+  let fromAddress = process.env.RESEND_FROM_EMAIL || 'SmartLedger <onboarding@resend.dev>';
   try {
     const domains = await resend.domains.list();
     const domainList = Array.isArray(domains.data) ? domains.data : (domains.data?.data || []);
@@ -203,41 +214,30 @@ export async function generateAndSendReport(
     console.warn('[Report Generator] Domain list check skipped:', err);
   }
 
-  let data = await resend.emails.send({
+  console.log(`[Report Generator] Dispatching monthly report to recipient: ${cleanEmail}`);
+  const data = await resend.emails.send({
     from: fromAddress,
-    to: email,
+    to: cleanEmail,
     subject: `📊 SmartLedger Monthly Report – ${month}`,
     html: htmlContent,
     attachments
   });
 
-  if (data.error && (data.error.message.includes('testing emails') || data.error.message.includes('verify a domain'))) {
-    console.warn(`[Report Generator] Resend Sandbox mode detected. Routing copy to owner email for delivery confirmation.`);
-    const ownerEmail = process.env.RESEND_OWNER_EMAIL || 'souvikdashbbsr@gmail.com';
-    const fallbackSend = await resend.emails.send({
-      from: fromAddress,
-      to: ownerEmail,
-      subject: `📊 [Sandbox Deliverable for ${email}] SmartLedger Monthly Report – ${month}`,
-      html: `<div style="padding: 12px; background: #fff3cd; color: #856404; font-family: sans-serif; font-size: 13px; border-radius: 8px; margin-bottom: 16px;">
-        <strong>Resend Sandbox Notice:</strong> This report was scheduled for <strong>${email}</strong>. In testing mode without custom DNS verification, emails route to the registered developer mailbox.
-      </div>` + htmlContent,
-      attachments
-    });
-
-    if (!fallbackSend.error) {
-      return {
-        success: true,
-        deliveredTo: email,
-        sandboxDelivered: true,
-        fileSizeXlsx: pendingCsvBuffer.length + gullakCsvBuffer.length,
-        fileSizePdf: summaryBuffer ? summaryBuffer.length : 0
-      };
-    }
+  if (data.error) {
+    console.error(`[Report Generator] Email dispatch error for ${cleanEmail}:`, data.error);
+    return {
+      success: false,
+      deliveredTo: cleanEmail,
+      error: data.error,
+      fileSizeXlsx: pendingCsvBuffer.length + gullakCsvBuffer.length,
+      fileSizePdf: summaryBuffer ? summaryBuffer.length : 0
+    };
   }
 
   return {
-    success: !data.error,
-    error: data.error,
+    success: true,
+    deliveredTo: cleanEmail,
+    messageId: data.data?.id,
     fileSizeXlsx: pendingCsvBuffer.length + gullakCsvBuffer.length,
     fileSizePdf: summaryBuffer ? summaryBuffer.length : 0
   };

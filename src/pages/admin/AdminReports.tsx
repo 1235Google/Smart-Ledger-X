@@ -110,6 +110,9 @@ export default function AdminReports() {
   // --- Dialog & Drilldown State ---
   const [selectedDrilldown, setSelectedDrilldown] = useState<any | null>(null);
   const [drilldownTitle, setDrilldownTitle] = useState<string>('');
+  // Current admin email
+  const adminEmail = adminUser?.email || 'admin@smartledgerx.io';
+
   const [showDrilldownModal, setShowDrilldownModal] = useState<boolean>(false);
   const [showPreviewModal, setShowPreviewModal] = useState<boolean>(false);
   const [showScheduleConfigModal, setShowScheduleConfigModal] = useState<boolean>(false);
@@ -118,14 +121,11 @@ export default function AdminReports() {
     frequency: 'weekly',
     dayOfWeek: 1,
     time: '09:00',
-    deliveryEmail: 'souvikbbsr811@gmail.com',
+    deliveryEmail: adminUser?.email || 'admin@smartledgerx.io',
     format: 'pdf',
     enabled: true
   });
   const [copiedText, setCopiedText] = useState<string | null>(null);
-
-  // Current admin email
-  const adminEmail = adminUser?.email || 'admin@smartledgerx.io';
 
   // Compute Active Date Range
   const dateRange: DateRangeResult = useMemo(() => {

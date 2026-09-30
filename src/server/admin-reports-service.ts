@@ -6,8 +6,6 @@ import { ScheduledReportConfig } from '../types';
 const SCHEDULED_REPORTS_FILE = path.join(process.cwd(), 'admin-scheduled-reports.json');
 
 export const VERIFIED_ADMIN_RECIPIENT_EMAILS = [
-  'souvikbbsr811@gmail.com',
-  'souvikdashbbsr@gmail.com',
   'admin@smartledgerx.io'
 ];
 
@@ -20,7 +18,10 @@ export function initScheduledReportsStore(): void {
       const raw = fs.readFileSync(SCHEDULED_REPORTS_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        inMemorySchedules = parsed;
+        inMemorySchedules = parsed.map(item => ({
+          ...item,
+          deliveryEmail: item.deliveryEmail?.includes('souvik') ? 'admin@smartledgerx.io' : item.deliveryEmail
+        }));
       }
     } else {
       // Seed default recommended schedule templates
@@ -32,7 +33,7 @@ export function initScheduledReportsStore(): void {
           frequency: 'weekly',
           dayOfWeek: 1, // Monday
           time: '09:00',
-          deliveryEmail: 'souvikbbsr811@gmail.com',
+          deliveryEmail: 'admin@smartledgerx.io',
           verifiedAdmin: true,
           format: 'pdf',
           enabled: true,
@@ -46,7 +47,7 @@ export function initScheduledReportsStore(): void {
           frequency: 'monthly',
           dayOfMonth: 1, // 1st of month
           time: '09:00',
-          deliveryEmail: 'souvikbbsr811@gmail.com',
+          deliveryEmail: 'admin@smartledgerx.io',
           verifiedAdmin: true,
           format: 'pdf',
           enabled: true,
@@ -60,7 +61,7 @@ export function initScheduledReportsStore(): void {
           frequency: 'monthly',
           dayOfMonth: 1,
           time: '09:00',
-          deliveryEmail: 'souvikbbsr811@gmail.com',
+          deliveryEmail: 'admin@smartledgerx.io',
           verifiedAdmin: true,
           format: 'both',
           enabled: true,
@@ -117,12 +118,12 @@ export function upsertScheduledReportConfig(
 ): { success: boolean; config?: ScheduledReportConfig; error?: string } {
   const email = (config.deliveryEmail || '').trim().toLowerCase();
   
-  // Guard against arbitrary external addresses
-  const isVerified = VERIFIED_ADMIN_RECIPIENT_EMAILS.includes(email);
-  if (!isVerified) {
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email || !emailRegex.test(email)) {
     return {
       success: false,
-      error: `Security restriction: Reports can only be scheduled for verified administrators (${VERIFIED_ADMIN_RECIPIENT_EMAILS.join(', ')}).`
+      error: 'Invalid recipient delivery email format.'
     };
   }
 

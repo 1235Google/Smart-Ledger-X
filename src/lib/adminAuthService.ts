@@ -618,6 +618,14 @@ export async function checkAdminRedirectAuth(): Promise<{
   adminUser?: AdminUser;
   error?: string;
 } | null> {
+  const isPendingAdminRedirect = typeof window !== 'undefined' && 
+    (window.location.pathname.startsWith('/admin') || 
+     sessionStorage.getItem('smartledger-admin-pending-redirect') === 'true');
+
+  if (!isPendingAdminRedirect) {
+    return null;
+  }
+
   try {
     const result = await getRedirectResult(auth);
     if (result && result.user) {
@@ -630,6 +638,7 @@ export async function checkAdminRedirectAuth(): Promise<{
           error: verification.errorMessage || 'This account does not have administrator access.'
         };
       }
+      sessionStorage.removeItem('smartledger-admin-pending-redirect');
       sessionStorage.setItem('smartledger-admin-auth', 'true');
       sessionStorage.setItem('smartledger-admin-email', verification.adminUser!.email);
       sessionStorage.setItem('smartledger-admin-role', verification.adminUser!.role);

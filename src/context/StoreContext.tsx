@@ -3,7 +3,7 @@ import { AppState, PendingMoney, ReceivedMoney, SentMoney, Transaction, Security
 import CryptoJS from 'crypto-js';
 import { calculateProgress, ACHIEVEMENTS } from '../lib/achievements';
 import { DEFAULT_REMINDER_TEMPLATE } from '../lib/utils';
-import { auth } from '../lib/firebase';
+import { auth, ensureAuthPersistence } from '../lib/firebase';
 import { onAuthStateChanged, User, signOut, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { subscribeToState, queueStateSync, migrateLocalDataToCloud, syncUserProfile, fetchUserState } from "../lib/cloudSync";
 import { createNotification } from '../lib/notificationService';
@@ -164,6 +164,16 @@ export const defaultState: AppState = {
     lastReportSent: null,
     nextScheduledReport: null,
   },
+  reportSettings: {
+    emailAddress: '',
+    includePdf: true,
+    verificationStatus: 'verified',
+    schedule: {
+      frequency: 'monthly',
+      time: '09:00',
+      timezone: 'Asia/Kolkata',
+    },
+  },
   emailHistory: [],
   generalSettings: {
     timezone: 'Asia/Kolkata',
@@ -245,28 +255,27 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [newlyUnlocked, setNewlyUnlocked] = useState<UnlockedAchievement | null>(null);
   const [isLocked, setIsLocked] = useState<boolean>(() => {
     try {
-      return sessionStorage.getItem('isUnlocked') !== 'true';
-    } catch {
-      return false;
-    }
+      const saved = localStorage.getItem('smart-ledger-data');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.securitySettings?.pinEnabled && parsed?.securitySettings?.pin) {
+          return sessionStorage.getItem('isUnlocked') !== 'true';
+        }
+      }
+    } catch {}
+    return false;
   });
 
   // Ensure Firebase Auth browserLocalPersistence so session survives refresh & auto-lock
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setPersistence(auth, browserLocalPersistence).catch((err) => {
+      ensureAuthPersistence().catch((err) => {
         console.warn('[Firebase Auth] Persistence notice:', err);
       });
     }
   }, []);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('smartledger_authenticated') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const [currentUser, setCurrentUser] = useState<User | null>(() => auth.currentUser);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => Boolean(auth.currentUser));
 
   // Enterprise System Availability & Mode State
   const [systemConfig, setSystemConfig] = useState<SystemConfig>(() => systemModeService.getCurrentConfig());
@@ -392,11 +401,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setIsAuthenticated(true);
         setIsAuthReady(true);
         try {
-          const unlocked = sessionStorage.getItem('isUnlocked') === 'true';
-          setIsLocked(!unlocked);
-        } catch (e) {}
+          const pinEnabled = state.securitySettings?.pinEnabled && Boolean(state.securitySettings?.pin);
+          if (pinEnabled) {
+            const unlocked = sessionStorage.getItem('isUnlocked') === 'true';
+            setIsLocked(!unlocked);
+          } else {
+            setIsLocked(false);
+          }
+        } catch (e) {
+          setIsLocked(false);
+        }
         try {
           localStorage.setItem('smartledger_authenticated', 'true');
+          localStorage.setItem('lastAuthUserId', user.uid);
+          if (user.email) localStorage.setItem('lastAuthUserEmail', user.email);
         } catch (e) {}
 
         setDataStatus('loading');
@@ -493,8 +511,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setCurrentUser(null);
         setIsAuthenticated(false);
         setIsAuthReady(true);
+        setIsLocked(false);
         try {
           localStorage.removeItem('smartledger_authenticated');
+          sessionStorage.removeItem('isUnlocked');
         } catch (e) {}
         
         // Load from local if not authenticated
@@ -536,16 +556,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Only queue sync if data has successfully loaded and this was a user-initiated change
     if (isDataLoaded && dataStatus === 'success') {
+      try {
+        localStorage.setItem('smart-ledger-data', JSON.stringify(state));
+        if (currentUser?.uid) {
+          localStorage.setItem(`smart-ledger-cache-${currentUser.uid}`, JSON.stringify({ state, transactions: state.transactions }));
+        }
+      } catch (e) {}
+
       if (isRemoteUpdateRef.current) {
         // Prevent echo cycle from remote Firestore update
         isRemoteUpdateRef.current = false;
       } else if (isAuthenticated && currentUser) {
         // Double check we are not overwriting with completely blank state
         queueStateSync(currentUser.uid, state);
-      } else {
-        try {
-          localStorage.setItem('smart-ledger-data', JSON.stringify(state));
-        } catch (e) {}
       }
       prevStateRef.current = state;
     }
@@ -623,14 +646,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const initAdminAuth = async () => {
       setIsAdminLoading(true);
       try {
-        // 1. Check if returning from redirect
-        const redirectRes = await checkAdminRedirectAuth();
-        if (redirectRes && redirectRes.success && redirectRes.adminUser) {
-          setAdminUser(redirectRes.adminUser);
-          setIsAdminAuthenticated(true);
-          sessionStorage.setItem('smartledger-admin-auth', 'true');
-          sessionStorage.setItem('smartledger-admin-email', redirectRes.adminUser.email);
-          sessionStorage.setItem('smartledger-admin-role', redirectRes.adminUser.role);
+        // 1. Only check if returning from redirect while on admin page or admin redirect flag is set
+        if (typeof window !== 'undefined' && 
+            (window.location.pathname.startsWith('/admin') || 
+             sessionStorage.getItem('smartledger-admin-pending-redirect') === 'true')) {
+          const redirectRes = await checkAdminRedirectAuth();
+          if (redirectRes && redirectRes.success && redirectRes.adminUser) {
+            setAdminUser(redirectRes.adminUser);
+            setIsAdminAuthenticated(true);
+            sessionStorage.setItem('smartledger-admin-auth', 'true');
+            sessionStorage.setItem('smartledger-admin-email', redirectRes.adminUser.email);
+            sessionStorage.setItem('smartledger-admin-role', redirectRes.adminUser.role);
+          }
         }
       } catch (e) {
         console.warn('[AdminAuth Debug] Redirect check error:', e);
@@ -698,10 +725,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     try {
-      const unlocked = sessionStorage.getItem('isUnlocked') === 'true';
-      setIsLocked(!unlocked);
-    } catch (e) {}
-  }, [isInitialized]);
+      const pinEnabled = state.securitySettings?.pinEnabled && Boolean(state.securitySettings?.pin);
+      if (pinEnabled) {
+        const unlocked = sessionStorage.getItem('isUnlocked') === 'true';
+        setIsLocked(!unlocked);
+      } else {
+        setIsLocked(false);
+      }
+    } catch (e) {
+      setIsLocked(false);
+    }
+  }, [isInitialized, state.securitySettings?.pinEnabled, state.securitySettings?.pin]);
 
   const unlockApp = (pin?: string) => {
     if (!pin) {
@@ -931,10 +965,33 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       sanitizedSettings.pin = hashPin(settings.pin);
       sanitizedSettings.pinLength = settings.pin.length as (4 | 6);
     }
-    setState(prev => ({
-      ...prev,
-      securitySettings: { ...prev.securitySettings, ...sanitizedSettings }
-    }));
+    setState(prev => {
+      const nextState: AppState = {
+        ...prev,
+        securitySettings: { ...prev.securitySettings, ...sanitizedSettings }
+      };
+      try {
+        localStorage.setItem('smart-ledger-data', JSON.stringify(nextState));
+        if (sanitizedSettings.faceUnlockEnabled !== undefined) {
+          if (sanitizedSettings.faceUnlockEnabled) {
+            localStorage.setItem('faceUnlockEnabled', 'true');
+          } else {
+            localStorage.removeItem('faceUnlockEnabled');
+          }
+        }
+        if (currentUser?.uid) {
+          localStorage.setItem(`smart-ledger-cache-${currentUser.uid}`, JSON.stringify({ state: nextState, transactions: nextState.transactions }));
+          if (sanitizedSettings.faceUnlockEnabled !== undefined) {
+            if (sanitizedSettings.faceUnlockEnabled) {
+              localStorage.setItem(`faceUnlockEnabled_${currentUser.uid}`, 'true');
+            } else {
+              localStorage.removeItem(`faceUnlockEnabled_${currentUser.uid}`);
+            }
+          }
+        }
+      } catch (e) {}
+      return nextState;
+    });
     if (settings.pin !== undefined) {
       createNotification({
         title: 'PIN Changed Successfully',
@@ -951,17 +1008,39 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateEmailSettings = (settings: Partial<EmailSettings>) => {
-    setState(prev => ({
-      ...prev,
-      emailSettings: { ...prev.emailSettings, ...settings }
-    }));
+    setState(prev => {
+      const newEmail = settings.emailAddress !== undefined ? settings.emailAddress.trim().toLowerCase() : prev.emailSettings?.emailAddress;
+      const updatedReport = settings.emailAddress !== undefined 
+        ? { ...prev.reportSettings, emailAddress: newEmail, verificationStatus: 'verified' }
+        : prev.reportSettings;
+      const nextState: AppState = {
+        ...prev,
+        emailSettings: { ...prev.emailSettings, ...settings, ...(newEmail !== undefined ? { emailAddress: newEmail } : {}) },
+        ...(updatedReport ? { reportSettings: updatedReport as ReportSettings } : {})
+      };
+      try {
+        localStorage.setItem('smart-ledger-data', JSON.stringify(nextState));
+      } catch (e) {}
+      return nextState;
+    });
   };
 
   const updateReportSettings = (settings: Partial<ReportSettings>) => {
-    setState(prev => ({
-      ...prev,
-      reportSettings: { ...prev.reportSettings, ...settings } as ReportSettings
-    }));
+    setState(prev => {
+      const newEmail = settings.emailAddress !== undefined ? settings.emailAddress.trim().toLowerCase() : prev.reportSettings?.emailAddress;
+      const updatedEmail = settings.emailAddress !== undefined
+        ? { ...prev.emailSettings, emailAddress: newEmail, enabled: true }
+        : prev.emailSettings;
+      const nextState: AppState = {
+        ...prev,
+        reportSettings: { ...prev.reportSettings, ...settings, ...(newEmail !== undefined ? { emailAddress: newEmail } : {}) } as ReportSettings,
+        ...(updatedEmail ? { emailSettings: updatedEmail } : {})
+      };
+      try {
+        localStorage.setItem('smart-ledger-data', JSON.stringify(nextState));
+      } catch (e) {}
+      return nextState;
+    });
   };
 
   const updateGeneralSettings = (settings: Partial<GeneralSettings>) => {

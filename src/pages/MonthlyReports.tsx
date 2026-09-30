@@ -35,6 +35,8 @@ export default function MonthlyReports() {
   const {
     reportSettings,
     updateReportSettings,
+    emailSettings,
+    updateEmailSettings,
     generatedReports,
     deleteGeneratedReport,
     addGeneratedReport,
@@ -49,12 +51,23 @@ export default function MonthlyReports() {
     currentUser
   } = useStore();
 
-  // User account email fallback
-  const accountEmail = userProfile?.email || currentUser?.email || 'souvikbbsr811@gmail.com';
+  // User account email fallback (from profile or auth session, no hardcoded email)
+  const accountEmail = userProfile?.email || currentUser?.email || '';
 
-  const [emailInput, setEmailInput] = useState<string>(() => {
-    return reportSettings?.emailAddress || accountEmail || '';
-  });
+  // Configured recipient email from user's saved SmartLedgerX settings
+  const savedSettingsEmail = (reportSettings?.emailAddress || emailSettings?.emailAddress || '').trim().toLowerCase();
+  const configuredEmail = savedSettingsEmail || accountEmail.trim().toLowerCase();
+
+  const [emailInput, setEmailInput] = useState<string>(() => configuredEmail);
+
+  // Keep input in sync with saved settings whenever they change in Settings or via cloud sync
+  React.useEffect(() => {
+    if (savedSettingsEmail) {
+      setEmailInput(savedSettingsEmail);
+    } else if (accountEmail && !emailInput) {
+      setEmailInput(accountEmail.trim().toLowerCase());
+    }
+  }, [savedSettingsEmail, accountEmail]);
 
   const [emailStatus, setEmailStatus] = useState<{
     type: 'success' | 'error' | 'warning' | 'loading';
@@ -202,7 +215,7 @@ export default function MonthlyReports() {
 
   // Save & Verify Email Handler (Guaranteed not to reject valid emails!)
   const handleSaveEmail = async () => {
-    const cleanEmail = emailInput.trim();
+    const cleanEmail = emailInput.trim().toLowerCase();
     if (!cleanEmail || !isValidEmailFormat(cleanEmail)) {
       setEmailStatus({
         type: 'error',
@@ -212,10 +225,14 @@ export default function MonthlyReports() {
       return;
     }
 
-    // Immediately persist email as verified in local Store
+    // Persist email in both reportSettings and emailSettings
     updateReportSettings({
       emailAddress: cleanEmail,
       verificationStatus: 'verified'
+    });
+    updateEmailSettings({
+      emailAddress: cleanEmail,
+      enabled: true
     });
     setEmailStatus({ type: 'loading', text: 'Saving and verifying email configuration...' });
 
@@ -227,32 +244,33 @@ export default function MonthlyReports() {
       });
       const data = await res.json().catch(() => ({}));
 
-      // In all cases, preserve verified status for valid format
+      // Confirm settings persistence
       updateReportSettings({
         emailAddress: cleanEmail,
         verificationStatus: 'verified'
       });
+      updateEmailSettings({
+        emailAddress: cleanEmail,
+        enabled: true
+      });
 
       confetti({ particleCount: 35, spread: 50, origin: { y: 0.6 } });
-      if (data.sandboxNotice) {
-        setEmailStatus({
-          type: 'success',
-          text: `✓ Email verified and linked! (Sandbox active: ${cleanEmail})`
-        });
-      } else {
-        setEmailStatus({
-          type: 'success',
-          text: `✓ Email verified & active: ${cleanEmail}`
-        });
-      }
+      setEmailStatus({
+        type: 'success',
+        text: `✓ Report email saved and verified: ${cleanEmail}`
+      });
     } catch {
       updateReportSettings({
         emailAddress: cleanEmail,
         verificationStatus: 'verified'
       });
+      updateEmailSettings({
+        emailAddress: cleanEmail,
+        enabled: true
+      });
       setEmailStatus({
         type: 'success',
-        text: `✓ Email saved successfully for reports: ${cleanEmail}`
+        text: `✓ Report email saved successfully: ${cleanEmail}`
       });
     }
 
@@ -444,7 +462,11 @@ export default function MonthlyReports() {
 
   // API Call to Generate and Email Report
   const callGenerateReportAPI = async (type: 'monthly_report' | 'test_report') => {
-    const targetEmail = (reportSettings?.emailAddress || emailInput || '').trim();
+    const currentInput = emailInput.trim().toLowerCase();
+    const savedEmail = (reportSettings?.emailAddress || emailSettings?.emailAddress || '').trim().toLowerCase();
+    // Use valid input if edited, otherwise strictly use user's saved SmartLedgerX settings
+    const targetEmail = (isValidEmailFormat(currentInput) ? currentInput : savedEmail || accountEmail).trim().toLowerCase();
+    
     if (!targetEmail || !isValidEmailFormat(targetEmail)) {
       setEmailStatus({
         type: 'error',
@@ -454,10 +476,9 @@ export default function MonthlyReports() {
       return;
     }
 
-    // Ensure email is verified in settings
-    if (reportSettings?.emailAddress !== targetEmail) {
-      updateReportSettings({ emailAddress: targetEmail, verificationStatus: 'verified' });
-    }
+    // Ensure email is saved and synchronized in user settings
+    updateReportSettings({ emailAddress: targetEmail, verificationStatus: 'verified' });
+    updateEmailSettings({ emailAddress: targetEmail, enabled: true });
 
     type === 'test_report' ? setIsTesting(true) : setIsGenerating(true);
     setEmailStatus({
@@ -840,7 +861,7 @@ export default function MonthlyReports() {
                       type="email"
                       value={emailInput}
                       onChange={e => setEmailInput(e.target.value)}
-                      placeholder="e.g. souvikbbsr811@gmail.com"
+                      placeholder="e.g. name@domain.com"
                       className="w-full bg-black/50 border border-white/15 focus:border-cyan-400 rounded-2xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400/20 text-sm transition-all"
                     />
                   </div>

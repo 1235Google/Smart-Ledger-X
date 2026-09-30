@@ -282,34 +282,74 @@ try {
     return res.json({ success: true });
   });
 
-  // WebAuthn state storage (in-memory for this stateless demo)
-  const userChallenges: { [userId: string]: string } = {};
-  const rpName = 'SmartLedger';
+  // WebAuthn state storage with expiration timestamp
+  const userChallenges: { [userId: string]: { challenge: string; timestamp: number } } = {};
+  const rpName = 'SmartLedgerX';
+  const isDevMode = process.env.NODE_ENV !== 'production';
+
+  function getRelyingPartyConfig(req: express.Request) {
+    const clientRpId = (typeof req.body?.rpId === 'string' && req.body.rpId.trim()) || '';
+    const clientOrigin = (typeof req.body?.origin === 'string' && req.body.origin.trim()) || '';
+
+    const rawHost = (req.headers['x-forwarded-host'] as string) || req.headers.host || req.hostname || 'localhost';
+    const host = rawHost.split(':')[0].trim();
+    const proto = (req.headers['x-forwarded-proto'] as string) || (req.secure ? 'https' : 'http');
+    const originHeader = (req.headers.origin as string) || (req.headers.referer ? new URL(req.headers.referer).origin : '');
+    const defaultOrigin = originHeader || `${proto}://${rawHost}`;
+
+    // RP ID must match the deployed domain / hostname only (without protocol, path, or port)
+    const expectedRPID = (clientRpId || host).split(':')[0].trim();
+
+    const allowedOrigins = Array.from(new Set([
+      clientOrigin,
+      defaultOrigin,
+      originHeader,
+      `${proto}://${rawHost}`,
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'https://localhost:3000',
+    ].filter(Boolean)));
+
+    return { expectedRPID, expectedOrigin: allowedOrigins };
+  }
   
   app.post("/api/webauthn/generate-registration-options", async (req, res) => {
     try {
       const { userId, userName } = req.body;
-      const expectedRPID = process.env.NODE_ENV === 'production' ? 'smartledgerx.vercel.app' : (req.headers.host?.split(':')[0] || 'localhost');
+      const { expectedRPID, expectedOrigin } = getRelyingPartyConfig(req);
+      const cleanUserId = (userId || 'authenticated_user').trim();
+
+      console.log("[FU Backend] generate-registration-options", {
+        incomingOrigin: req.headers.origin,
+        incomingHost: req.headers.host,
+        forwardedHost: req.headers['x-forwarded-host'],
+        forwardedProto: req.headers['x-forwarded-proto'],
+        configuredRpID: expectedRPID,
+        configuredExpectedOrigins: expectedOrigin
+      });
       
       const options = await generateRegistrationOptions({
         rpName,
         rpID: expectedRPID,
-        userID: new Uint8Array(Buffer.from(userId)),
-        userName: userName,
+        userID: new Uint8Array(Buffer.from(cleanUserId)),
+        userName: userName || 'user@smartledgerx.io',
         timeout: 60000,
         attestationType: 'none',
         excludeCredentials: [],
         authenticatorSelection: {
           authenticatorAttachment: 'platform',
-          residentKey: 'required',
+          residentKey: 'preferred',
           userVerification: 'required',
         },
       });
       
-      userChallenges[userId] = options.challenge;
+      userChallenges[cleanUserId] = {
+        challenge: options.challenge,
+        timestamp: Date.now()
+      };
       res.json(options);
     } catch (error: any) {
-      console.error(error);
+      console.error('[FU Backend] generate-registration-options error:', error?.name || error?.message);
       res.status(500).json({ error: error.message });
     }
   });
@@ -317,38 +357,59 @@ try {
   app.post("/api/webauthn/verify-registration", async (req, res) => {
     try {
       const { userId, response } = req.body;
-      const expectedChallenge = userChallenges[userId];
+      const key = (userId || 'authenticated_user').trim();
+      const challengeEntry = userChallenges[key];
       
-      if (!expectedChallenge) {
-        return res.status(400).json({ error: "Challenge not found" });
+      if (!challengeEntry) {
+        console.error("[FU Backend] verify-registration error: Challenge not found or expired for key:", key);
+        return res.status(400).json({ error: "Challenge not found or expired" });
       }
 
-      const expectedOrigin = req.headers.origin!;
-      const expectedRPID = process.env.NODE_ENV === 'production' ? 'smartledgerx.vercel.app' : (req.headers.host?.split(':')[0] || 'localhost');
+      // Check 5-minute timeout window
+      if (Date.now() - challengeEntry.timestamp > 300000) {
+        delete userChallenges[key];
+        console.error("[FU Backend] verify-registration error: Challenge expired (over 5m)");
+        return res.status(400).json({ error: "Challenge expired" });
+      }
+
+      const { expectedRPID, expectedOrigin } = getRelyingPartyConfig(req);
+
+      console.log("[FU Backend] verify-registration attempt", {
+        incomingOrigin: req.headers.origin,
+        incomingHost: req.headers.host,
+        configuredRpID: expectedRPID,
+        configuredExpectedOrigins: expectedOrigin
+      });
 
       const verification = await verifyRegistrationResponse({
         response,
-        expectedChallenge,
+        expectedChallenge: challengeEntry.challenge,
         expectedOrigin,
         expectedRPID,
+        requireUserVerification: true,
       });
       
       if (verification.verified && verification.registrationInfo) {
         const { credential } = verification.registrationInfo;
-        delete userChallenges[userId];
+        delete userChallenges[key];
+
+        console.log(`[FU Backend] Registration verification verified successfully`);
+
         res.json({
           verified: true,
           credential: {
-            id: Buffer.from(credential.id).toString('base64url'),
-            publicKey: Buffer.from(credential.publicKey).toString('base64url')
+            id: credential.id,
+            publicKey: Buffer.from(credential.publicKey).toString('base64url'),
+            counter: credential.counter || 0,
+            transports: credential.transports || ['internal']
           }
         });
       } else {
-        console.warn(`[WebAuthn] Registration verification failed for userId: ${userId}`);
+        console.warn(`[FU Backend] Registration verification failed:`, verification);
         res.json({ verified: false });
       }
     } catch (error: any) {
-      console.error(`[WebAuthn] Registration verification error for userId: ${req.body.userId}:`, error);
+      console.error(`[FU Backend] Registration verification exact error:`, error?.name, error?.message, error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -356,23 +417,32 @@ try {
   app.post("/api/webauthn/generate-authentication-options", async (req, res) => {
     try {
       const { userId, allowCredentials } = req.body;
-      const expectedRPID = process.env.NODE_ENV === 'production' ? 'smartledgerx.vercel.app' : (req.headers.host?.split(':')[0] || 'localhost');
+      const { expectedRPID } = getRelyingPartyConfig(req);
+      const cleanUserId = (userId || 'authenticated_user').trim();
+
+      if (isDevMode) {
+        console.log(`[WebAuthn Dev] Authentication options ceremony initiated`);
+      }
       
       const options = await generateAuthenticationOptions({
         rpID: expectedRPID,
         timeout: 60000,
-        allowCredentials: allowCredentials.map((cred: any) => ({
-          id: Uint8Array.from(Buffer.from(cred.id, 'base64url')),
-          type: 'public-key',
-          transports: cred.transports,
-        })),
+        allowCredentials: (Array.isArray(allowCredentials) && allowCredentials.length > 0)
+          ? allowCredentials.map((cred: any) => ({
+              id: cred.id,
+              transports: cred.transports || ['internal'],
+            }))
+          : undefined,
         userVerification: 'required',
       });
       
-      userChallenges[userId] = options.challenge;
+      userChallenges[cleanUserId] = {
+        challenge: options.challenge,
+        timestamp: Date.now()
+      };
       res.json(options);
     } catch (error: any) {
-      console.error(`[WebAuthn] Authentication options generation error for userId: ${req.body.userId}:`, error);
+      console.error(`[WebAuthn] Authentication options generation error:`, error?.name || error?.message);
       res.status(500).json({ error: error.message });
     }
   });
@@ -380,36 +450,48 @@ try {
   app.post("/api/webauthn/verify-authentication", async (req, res) => {
     try {
       const { userId, response, authenticator } = req.body;
-      const expectedChallenge = userChallenges[userId];
+      const key = (userId || 'authenticated_user').trim();
+      const challengeEntry = userChallenges[key];
       
-      if (!expectedChallenge) {
-        return res.status(400).json({ error: "Challenge not found" });
+      if (!challengeEntry) {
+        return res.status(400).json({ error: "Challenge not found or expired" });
       }
 
-      const expectedOrigin = req.headers.origin!;
-      const expectedRPID = process.env.NODE_ENV === 'production' ? 'smartledgerx.vercel.app' : (req.headers.host?.split(':')[0] || 'localhost');
+      // Check 5-minute timeout window
+      if (Date.now() - challengeEntry.timestamp > 300000) {
+        delete userChallenges[key];
+        return res.status(400).json({ error: "Challenge expired" });
+      }
+
+      const { expectedRPID, expectedOrigin } = getRelyingPartyConfig(req);
 
       const verification = await verifyAuthenticationResponse({
         response,
-        expectedChallenge,
+        expectedChallenge: challengeEntry.challenge,
         expectedOrigin,
         expectedRPID,
         credential: {
           id: authenticator.id,
           publicKey: Uint8Array.from(Buffer.from(authenticator.publicKey, 'base64url')),
-          counter: 0,
-        }
+          counter: authenticator.counter || 0,
+        },
+        requireUserVerification: true,
       });
       
       if (verification.verified) {
-        delete userChallenges[userId];
+        delete userChallenges[key];
+        if (isDevMode) {
+          console.log(`[WebAuthn Dev] Authentication verified successfully`);
+        }
         res.json({ verified: true });
       } else {
-        console.warn(`[WebAuthn] Authentication verification failed for userId: ${userId}`);
+        if (isDevMode) {
+          console.warn(`[WebAuthn Dev] Authentication signature verification did not pass`);
+        }
         res.json({ verified: false });
       }
     } catch (error: any) {
-      console.error(`[WebAuthn] Authentication verification error for userId: ${req.body.userId}:`, error);
+      console.error(`[WebAuthn] Authentication verification error:`, error?.name || error?.message);
       res.status(500).json({ error: error.message });
     }
   });
@@ -1294,21 +1376,24 @@ try {
         </html>
       `;
 
+      const cleanEmail = String(email || '').trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        res.status(400).json({ error: "Invalid recipient email address format." });
+        return;
+      }
+
       const domains = await resend.domains.list();
       const domainList = Array.isArray(domains.data) ? domains.data : (domains.data?.data || []);
       const verifiedDomain = domainList.find((d: any) => d.status === 'verified');
       
-      let fromAddress = "SmartLedger <onboarding@resend.dev>";
-      let finalToAddress = email;
-      
+      let fromAddress = process.env.RESEND_FROM_EMAIL || "SmartLedger <onboarding@resend.dev>";
       if (verifiedDomain) {
         fromAddress = `SmartLedger <updates@${verifiedDomain.name}>`;
-      } else {
-        // Testing mode override
-        finalToAddress = process.env.RESEND_OWNER_EMAIL || "souvikdashbbsr@gmail.com";
       }
 
-      console.log(`Sending HTML email to ${finalToAddress}...`);
+      const finalToAddress = cleanEmail;
+
+      console.log(`Sending HTML report email to configured recipient: ${finalToAddress}...`);
       const data = await resend.emails.send({
         from: fromAddress,
         to: finalToAddress,
@@ -1340,6 +1425,11 @@ try {
       if (!email) {
         return res.status(400).json({ error: "Missing email" });
       }
+      const cleanEmail = String(email).trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        return res.status(400).json({ error: "Invalid email format." });
+      }
+
       const resendApiKey = process.env.RESEND_API_KEY;
       if (!resendApiKey) {
         // Return simulated success with generated statistics
@@ -1347,32 +1437,23 @@ try {
           success: true, 
           fileSizeXlsx: 2048, 
           fileSizePdf: 1024,
+          deliveredTo: cleanEmail,
           note: "Report generated successfully (local mode)."
         });
       }
 
-      const result = await generateAndSendReport(email, month, transactions || [], customers || [], includePdf, aiSummary, resendApiKey, gullakEntries || []);
+      const result = await generateAndSendReport(cleanEmail, month, transactions || [], customers || [], includePdf, aiSummary, resendApiKey, gullakEntries || []);
       
       if (result.success) {
         return res.json({ 
           success: true, 
           fileSizeXlsx: result.fileSizeXlsx, 
           fileSizePdf: result.fileSizePdf,
-          deliveredTo: email
+          deliveredTo: cleanEmail
         });
       } else {
-        let errorMsg = result.error?.message || 'Email delivery could not complete';
-        // If it's a domain/sandbox warning, treat as deliverable in testing mode
-        if (errorMsg.includes("verify") || errorMsg.includes("onboarding") || errorMsg.includes("testing emails")) {
-          return res.json({
-            success: true,
-            fileSizeXlsx: result.fileSizeXlsx || 1500,
-            fileSizePdf: result.fileSizePdf || 800,
-            deliveredTo: email,
-            warning: "Delivered via development mode sandbox"
-          });
-        }
-        return res.status(500).json({ error: errorMsg });
+        const errorMsg = result.error?.message || 'Email delivery could not complete';
+        return res.status(400).json({ error: errorMsg, deliveredTo: cleanEmail });
       }
     } catch (e: any) {
       return res.status(500).json({ error: e.message || 'An error occurred' });
@@ -1424,26 +1505,12 @@ try {
           }
         } catch (err) {}
 
-        const sendResult = await resend.emails.send({
+        await resend.emails.send({
           from: fromAddress,
           to: cleanEmail,
           subject: 'Verify your email address for SmartLedger Monthly Reports',
           html: htmlContent,
         });
-
-        // If sandbox error occurs, also forward notice to developer account
-        if (sendResult.error && (sendResult.error.message.includes("testing emails") || sendResult.error.message.includes("verify a domain"))) {
-          console.warn("[Verify Email] Resend sandbox restriction active. Target was:", cleanEmail);
-          const ownerEmail = process.env.RESEND_OWNER_EMAIL || "souvikdashbbsr@gmail.com";
-          try {
-            await resend.emails.send({
-              from: fromAddress,
-              to: ownerEmail,
-              subject: `SmartLedger Verification for ${cleanEmail} (Sandbox)`,
-              html: `<p>Target user registered email: <strong>${cleanEmail}</strong></p>` + htmlContent
-            });
-          } catch (e) {}
-        }
       } catch (sendErr) {
         console.warn("[Verify Email] Non-fatal send error:", sendErr);
       }
@@ -1475,6 +1542,12 @@ try {
         return;
       }
 
+      const cleanEmail = String(email).trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        res.status(400).json({ error: "Invalid email format." });
+        return;
+      }
+
       const resendApiKey = process.env.RESEND_API_KEY;
       if (!resendApiKey) {
         console.error("Missing RESEND_API_KEY in environment variables.");
@@ -1490,7 +1563,7 @@ try {
           <div style="padding: 32px 24px;">
             <p style="color: #475569; font-size: 16px; margin: 0 0 16px;">Hello,</p>
             <p style="color: #475569; font-size: 16px; margin: 0 0 16px;">This is a test email from SmartLedger.</p>
-            <p style="color: #475569; font-size: 16px; margin: 0 0 16px;">If you received this email, the email system is working correctly.</p>
+            <p style="color: #475569; font-size: 16px; margin: 0 0 16px;">If you received this email at <strong>${cleanEmail}</strong>, the email routing system is working correctly.</p>
           </div>
           <div style="background: #f1f5f9; padding: 16px; text-align: center; border-top: 1px solid #e2e8f0;">
             <p style="margin: 0; color: #94a3b8; font-size: 12px;">Generated Automatically by SmartLedger.</p>
@@ -1502,17 +1575,13 @@ try {
       const domainList = Array.isArray(domains.data) ? domains.data : (domains.data?.data || []);
       const verifiedDomain = domainList.find((d: any) => d.status === 'verified');
       
-      let fromAddress = "SmartLedger <onboarding@resend.dev>";
-      let finalToAddress = email;
-      
+      let fromAddress = process.env.RESEND_FROM_EMAIL || "SmartLedger <onboarding@resend.dev>";
       if (verifiedDomain) {
         fromAddress = `SmartLedger <updates@${verifiedDomain.name}>`;
-      } else {
-        // Testing mode override
-        finalToAddress = process.env.RESEND_OWNER_EMAIL || "souvikdashbbsr@gmail.com";
       }
+      const finalToAddress = cleanEmail;
 
-      console.log(`Sending HTML email to ${finalToAddress}...`);
+      console.log(`Sending HTML test email to configured recipient: ${finalToAddress}...`);
       const data = await resend.emails.send({
         from: fromAddress,
         to: finalToAddress,
@@ -1531,7 +1600,7 @@ try {
       }
 
       console.log("Email delivery successful! Message ID:", data.data?.id);
-      res.json({ success: true, messageId: data.data?.id });
+      res.json({ success: true, messageId: data.data?.id, deliveredTo: finalToAddress });
     } catch (error: any) {
       console.error("Email Error:", error);
       res.status(500).json({ error: error.message || "An error occurred while sending the email." });
@@ -1552,8 +1621,7 @@ try {
         return res.json({
           configured: true,
           isTestingMode: true,
-          fromAddress: "SmartLedger <onboarding@resend.dev>",
-          ownerEmail: process.env.RESEND_OWNER_EMAIL || "souvikdashbbsr@gmail.com",
+          fromAddress: process.env.RESEND_FROM_EMAIL || "SmartLedger <onboarding@resend.dev>",
           error: domains.error.message
         });
       }
@@ -1571,8 +1639,7 @@ try {
         res.json({
           configured: true,
           isTestingMode: true,
-          fromAddress: "SmartLedger <onboarding@resend.dev>",
-          ownerEmail: process.env.RESEND_OWNER_EMAIL || "souvikdashbbsr@gmail.com"
+          fromAddress: process.env.RESEND_FROM_EMAIL || "SmartLedger <onboarding@resend.dev>"
         });
       }
     } catch (err: any) {

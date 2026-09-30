@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
-import { auth } from '../lib/firebase';
-import { setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { auth, ensureAuthPersistence } from '../lib/firebase';
 import LockScreen from './LockScreen';
 import { ShieldCheck } from 'lucide-react';
 
@@ -14,12 +13,21 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
   const { 
     currentUser, 
     isAuthReady, 
+    securitySettings,
     unlockApp: storeUnlockApp, 
     lockApp: storeLockApp 
   } = useStore();
   
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Determine if user has actively configured and enabled PIN or biometric security
+  const isPinOrBiometricEnabled = Boolean(
+    (securitySettings?.pinEnabled && securitySettings?.pin) || 
+    securitySettings?.biometricEnabled || 
+    securitySettings?.faceUnlockEnabled ||
+    localStorage.getItem('faceUnlockEnabled') === 'true'
+  );
 
   // Local unlock state backed by sessionStorage ('isUnlocked')
   const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
@@ -30,10 +38,10 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
     }
   });
 
-  // 1. Ensure Firebase Auth uses browser local persistence so Google login survives page refresh & auto-lock
+  // 1. Ensure Firebase Auth uses browser local persistence so Google login survives page refresh & closure
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setPersistence(auth, browserLocalPersistence)
+      ensureAuthPersistence()
         .then(() => {
           console.log('[SecurityWrapper] Firebase Auth persistence verified as browserLocalPersistence');
         })
@@ -62,9 +70,10 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
     };
   }, []);
 
-  // 3. Local Lock Function - strictly locks the local UI without signing out of Firebase/Google
+  // 3. Local Lock Function - strictly locks the local UI when PIN is configured, never signs out of Google
   const lockAppLocally = useCallback(() => {
-    console.log('[Auto-Lock] 5 minutes of inactivity reached. Locking local UI.');
+    if (!isPinOrBiometricEnabled) return;
+    console.log('[Auto-Lock] Inactivity threshold reached. Locking local UI with PIN protection.');
     try {
       sessionStorage.removeItem('isUnlocked');
     } catch (e) {
@@ -72,11 +81,11 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
     }
     setIsUnlocked(false);
     storeLockApp();
-  }, [storeLockApp]);
+  }, [storeLockApp, isPinOrBiometricEnabled]);
 
   // 4. Unlock Handler - unlocks local UI upon successful Face or PIN verification
   const handleUnlock = useCallback(() => {
-    console.log('[Security] App unlocked successfully via Face / PIN.');
+    console.log('[Security] App unlocked successfully.');
     try {
       sessionStorage.setItem('isUnlocked', 'true');
     } catch (e) {
@@ -92,15 +101,16 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
     }
   }, [storeUnlockApp, location.pathname, navigate]);
 
-  // 5. Inactivity Timer (5 Minutes)
-  // Tracks user activity: on 5 minutes of inactivity, locks local UI only.
-  // Never calls signOut(auth), never clears Firebase session, never clears localStorage.
-  const AUTO_LOCK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+  // 5. Inactivity Timer
+  // Only applies when user is authenticated, has enabled PIN/biometrics, and autoLogout is active
+  const timeoutMinutes = securitySettings?.inactivityTimeout ?? 30;
+  const isAutoLogout = securitySettings?.autoLogoutEnabled !== false;
+  const AUTO_LOCK_TIMEOUT_MS = Math.max(1, timeoutMinutes) * 60 * 1000;
   const lastActivityRef = useRef<number>(Date.now());
 
   useEffect(() => {
-    // Only track inactivity when user is authenticated with Firebase and currently unlocked
-    if (!currentUser || !isUnlocked) return;
+    // Only track inactivity when user is authenticated with Firebase, has PIN configured, and is currently unlocked
+    if (!currentUser || !isUnlocked || !isPinOrBiometricEnabled || !isAutoLogout) return;
 
     // Do not auto-lock while inside admin dashboard
     if (location.pathname.startsWith('/admin')) return;
@@ -126,7 +136,7 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
       if (elapsed >= AUTO_LOCK_TIMEOUT_MS) {
         lockAppLocally();
       }
-    }, 1000);
+    }, 5000);
 
     return () => {
       cancelAnimationFrame(rafId);
@@ -135,7 +145,7 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
       });
       clearInterval(interval);
     };
-  }, [currentUser, isUnlocked, location.pathname, lockAppLocally]);
+  }, [currentUser, isUnlocked, isPinOrBiometricEnabled, isAutoLogout, AUTO_LOCK_TIMEOUT_MS, location.pathname, lockAppLocally]);
 
   // ===========================================================================
   // RENDER PRIORITY HIERARCHY
@@ -162,28 +172,26 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
     );
   }
 
-  // Priority B: There IS a Firebase user -> Proceed to lock or dashboard
-  // Priority C: NO Firebase user, BUT we have a local biometric credential ->
-  // try to unlock via biometric first, then auto-login.
-  // Priority D: NO Firebase user AND no biometric -> render Google Sign-In page
-  
+  // Priority B: No authenticated Firebase user -> render children (AppRoutes renders LoginRoute)
   if (!currentUser) {
-    // If biometric credential exists, try to unlock via biometric first
+    // If standalone biometric credential exists locally and user wants to use it
     const hasBiometricConfigured = localStorage.getItem('biometricCredentialId');
     if (hasBiometricConfigured && !isUnlocked) {
-        return <LockScreen onUnlock={handleUnlock} />;
+      return <LockScreen onUnlock={handleUnlock} />;
     }
     return <>{children}</>;
   }
 
-  // Priority C: There IS a Firebase user, but sessionStorage.isUnlocked !== "true"
-  // Render local lock screen: Face Unlock first priority, PIN fallback second priority
-  const isLocallyUnlocked = isUnlocked && sessionStorage.getItem('isUnlocked') === 'true';
-  if (!isLocallyUnlocked) {
-    return <LockScreen onUnlock={handleUnlock} />;
+  // Priority C: Authenticated Firebase user with active PIN / biometric protection
+  // Only present LockScreen if PIN is actually configured and session is not yet unlocked
+  if (isPinOrBiometricEnabled) {
+    const isLocallyUnlocked = isUnlocked && sessionStorage.getItem('isUnlocked') === 'true';
+    if (!isLocallyUnlocked) {
+      return <LockScreen onUnlock={handleUnlock} />;
+    }
   }
 
-  // Priority D: There IS a Firebase user AND sessionStorage.isUnlocked === "true"
-  // Render the main Smart Ledger X dashboard
+  // Priority D: Authenticated Firebase user with no PIN enabled OR already unlocked
+  // Render the main Smart Ledger X dashboard seamlessly
   return <>{children}</>;
 }

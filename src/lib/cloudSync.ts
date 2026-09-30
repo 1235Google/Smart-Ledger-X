@@ -188,6 +188,15 @@ class SyncQueueManager {
       gullakCount: state.gullakEntries?.length || 0,
       lastTxId: state.transactions?.[0]?.id || '',
       updatedAt: state.userProfile?.fullName || '',
+      reportEmail: state.reportSettings?.emailAddress || '',
+      emailSettingsEmail: state.emailSettings?.emailAddress || '',
+      reportSchedule: state.reportSettings?.schedule,
+      reportIncludePdf: state.reportSettings?.includePdf,
+      emailSettingsEnabled: state.emailSettings?.enabled,
+      faceUnlockEnabled: state.securitySettings?.faceUnlockEnabled,
+      biometricEnabled: state.securitySettings?.biometricEnabled,
+      registeredDevicesCount: state.securitySettings?.registeredDevices?.length || 0,
+      pinEnabled: state.securitySettings?.pinEnabled,
     });
 
     if (currentHash === this.lastSyncedHash && !this.pendingState) {
@@ -293,6 +302,15 @@ class SyncQueueManager {
         gullakCount: state.gullakEntries?.length || 0,
         lastTxId: state.transactions?.[0]?.id || '',
         updatedAt: state.userProfile?.fullName || '',
+        reportEmail: state.reportSettings?.emailAddress || '',
+        emailSettingsEmail: state.emailSettings?.emailAddress || '',
+        reportSchedule: state.reportSettings?.schedule,
+        reportIncludePdf: state.reportSettings?.includePdf,
+        emailSettingsEnabled: state.emailSettings?.enabled,
+        faceUnlockEnabled: state.securitySettings?.faceUnlockEnabled,
+        biometricEnabled: state.securitySettings?.biometricEnabled,
+        registeredDevicesCount: state.securitySettings?.registeredDevices?.length || 0,
+        pinEnabled: state.securitySettings?.pinEnabled,
       });
 
       this.pendingState = null;

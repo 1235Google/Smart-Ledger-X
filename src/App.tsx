@@ -1,9 +1,8 @@
 import React, { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { StoreProvider, useStore } from './context/StoreContext';
 import Layout from './components/Layout';
 import SecurityWrapper from './components/SecurityWrapper';
-
 import MaintenanceScreen from './components/MaintenanceScreen';
 
 // Lazy load all page routes
@@ -48,16 +47,35 @@ const AdminTrustedDevices = lazy(() => import('./pages/admin/AdminTrustedDevices
 
 const Login = lazy(() => import('./pages/Login'));
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isAuthReady, systemConfig, isAdminAuthenticated } = useStore();
-  
-  if (!isAuthReady) {
-    return (
-      <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center gap-3">
-        <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-xs text-neutral-400 font-medium">Verifying authentication...</p>
+/**
+ * Loading & Splash screen displayed while Firebase Auth restores user session
+ */
+function AuthLoadingScreen({ message }: { message?: string }) {
+  return (
+    <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center gap-4 text-white select-none">
+      <div className="relative flex items-center justify-center">
+        <div className="w-12 h-12 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+        <div className="w-3 h-3 bg-indigo-500 rounded-full animate-ping absolute" />
       </div>
-    );
+      <div className="text-center space-y-1">
+        <p className="text-sm font-semibold tracking-wide text-neutral-200">Smart Ledger X</p>
+        <p className="text-xs text-neutral-400 font-medium">{message || 'Restoring secure authentication...'}</p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ProtectedRoute:
+ * - If authLoading === true -> show loading/splash screen (never redirect prematurely)
+ * - If authLoading === false && user -> render protected content
+ * - If authLoading === false && !user -> redirect to /login
+ */
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, isAuthenticated, authLoading, isAuthReady, systemConfig, isAdminAuthenticated } = useStore();
+  
+  if (authLoading || !isAuthReady) {
+    return <AuthLoadingScreen message="Verifying authentication session..." />;
   }
 
   // If system is in maintenance mode and user is not an administrator, show maintenance screen
@@ -65,22 +83,25 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <MaintenanceScreen />;
   }
 
-  if (!isAuthenticated) {
+  const hasAuthenticatedUser = Boolean(user || isAuthenticated);
+  if (!hasAuthenticatedUser) {
     return <Navigate to="/login" replace />;
   }
+
   return <>{children}</>;
 }
 
+/**
+ * LoginRoute:
+ * - While authLoading === true -> show loading/splash (NEVER show login screen while Firebase is restoring)
+ * - If user exists (user !== null) -> automatically redirect to dashboard ("/")
+ * - If Firebase finished initializing and user is null -> show login screen
+ */
 function LoginRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isAuthReady, systemConfig, isAdminAuthenticated } = useStore();
+  const { user, isAuthenticated, authLoading, isAuthReady, systemConfig, isAdminAuthenticated } = useStore();
   
-  if (!isAuthReady) {
-    return (
-      <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center gap-3">
-        <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-xs text-neutral-400 font-medium">Loading Smart Ledger...</p>
-      </div>
-    );
+  if (authLoading || !isAuthReady) {
+    return <AuthLoadingScreen message="Loading Smart Ledger..." />;
   }
 
   // If system is in maintenance mode and user is not an administrator, show maintenance screen
@@ -88,9 +109,11 @@ function LoginRoute({ children }: { children: React.ReactNode }) {
     return <MaintenanceScreen />;
   }
 
-  if (isAuthenticated) {
+  const hasAuthenticatedUser = Boolean(user || isAuthenticated);
+  if (hasAuthenticatedUser) {
     return <Navigate to="/" replace />;
   }
+
   return <>{children}</>;
 }
 
@@ -99,12 +122,9 @@ import { ToastProvider } from './context/ToastContext';
 import { NotificationProvider } from './context/NotificationContext';
 import ToastContainer from './components/ui/ToastContainer';
 import CommandPalette from './components/CommandPalette';
-
 import SplashScreen from './components/SplashScreen';
 import AutomaticBackupRunner from './components/AutomaticBackupRunner';
 import PageTransitionWrapper from './components/PageTransitionWrapper';
-
-import { useLocation } from 'react-router-dom';
 
 function AppRoutes() {
   const location = useLocation();
@@ -175,25 +195,48 @@ function AppRoutes() {
   );
 }
 
-export default function App() {
-  const [showSplash, setShowSplash] = React.useState(true);
+/**
+ * MainAppContent synchronizes brand splash display with Firebase auth initialization.
+ * The splash screen only hides when auth has resolved (authLoading === false) AND
+ * the initial brand animation duration has elapsed.
+ */
+function MainAppContent() {
+  const { authLoading, isAuthReady } = useStore();
+  const [minSplashDone, setMinSplashDone] = React.useState(false);
 
+  React.useEffect(() => {
+    // Minimum cinematic brand splash duration (800ms)
+    const timer = setTimeout(() => {
+      setMinSplashDone(true);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // While authLoading is true or initial splash duration is running, show SplashScreen
+  const isInitializing = authLoading || !isAuthReady || !minSplashDone;
+
+  if (isInitializing) {
+    return <SplashScreen onComplete={() => {}} />;
+  }
+
+  return (
+    <SecurityWrapper>
+      <AutomaticBackupRunner />
+      <AppRoutes />
+      <CommandPalette />
+      <ToastContainer />
+    </SecurityWrapper>
+  );
+}
+
+export default function App() {
   return (
     <ErrorBoundary>
       <StoreProvider>
         <NotificationProvider>
           <ToastProvider>
             <BrowserRouter>
-              {showSplash ? (
-                <SplashScreen onComplete={() => setShowSplash(false)} />
-              ) : (
-                <SecurityWrapper>
-                  <AutomaticBackupRunner />
-                  <AppRoutes />
-                  <CommandPalette />
-                  <ToastContainer />
-                </SecurityWrapper>
-              )}
+              <MainAppContent />
             </BrowserRouter>
           </ToastProvider>
         </NotificationProvider>
@@ -201,4 +244,3 @@ export default function App() {
     </ErrorBoundary>
   );
 }
-

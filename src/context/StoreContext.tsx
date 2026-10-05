@@ -99,6 +99,7 @@ interface StoreContextType extends AppState {
   totalSent: number;
   totalPending: number;
   isLoading: boolean;
+  authLoading: boolean;
   isAuthReady: boolean;
   dataStatus: DataLoadStatus;
   dataError: string | null;
@@ -121,6 +122,7 @@ interface StoreContextType extends AppState {
   unlockApp: (pin?: string) => boolean;
   lockApp: () => void;
   loginWithPin: (pin: string) => boolean;
+  user: User | null;
   currentUser: User | null;
   isAuthenticated: boolean;
   logout: () => Promise<void>;
@@ -248,6 +250,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   });
 
   const [isLoading, setIsLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [dataStatus, setDataStatus] = useState<DataLoadStatus>('loading');
   const [dataError, setDataError] = useState<string | null>(null);
@@ -274,6 +277,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       });
     }
   }, []);
+  const [user, setUser] = useState<User | null>(() => auth.currentUser);
   const [currentUser, setCurrentUser] = useState<User | null>(() => auth.currentUser);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => Boolean(auth.currentUser));
 
@@ -397,8 +401,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       
       if (user) {
+        setUser(user);
         setCurrentUser(user);
         setIsAuthenticated(true);
+        setAuthLoading(false);
         setIsAuthReady(true);
         try {
           const pinEnabled = state.securitySettings?.pinEnabled && Boolean(state.securitySettings?.pin);
@@ -508,8 +514,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } else {
+        setUser(null);
         setCurrentUser(null);
         setIsAuthenticated(false);
+        setAuthLoading(false);
         setIsAuthReady(true);
         setIsLocked(false);
         try {
@@ -534,6 +542,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }, (authError) => {
       console.error('[Auth State Error]', authError);
       if (isSubscribed) {
+        setUser(null);
+        setCurrentUser(null);
+        setIsAuthenticated(false);
+        setAuthLoading(false);
         setIsAuthReady(true);
         setDataError(authError?.message || 'Authentication error');
         setDataStatus('error');
@@ -629,8 +641,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {}
     setState(defaultState);
     prevStateRef.current = defaultState;
+    setUser(null);
     setCurrentUser(null);
     setIsAuthenticated(false);
+    setAuthLoading(false);
+    setIsAuthReady(true);
   };
 
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
@@ -1651,6 +1666,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       totalSent,
       totalPending,
       isLoading,
+      authLoading,
       isAuthReady,
       dataStatus,
       dataError,
@@ -1670,6 +1686,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       unlockApp,
       lockApp,
       loginWithPin,
+      user,
       currentUser,
       isAuthenticated,
       logout,

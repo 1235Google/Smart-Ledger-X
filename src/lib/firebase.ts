@@ -9,11 +9,12 @@ import {
 } from 'firebase/firestore';
 import { 
   getAuth, 
+  initializeAuth,
   GoogleAuthProvider, 
   signInWithPopup, 
   signInWithRedirect,
   signInWithCredential,
-  getRedirectResult,
+  getRedirectResult, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   sendPasswordResetEmail, 
@@ -22,6 +23,7 @@ import {
   onAuthStateChanged,
   setPersistence,
   browserLocalPersistence,
+  indexedDBLocalPersistence,
   browserPopupRedirectResolver,
   User
 } from 'firebase/auth';
@@ -50,10 +52,25 @@ const firestoreDbId = (rawConfig as any).firestoreDatabaseId && (rawConfig as an
 const db = firestoreDbId ? getFirestore(app, firestoreDbId) : getFirestore(app);
 console.log('[Firebase Init] Firestore instance ready. DB ID:', firestoreDbId || '(default)');
 
-const auth = getAuth(app);
+// Initialize Auth with browserLocalPersistence from the start so sessions survive refresh & restarts
+let authInstance: any;
+if (typeof window !== 'undefined') {
+  try {
+    authInstance = initializeAuth(app, {
+      persistence: [browserLocalPersistence, indexedDBLocalPersistence],
+      popupRedirectResolver: browserPopupRedirectResolver,
+    });
+    console.log('[Firebase Init] Auth initialized with browserLocalPersistence');
+  } catch (e) {
+    authInstance = getAuth(app);
+  }
+} else {
+  authInstance = getAuth(app);
+}
+const auth = authInstance;
 console.log('[Firebase Init] Auth instance ready');
 
-// Dedicated persistence lock to guarantee browserLocalPersistence is set once and awaited before logins
+// Dedicated persistence lock to guarantee browserLocalPersistence is explicitly set and awaited before logins
 let persistencePromise: Promise<void> | null = null;
 export async function ensureAuthPersistence(): Promise<void> {
   if (typeof window === 'undefined') return;
@@ -210,7 +227,6 @@ export async function testConnection() {
 
 /**
  * Ensures user profile and initial app records exist in Firestore after login
- * Task 5: Store uid, name, email, photoURL, createdAt without failing login on temporary errors
  */
 export async function ensureUserProfileDoc(user: User, customFullName?: string): Promise<void> {
   if (!user || !user.uid) return;
@@ -237,30 +253,40 @@ export async function ensureUserProfileDoc(user: User, customFullName?: string):
       console.log('[Firebase Auth] User profile document already exists for:', user.uid);
     }
   } catch (err) {
-    // Non-fatal: Do not block authentication if Firestore document creation encounters temporary issue
     console.warn('[Firebase Auth] User profile document notice (non-fatal):', err);
   }
 }
 
 /**
- * Google Sign-In with automatic error classification and debug logging
- * Task 1, 4, 7: Audit Google auth flow, handle popup-closed-by-user, log details
+ * Google Sign-In with browserLocalPersistence guaranteed before popup
  */
 export async function loginWithGoogle(): Promise<{ user: User }> {
   console.log('[Firebase Auth] Ensuring browserLocalPersistence before Google sign in...');
   await ensureAuthPersistence();
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+  } catch (pErr) {
+    console.warn('[Firebase Auth] setPersistence notice:', pErr);
+  }
+  
   console.log('[Firebase Auth] Launching signInWithPopup for Google...');
   try {
     const result = await signInWithPopup(auth, googleProvider, browserPopupRedirectResolver);
     const user = result.user;
     
-    // Debug logging as required by Task 7
     console.log('[Auth Debug] Google Login Success');
     console.log('[Auth Debug] Firebase currentUser:', auth.currentUser?.email);
     console.log('[Auth Debug] UID:', user.uid);
     console.log('[Auth Debug] Email:', user.email);
     console.log('[Auth Debug] Display Name:', user.displayName);
     console.log('[Auth Debug] Provider:', user.providerData?.[0]?.providerId || 'google.com');
+
+    // Persist session hint to survive browser restart/reopen
+    try {
+      localStorage.setItem('smartledger_authenticated', 'true');
+      localStorage.setItem('lastAuthUserId', user.uid);
+      if (user.email) localStorage.setItem('lastAuthUserEmail', user.email);
+    } catch (e) {}
 
     // Create user profile in Firestore if needed (asynchronous & non-blocking)
     ensureUserProfileDoc(user).catch((err) => {
@@ -303,6 +329,11 @@ export async function loginWithGoogleCredential(idToken: string): Promise<{ user
   console.log('[Firebase Auth] Initiating signInWithCredential with Google ID token...');
   await ensureAuthPersistence();
   try {
+    await setPersistence(auth, browserLocalPersistence);
+  } catch (pErr) {
+    console.warn('[Firebase Auth] setPersistence notice:', pErr);
+  }
+  try {
     const credential = GoogleAuthProvider.credential(idToken);
     const result = await signInWithCredential(auth, credential);
     const user = result.user;
@@ -311,6 +342,12 @@ export async function loginWithGoogleCredential(idToken: string): Promise<{ user
     console.log('[Auth Debug] Firebase currentUser:', auth.currentUser?.email);
     console.log('[Auth Debug] UID:', user.uid);
     console.log('[Auth Debug] Email:', user.email);
+
+    try {
+      localStorage.setItem('smartledger_authenticated', 'true');
+      localStorage.setItem('lastAuthUserId', user.uid);
+      if (user.email) localStorage.setItem('lastAuthUserEmail', user.email);
+    } catch (e) {}
 
     ensureUserProfileDoc(user).catch((err) => {
       console.warn('[Firebase Auth] Profile creation notice:', err);
@@ -335,6 +372,13 @@ export async function checkRedirectResult(): Promise<User | null> {
       console.log('[Firebase Auth] Successfully processed redirect sign-in for:', result.user.uid);
       console.log('[Auth Debug] Redirect User UID:', result.user.uid);
       console.log('[Auth Debug] Redirect User Email:', result.user.email);
+
+      try {
+        localStorage.setItem('smartledger_authenticated', 'true');
+        localStorage.setItem('lastAuthUserId', result.user.uid);
+        if (result.user.email) localStorage.setItem('lastAuthUserEmail', result.user.email);
+      } catch (e) {}
+
       ensureUserProfileDoc(result.user).catch((err) => {
         console.warn('[Firebase Auth] Background profile creation notice on redirect:', err);
       });
@@ -351,6 +395,11 @@ export async function checkRedirectResult(): Promise<User | null> {
  */
 export async function loginWithEmail(email: string, pass: string) {
   await ensureAuthPersistence();
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+  } catch (pErr) {
+    console.warn('[Firebase Auth] setPersistence notice:', pErr);
+  }
   const cleanEmail = email.trim().toLowerCase();
   const cleanPass = pass.trim();
   
@@ -367,6 +416,11 @@ export async function loginWithEmail(email: string, pass: string) {
 
   const cred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPass);
   if (cred.user) {
+    try {
+      localStorage.setItem('smartledger_authenticated', 'true');
+      localStorage.setItem('lastAuthUserId', cred.user.uid);
+      if (cred.user.email) localStorage.setItem('lastAuthUserEmail', cred.user.email);
+    } catch (e) {}
     await ensureUserProfileDoc(cred.user);
   }
   return cred;
@@ -377,6 +431,11 @@ export async function loginWithEmail(email: string, pass: string) {
  */
 export async function registerWithEmail(email: string, pass: string, fullName?: string) {
   await ensureAuthPersistence();
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+  } catch (pErr) {
+    console.warn('[Firebase Auth] setPersistence notice:', pErr);
+  }
   const cleanEmail = email.trim().toLowerCase();
   const cleanPass = pass.trim();
   const cleanName = fullName?.trim();
@@ -394,6 +453,12 @@ export async function registerWithEmail(email: string, pass: string, fullName?: 
 
   const cred = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPass);
   if (cred.user) {
+    try {
+      localStorage.setItem('smartledger_authenticated', 'true');
+      localStorage.setItem('lastAuthUserId', cred.user.uid);
+      if (cred.user.email) localStorage.setItem('lastAuthUserEmail', cred.user.email);
+    } catch (e) {}
+
     if (cleanName) {
       try {
         await updateProfile(cred.user, { displayName: cleanName });
@@ -423,6 +488,11 @@ export async function requestPasswordReset(email: string) {
  * Sign out current user
  */
 export async function logoutUser() {
+  try {
+    localStorage.removeItem('smartledger_authenticated');
+    localStorage.removeItem('lastAuthUserId');
+    localStorage.removeItem('lastAuthUserEmail');
+  } catch (e) {}
   return await signOut(auth);
 }
 

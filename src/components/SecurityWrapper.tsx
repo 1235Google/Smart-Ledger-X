@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
-import { auth, ensureAuthPersistence } from '../lib/firebase';
+import { ensureAuthPersistence } from '../lib/firebase';
 import LockScreen from './LockScreen';
 import { ShieldCheck } from 'lucide-react';
 
@@ -11,22 +11,23 @@ interface SecurityWrapperProps {
 
 export default function SecurityWrapper({ children }: SecurityWrapperProps) {
   const { 
+    user,
     currentUser, 
+    authLoading,
     isAuthReady, 
     securitySettings,
     unlockApp: storeUnlockApp, 
     lockApp: storeLockApp 
   } = useStore();
   
+  const activeUser = user || currentUser;
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Determine if user has actively configured and enabled PIN or biometric security
+  // Determine if user has actively configured and enabled PIN protection
+  // Only apply lock screen if PIN is explicitly enabled AND a PIN is actually configured
   const isPinOrBiometricEnabled = Boolean(
-    (securitySettings?.pinEnabled && securitySettings?.pin) || 
-    securitySettings?.biometricEnabled || 
-    securitySettings?.faceUnlockEnabled ||
-    localStorage.getItem('faceUnlockEnabled') === 'true'
+    securitySettings?.pinEnabled && Boolean(securitySettings?.pin)
   );
 
   // Local unlock state backed by sessionStorage ('isUnlocked')
@@ -110,7 +111,7 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
 
   useEffect(() => {
     // Only track inactivity when user is authenticated with Firebase, has PIN configured, and is currently unlocked
-    if (!currentUser || !isUnlocked || !isPinOrBiometricEnabled || !isAutoLogout) return;
+    if (!activeUser || !isUnlocked || !isPinOrBiometricEnabled || !isAutoLogout) return;
 
     // Do not auto-lock while inside admin dashboard
     if (location.pathname.startsWith('/admin')) return;
@@ -145,7 +146,7 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
       });
       clearInterval(interval);
     };
-  }, [currentUser, isUnlocked, isPinOrBiometricEnabled, isAutoLogout, AUTO_LOCK_TIMEOUT_MS, location.pathname, lockAppLocally]);
+  }, [activeUser, isUnlocked, isPinOrBiometricEnabled, isAutoLogout, AUTO_LOCK_TIMEOUT_MS, location.pathname, lockAppLocally]);
 
   // ===========================================================================
   // RENDER PRIORITY HIERARCHY
@@ -157,7 +158,7 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
   }
 
   // Priority A: Firebase auth is still loading -> show loading screen
-  if (!isAuthReady) {
+  if (authLoading || !isAuthReady) {
     return (
       <div className="min-h-screen bg-[#05060a] flex flex-col items-center justify-center gap-4 text-white select-none">
         <div className="relative flex items-center justify-center">
@@ -172,17 +173,12 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
     );
   }
 
-  // Priority B: No authenticated Firebase user -> render children (AppRoutes renders LoginRoute)
-  if (!currentUser) {
-    // If standalone biometric credential exists locally and user wants to use it
-    const hasBiometricConfigured = localStorage.getItem('biometricCredentialId');
-    if (hasBiometricConfigured && !isUnlocked) {
-      return <LockScreen onUnlock={handleUnlock} />;
-    }
+  // Priority B: No authenticated Firebase user -> pass through to AppRoutes (renders LoginRoute)
+  if (!activeUser) {
     return <>{children}</>;
   }
 
-  // Priority C: Authenticated Firebase user with active PIN / biometric protection
+  // Priority C: Authenticated Firebase user with active PIN protection
   // Only present LockScreen if PIN is actually configured and session is not yet unlocked
   if (isPinOrBiometricEnabled) {
     const isLocallyUnlocked = isUnlocked && sessionStorage.getItem('isUnlocked') === 'true';

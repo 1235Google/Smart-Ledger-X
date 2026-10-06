@@ -24,7 +24,8 @@ import {
   FileText,
   CheckCircle2,
   Calendar,
-  Sparkles
+  Sparkles,
+  Server
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -41,6 +42,7 @@ import {
 } from 'recharts';
 import { useStore } from '../../context/StoreContext';
 import { subscribeToAdminLogs } from '../../lib/adminAuthService';
+import { PaymentService, PaymentRecord } from '../../lib/paymentService';
 import { AdminSecurityLog } from '../../types';
 import { cn, formatDate } from '../../lib/utils';
 import { M3StatCard } from '../../components/admin/material3/M3StatCard';
@@ -48,7 +50,6 @@ import { M3Card } from '../../components/admin/material3/M3Card';
 import { M3Button } from '../../components/admin/material3/M3Button';
 import { M3DataTable, Column } from '../../components/admin/material3/M3DataTable';
 import { useM3Theme } from '../../components/admin/material3/M3ThemeContext';
-import SystemModeControlCard from '../../components/admin/SystemModeControlCard';
 
 export default function AdminDashboard() {
   const { 
@@ -59,19 +60,28 @@ export default function AdminDashboard() {
     currentBalance, 
     totalReceived, 
     totalSent, 
-    totalPending 
+    totalPending,
+    systemConfig
   } = useStore();
   const navigate = useNavigate();
   const { resolvedTheme } = useM3Theme();
   const isDark = resolvedTheme === 'dark';
 
   const [recentLogs, setRecentLogs] = useState<AdminSecurityLog[]>([]);
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
 
   useEffect(() => {
     const unsubscribe = subscribeToAdminLogs((logs) => {
       setRecentLogs(logs.slice(0, 5));
     }, 5);
 
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = PaymentService.subscribeToPayments((paymentsList) => {
+      setPayments(paymentsList);
+    });
     return () => unsubscribe();
   }, []);
 
@@ -287,7 +297,43 @@ export default function AdminDashboard() {
       </div>
 
       {/* Enterprise System Availability & Mode Control */}
-      <SystemModeControlCard />
+      <M3Card variant="elevated" padding="lg" className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-indigo-500/15 text-indigo-400 flex items-center justify-center shrink-0">
+            <Server size={20} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-sm">System Mode Status</span>
+              <span className={cn(
+                'px-2 py-0.5 rounded-full text-[10px] font-bold border inline-flex items-center gap-1',
+                systemConfig?.mode === 'normal' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' :
+                systemConfig?.mode === 'readonly' ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' :
+                'bg-rose-500/10 border-rose-500/30 text-rose-300'
+              )}>
+                <span className={cn(
+                  'w-1.5 h-1.5 rounded-full animate-pulse',
+                  systemConfig?.mode === 'normal' ? 'bg-emerald-500' :
+                  systemConfig?.mode === 'readonly' ? 'bg-amber-500' :
+                  'bg-rose-500'
+                )} />
+                {systemConfig?.mode?.toUpperCase() || 'NORMAL'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              Active Mode: {systemConfig?.mode === 'normal' ? 'All ledger writing and user access enabled' : systemConfig?.mode === 'readonly' ? 'Database state frozen (Read-only)' : 'Normal users blocked (Maintenance Mode)'}
+            </p>
+          </div>
+        </div>
+        <M3Button
+          variant="tonal"
+          size="sm"
+          icon={Settings}
+          onClick={() => navigate('/admin/system-mode')}
+        >
+          Manage State
+        </M3Button>
+      </M3Card>
 
       {/* Charts Section: Cash Flow Area Chart + Payment Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -405,7 +451,7 @@ export default function AdminDashboard() {
         </M3Card>
       </div>
 
-      {/* Tables Grid: Recent Transactions + Security Audit Mini Log */}
+      {/* Tables Grid: Recent Transactions + Side Feeds Column */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Ledger Entries */}
         <div className="lg:col-span-2">
@@ -428,54 +474,105 @@ export default function AdminDashboard() {
           />
         </div>
 
-        {/* Security Audit Feed */}
-        <M3Card variant="elevated" padding="lg" className="flex flex-col">
-          <div className="flex items-center justify-between pb-4 border-b border-[#e1e3e1]/60 dark:border-[#2d2f31]">
-            <div>
-              <h3 className={cn('font-bold text-base', isDark ? 'text-white' : 'text-[#1f1f1f]')}>
-                Security Audit Log
-              </h3>
-              <p className={cn('text-xs', isDark ? 'text-[#8e918f]' : 'text-[#5f6368]')}>
-                Live activity & auth attempts
-              </p>
+        {/* Right column feeds stack */}
+        <div className="space-y-6 flex flex-col">
+          {/* Outstanding Receivables Feed */}
+          <M3Card variant="elevated" padding="lg" className="flex flex-col">
+            <div className="flex items-center justify-between pb-4 border-b border-[#e1e3e1]/60 dark:border-[#2d2f31]">
+              <div>
+                <h3 className={cn('font-bold text-base', isDark ? 'text-white' : 'text-[#1f1f1f]')}>
+                  Outstanding Receivables
+                </h3>
+                <p className={cn('text-xs', isDark ? 'text-[#8e918f]' : 'text-[#5f6368]')}>
+                  Unsettled customer payment invoices
+                </p>
+              </div>
+              <M3Button
+                variant="text"
+                size="sm"
+                onClick={() => navigate('/admin/users')}
+              >
+                Manage
+              </M3Button>
             </div>
-            <button
-              onClick={() => navigate('/admin/logs')}
-              className="text-xs font-semibold text-[#0b57d0] dark:text-[#a8c7fa] hover:underline"
-            >
-              See All
-            </button>
-          </div>
 
-          <div className="py-3 space-y-3 flex-1 overflow-y-auto">
-            {recentLogs.length > 0 ? (
-              recentLogs.map((log, idx) => (
-                <div
-                  key={log?.id ? `log-${log.id}-${idx}` : `log-${idx}-${log?.timestamp || ''}`}
-                  className={cn(
-                    'p-3 rounded-2xl border text-xs flex items-start gap-3 transition-colors',
-                    isDark ? 'bg-[#1e1f20] border-[#2d2f31]' : 'bg-[#f0f4f9] border-[#e1e3e1]'
-                  )}
-                >
-                  <div className="w-7 h-7 rounded-xl bg-[#004a77] text-[#c2e7ff] flex items-center justify-center shrink-0 mt-0.5">
-                    <Shield size={14} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-semibold truncate">{log.email || (log as any).adminEmail || 'Admin User'}</div>
-                    <div className="text-[11px] text-slate-400">{log.action}</div>
-                    <div className="text-[10px] text-slate-500 mt-1">
-                      {formatDate(log.timestamp)}
+            <div className="py-3 space-y-3 flex-1 max-h-[300px] overflow-y-auto pr-1">
+              {payments.filter(p => p.status !== 'Paid' && p.status !== 'Cancelled').length > 0 ? (
+                payments.filter(p => p.status !== 'Paid' && p.status !== 'Cancelled').map((p, idx) => (
+                  <div
+                    key={`pending-invoice-${p.paymentId}-${idx}`}
+                    onClick={() => navigate('/admin/users')}
+                    className={cn(
+                      'p-3 rounded-2xl border text-xs flex items-center justify-between transition-all cursor-pointer hover:border-indigo-500/40',
+                      isDark ? 'bg-[#1e1f20] border-[#2d2f31]' : 'bg-[#f0f4f9] border-[#e1e3e1]'
+                    )}
+                  >
+                    <div>
+                      <div className="font-bold text-white">{p.userName}</div>
+                      <div className="text-[10px] text-slate-500 font-mono mt-0.5">Due: {p.dueDate}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-mono font-extrabold text-rose-400">₹{p.pendingAmount.toLocaleString('en-IN')}</div>
+                      <div className={cn(
+                        'text-[9px] font-extrabold uppercase mt-0.5 tracking-wider',
+                        p.status === 'Overdue' ? 'text-rose-400' : 'text-amber-400'
+                      )}>
+                        {p.status}
+                      </div>
                     </div>
                   </div>
+                ))
+              ) : (
+                <div className="py-8 text-center text-xs text-slate-500 italic">
+                  No outstanding receivables registered on system.
                 </div>
-              ))
-            ) : (
-              <div className="py-8 text-center text-xs text-slate-400">
-                Security audit logging active. All administrative actions are recorded with IP & User Agent.
+              )}
+            </div>
+          </M3Card>
+
+          {/* Security Audit Feed */}
+          <M3Card variant="elevated" padding="lg" className="flex flex-col">
+            <div className="flex items-center justify-between pb-4 border-b border-[#e1e3e1]/60 dark:border-[#2d2f31]">
+              <div>
+                <h3 className={cn('font-bold text-base', isDark ? 'text-white' : 'text-[#1f1f1f]')}>
+                  Security Audit Log
+                </h3>
+                <p className={cn('text-xs', isDark ? 'text-[#8e918f]' : 'text-[#5f6368]')}>
+                  Live activity & auth attempts
+                </p>
               </div>
-            )}
-          </div>
-        </M3Card>
+            </div>
+
+            <div className="py-3 space-y-3 flex-1 max-h-[300px] overflow-y-auto pr-1">
+              {recentLogs.length > 0 ? (
+                recentLogs.map((log, idx) => (
+                  <div
+                    key={log?.id ? `log-${log.id}-${idx}` : `log-${idx}-${log?.timestamp || ''}`}
+                    className={cn(
+                      'p-3 rounded-2xl border text-xs flex items-start gap-3 transition-colors',
+                      isDark ? 'bg-[#1e1f20] border-[#2d2f31]' : 'bg-[#f0f4f9] border-[#e1e3e1]'
+                    )}
+                  >
+                    <div className="w-7 h-7 rounded-xl bg-[#004a77] text-[#c2e7ff] flex items-center justify-center shrink-0 mt-0.5">
+                      <Shield size={14} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold truncate">{log.email || (log as any).adminEmail || 'Admin User'}</div>
+                      <div className="text-[11px] text-slate-400">{log.action}</div>
+                      <div className="text-[10px] text-slate-500 mt-1">
+                        {formatDate(log.timestamp)}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  Security audit logging active. All administrative actions are recorded with IP & User Agent.
+                </div>
+              )}
+            </div>
+          </M3Card>
+        </div>
       </div>
     </div>
   );

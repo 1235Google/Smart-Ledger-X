@@ -42,8 +42,11 @@ const AdminGullak = lazy(() => import('./pages/admin/AdminGullak'));
 const AdminLogs = lazy(() => import('./pages/admin/AdminLogs'));
 const AdminBackup = lazy(() => import('./pages/admin/AdminBackup'));
 const AdminScheduledJobs = lazy(() => import('./pages/admin/AdminScheduledJobs'));
+const AdminSystemMode = lazy(() => import('./pages/admin/AdminSystemMode'));
+const AdminAlerts = lazy(() => import('./pages/admin/AdminAlerts'));
 const AdminRecycleBin = lazy(() => import('./pages/admin/AdminRecycleBin'));
 const AdminTrustedDevices = lazy(() => import('./pages/admin/AdminTrustedDevices'));
+const AdminUserProfile = lazy(() => import('./pages/admin/AdminUserProfile'));
 
 const Login = lazy(() => import('./pages/Login'));
 
@@ -140,6 +143,7 @@ function AppRoutes() {
         <Route path="/admin/*" element={<AdminLayout />}>
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="users" element={<AdminUsers />} />
+          <Route path="users/:uid" element={<AdminUserProfile />} />
           <Route path="ledger" element={<AdminLedger />} />
           <Route path="received" element={<MoneyReceived />} />
           <Route path="pending" element={<AdminPending />} />
@@ -147,6 +151,8 @@ function AppRoutes() {
           <Route path="analytics" element={<AdminAnalytics />} />
           <Route path="reports" element={<AdminReports />} />
           <Route path="backup" element={<AdminBackup />} />
+          <Route path="alerts" element={<AdminAlerts />} />
+          <Route path="system-mode" element={<AdminSystemMode />} />
           <Route path="jobs" element={<AdminScheduledJobs />} />
           <Route path="gullak" element={<AdminGullak />} />
           <Route path="recycle-bin" element={<AdminRecycleBin />} />

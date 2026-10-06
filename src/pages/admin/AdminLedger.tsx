@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { collectionGroup, query, onSnapshot } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Search, 
@@ -47,6 +49,34 @@ export default function AdminLedger() {
   const { resolvedTheme } = useM3Theme();
   const isDark = resolvedTheme === 'dark';
 
+  // Aggregate Transactions from all users in real time
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
+  const [isLoadingAll, setIsLoadingAll] = useState(true);
+
+  useEffect(() => {
+    setIsLoadingAll(true);
+    const q = query(collectionGroup(db, 'transactions'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const merged: any[] = [];
+      snapshot.forEach(docSnap => {
+        merged.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      // Sort newest first
+      merged.sort((a, b) => {
+        const dateA = a.type === 'pending' ? a.dueDate : a.date;
+        const dateB = b.type === 'pending' ? b.dueDate : b.date;
+        return new Date(dateB || 0).getTime() - new Date(dateA || 0).getTime();
+      });
+      setAllTransactions(merged);
+      setIsLoadingAll(false);
+    }, (err) => {
+      console.warn('[AdminLedger] Error querying collectionGroup transactions:', err);
+      setIsLoadingAll(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   const [methodFilter, setMethodFilter] = useState<'all' | 'UPI' | 'Cash' | 'Card' | 'Bank Transfer'>('all');
   const [dateFilter, setDateFilter] = useState<string>('');
 
@@ -67,15 +97,10 @@ export default function AdminLedger() {
   const [formNote, setFormNote] = useState('');
   const [formError, setFormError] = useState('');
 
-  const safeTransactions = transactions || [];
+  const safeTransactions = allTransactions || [];
 
-  // Filter completed ledger records
-  const completedEntries = safeTransactions.filter((tx: any) => {
-    if (tx.type === 'pending' || tx.status === 'pending' || tx.status === 'overdue' || tx.isPending === true) {
-      return false;
-    }
-    return true;
-  });
+  // Filter completed ledger records - Show all non-deleted transactions
+  const completedEntries = safeTransactions.filter((tx: any) => !tx.deleted);
 
   // Apply chip filters
   const filteredData = completedEntries.filter((tx: any) => {

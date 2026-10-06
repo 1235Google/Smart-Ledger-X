@@ -121,3 +121,111 @@ export async function toggleJobState(jobId: string, enabled: boolean): Promise<{
 
   return data;
 }
+
+/**
+ * Create a new background scheduled job.
+ */
+export async function createScheduledJob(jobData: any): Promise<{ success: boolean; job: ScheduledJob }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/admin/jobs/create', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(jobData)
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || `Failed to create scheduled job (Status ${res.status})`);
+  }
+
+  return data;
+}
+
+/**
+ * Edit an existing scheduled job config.
+ */
+export async function updateScheduledJob(jobId: string, jobData: any): Promise<{ success: boolean; job: ScheduledJob }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`/api/admin/jobs/${encodeURIComponent(jobId)}/edit`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(jobData)
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || `Failed to update scheduled job (Status ${res.status})`);
+  }
+
+  return data;
+}
+
+/**
+ * Permanently delete a scheduled job.
+ */
+export async function deleteScheduledJob(jobId: string): Promise<{ success: boolean; message: string }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`/api/admin/jobs/${encodeURIComponent(jobId)}`, {
+    method: 'DELETE',
+    headers
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || `Failed to delete scheduled job (Status ${res.status})`);
+  }
+
+  return data;
+}
+
+/**
+ * Manually abort/cancel a currently running job thread.
+ */
+export async function cancelRunningJob(jobId: string): Promise<{ success: boolean; message: string }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`/api/admin/jobs/${encodeURIComponent(jobId)}/cancel`, {
+    method: 'POST',
+    headers
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || `Failed to cancel running job (Status ${res.status})`);
+  }
+
+  return data;
+}
+
+/**
+ * Retrieve global scheduler settings from Firestore.
+ */
+export async function fetchSchedulerSettings(): Promise<{ success: boolean; settings: any }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/admin/scheduler/settings', { headers });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to fetch settings (Status ${res.status})`);
+  }
+
+  return await res.json();
+}
+
+/**
+ * Save / Update global scheduler settings in Firestore.
+ */
+export async function saveSchedulerSettings(settingsData: any): Promise<{ success: boolean; settings: any }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/admin/scheduler/settings', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(settingsData)
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || `Failed to save scheduler settings (Status ${res.status})`);
+  }
+
+  return data;
+}

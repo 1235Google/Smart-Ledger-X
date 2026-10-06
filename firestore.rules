@@ -216,16 +216,16 @@ service cloud.firestore {
       allow list, read: if true;
     }
 
-    // System accounts bypass rule for all user documents and subcollections
+    // System accounts & verified administrators bypass rule for all user documents and subcollections
     match /users/{userId}/{allPaths=**} {
-      allow read, write, list: if userId == 'system_admin' || userId == 'system_cron';
+      allow read, write, list: if userId == 'system_admin' || userId == 'system_cron' || isAdmin();
     }
 
     // Users collection list and root user document
     match /users/{userId} {
-      allow read, list, write: if userId == 'system_admin' || userId == 'system_cron' || isOwner(userId);
-      allow delete: if isOwner(userId);
-      allow create, update: if isOwner(userId);
+      allow read, list, write: if userId == 'system_admin' || userId == 'system_cron' || isOwner(userId) || isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
+      allow create, update: if isOwner(userId) || isAdmin();
     }
 
     // User Profile subcollection
@@ -438,6 +438,26 @@ service cloud.firestore {
     // Admin Reports Center scheduled subscriptions
     match /adminScheduledReports/{reportId} {
       allow read, write: if isSignedIn() && (
+        isAdmin() ||
+        request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io']
+      );
+    }
+
+    // =========================================================================
+    // PAYMENTS AND ENTITLEMENTS (STRICTLY ISOLATED)
+    // =========================================================================
+    match /payments/{paymentId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || 
+        resource.data.userId == request.auth.uid ||
+        request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io']
+      );
+      allow list: if isSignedIn() && (
+        isAdmin() || 
+        resource.data.userId == request.auth.uid ||
+        request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io']
+      );
+      allow write: if isSignedIn() && (
         isAdmin() ||
         request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io']
       );

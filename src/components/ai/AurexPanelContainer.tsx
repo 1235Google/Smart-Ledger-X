@@ -13,7 +13,7 @@ export type PanelState = 'full' | 'bubble' | 'rail' | 'closed';
 
 export const AurexPanelContainer: React.FC<{ state: PanelState, setState: (s: PanelState) => void }> = ({ state, setState }) => {
   const [width, setWidth] = useState(400);
-  const { transactions } = useStore();
+  const { transactions, user } = useStore();
   const [messages, setMessages] = useState<Message[]>([
     { id: '1', role: 'assistant', content: "Hello! I'm Aurex, I can help you summarize your finances or draft reminders. How can I assist you today?", timestamp: Date.now() }
   ]);
@@ -46,9 +46,19 @@ export const AurexPanelContainer: React.FC<{ state: PanelState, setState: (s: Pa
     setIsThinking(true);
 
     try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (user) {
+            try {
+                const idToken = await user.getIdToken();
+                headers['Authorization'] = `Bearer ${idToken}`;
+            } catch (tokenErr) {
+                console.warn('[Aurex Client] Failed to retrieve ID token:', tokenErr);
+            }
+        }
+
         const response = await fetch('/api/ai', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ prompt: isRetry ? userMsg.content : text, context: transactions, history: isRetry ? messages.slice(0, -1) : messages })
         });
         

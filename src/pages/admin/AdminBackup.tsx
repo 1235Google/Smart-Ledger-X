@@ -33,7 +33,7 @@ import { M3LinearProgress } from '../../components/admin/material3/M3Progress';
 import { useM3Theme } from '../../components/admin/material3/M3ThemeContext';
 
 export default function AdminBackup() {
-  const { applyRestoredState, updateBackupSettings } = useStore();
+  const { applyRestoredState, updateBackupSettings, adminUser } = useStore();
   const { showSuccess, showError, showInfo } = useToast();
   const { resolvedTheme } = useM3Theme();
   const isDark = resolvedTheme === 'dark';
@@ -68,61 +68,70 @@ export default function AdminBackup() {
   }, []);
 
   const handleCreateSnapshot = async () => {
-    if (isCreating || BackupService.isOperationActive()) return;
+    if (isCreating) return;
     setIsCreating(true);
-    setProgressStage('Collecting ledger data...');
+    setProgressStage('Triggering server-side backup pipeline...');
     setProgressValue(20);
 
     try {
-      setTimeout(() => {
-        setProgressStage('Encrypting with AES-256-CBC...');
+      // Progress simulation stage 1
+      const progressTimer1 = setTimeout(() => {
+        setProgressStage('Express Server executing pipeline & encrypting...');
         setProgressValue(50);
-      }, 400);
-
-      setTimeout(() => {
-        setProgressStage('Computing SHA-256 integrity hash...');
-        setProgressValue(80);
       }, 800);
 
-      const snapshot = await BackupService.createBackup('manual');
-      setProgressStage('Snapshot verified & indexed');
+      // Progress simulation stage 2
+      const progressTimer2 = setTimeout(() => {
+        setProgressStage('Uploading dual-encrypted payload to Firebase Storage...');
+        setProgressValue(80);
+      }, 1600);
+
+      const targetUid = adminUser?.uid || 'system_admin';
+      const res = await fetch('/api/backup/run-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: targetUid })
+      });
+
+      clearTimeout(progressTimer1);
+      clearTimeout(progressTimer2);
+
+      const data = await res.json();
+      
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Server rejected manual backup execution');
+      }
+
+      setProgressStage('Metadata registered in Firestore!');
       setProgressValue(100);
 
-      const backupDate = snapshot.date || new Date(snapshot.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-      const backupTime = snapshot.time || new Date(snapshot.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-      const backupSize = BackupService.formatSize(snapshot.size || snapshot.fileSize);
-      const totalRecords = snapshot.recordsCount || (
-        (snapshot.itemCounts?.transactions || 0) +
-        (snapshot.itemCounts?.customers || 0) +
-        (snapshot.itemCounts?.savingsGoals || 0) +
-        (snapshot.itemCounts?.gullakEntries || 0) +
-        (snapshot.itemCounts?.investments || 0) +
-        (snapshot.itemCounts?.reports || 0) +
-        (snapshot.itemCounts?.bills || 0)
-      ) || 1;
+      const snapshot = data.backup;
+      const backupDate = snapshot.date || new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      const backupTime = snapshot.time || new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      const backupSize = BackupService.formatSize(snapshot.fileSize || snapshot.size || 0);
 
       updateBackupSettings({
-        lastBackupTime: snapshot.createdAt,
+        lastBackupTime: snapshot.createdAt || new Date().toISOString(),
         lastBackupStatus: 'healthy',
         backupHealth: 'Optimal • Cloud Verified',
-        lastBackupSize: snapshot.size,
-        lastBackupChecksum: snapshot.checksumSha256 || snapshot.checksum,
-        lastBackupLocation: snapshot.storagePath,
+        lastBackupSize: snapshot.fileSize || snapshot.size || 0,
+        lastBackupChecksum: snapshot.checksumSha256 || snapshot.checksum || '',
+        lastBackupLocation: snapshot.storagePath || '',
         lastError: null,
       });
 
-      localStorage.setItem('smart_ledger_last_backup_time', snapshot.createdAt);
+      localStorage.setItem('smart_ledger_last_backup_time', snapshot.createdAt || new Date().toISOString());
 
       showSuccess(
         '✅ Backup Completed Successfully',
-        `Your Smart Ledger data has been safely backed up.\nDate: ${backupDate} • Time: ${backupTime} • Size: ${backupSize}`
+        `Disaster recovery backup executed on Firebase Cloud Functions and saved safely to Storage.\nDate: ${backupDate} • Time: ${backupTime} • Size: ${backupSize}`
       );
       await loadSnapshots();
     } catch (err: any) {
-      console.error('Backup failed (with error details):', err);
+      console.error('Backup failed:', err);
       showError(
-        '❌ Backup Failed',
-        'Please check your internet connection and try again.'
+        '❌ Cloud Backup Failed',
+        err.message || 'The server-side Cloud Function backup failed. Please try again.'
       );
     } finally {
       setTimeout(() => {

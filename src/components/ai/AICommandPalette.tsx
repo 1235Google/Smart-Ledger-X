@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Sparkles, Send, X, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useStore } from '../../context/StoreContext';
 
 export const AICommandPalette: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+  const { user } = useStore();
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [response, setResponse] = useState<string | null>(null);
@@ -12,9 +14,18 @@ export const AICommandPalette: React.FC<{ isOpen: boolean; onClose: () => void }
     setIsThinking(true);
     setResponse(null);
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (user) {
+        try {
+          const idToken = await user.getIdToken();
+          headers['Authorization'] = `Bearer ${idToken}`;
+        } catch (tokenErr) {
+          console.warn('[Aurex Client] Failed to retrieve ID token:', tokenErr);
+        }
+      }
       const res = await fetch('/api/ai', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ prompt: input }),
       });
       const data = await res.json();

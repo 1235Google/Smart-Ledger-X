@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { collectionGroup, query, onSnapshot } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import { motion } from 'motion/react';
 import { 
   Database, 
@@ -44,7 +46,41 @@ export default function AdminGullak() {
   const { resolvedTheme } = useM3Theme();
   const isDark = resolvedTheme === 'dark';
 
-  const gullakBalance = calculateGullakBalance(gullakEntries || []);
+  // Aggregate Gullak entries from all users in real time
+  const [allGullakEntries, setAllGullakEntries] = useState<GullakEntry[]>([]);
+  const [isLoadingAll, setIsLoadingAll] = useState(true);
+
+  useEffect(() => {
+    setIsLoadingAll(true);
+    const q = query(collectionGroup(db, 'app'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const merged: GullakEntry[] = [];
+      snapshot.forEach(docSnap => {
+        if (docSnap.id === 'state') {
+          const data = docSnap.data();
+          if (data.gullakEntries && Array.isArray(data.gullakEntries)) {
+            const userName = data.userProfile?.fullName || data.userProfile?.username || 'Client';
+            const mapped = data.gullakEntries.map((e: any) => ({
+              ...e,
+              personName: e.personName && e.personName !== 'Admin' && e.personName !== 'User' ? e.personName : userName
+            }));
+            merged.push(...mapped);
+          }
+        }
+      });
+      // Sort newest first
+      merged.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+      setAllGullakEntries(merged);
+      setIsLoadingAll(false);
+    }, (err) => {
+      console.warn('[AdminGullak] Error loading multi-user gullak state:', err);
+      setIsLoadingAll(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const gullakBalance = calculateGullakBalance(allGullakEntries || []);
 
   const [typeFilter, setTypeFilter] = useState<'all' | 'credit' | 'debit'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -57,7 +93,7 @@ export default function AdminGullak() {
   const [formNotes, setFormNotes] = useState('');
   const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const filtered = (gullakEntries || []).filter((entry) => {
+  const filtered = (allGullakEntries || []).filter((entry) => {
     if (typeFilter === 'all') return true;
     const dir = getGullakEntryDirection(entry);
     return dir === typeFilter;

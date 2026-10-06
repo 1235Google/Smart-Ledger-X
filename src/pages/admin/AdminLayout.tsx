@@ -35,7 +35,8 @@ import {
   Loader2,
   CalendarClock,
   Trash2,
-  Smartphone
+  Smartphone,
+  PiggyBank
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { useToast } from '../../context/ToastContext';
@@ -45,6 +46,7 @@ import { M3Button } from '../../components/admin/material3/M3Button';
 import { M3Dialog } from '../../components/admin/material3/M3Dialog';
 import SystemModeBanner from '../../components/SystemModeBanner';
 import PageTransitionWrapper from '../../components/PageTransitionWrapper';
+import { AlertService } from '../../lib/alertService';
 
 function AdminLayoutInner() {
   const { 
@@ -68,6 +70,16 @@ function AdminLayoutInner() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [unreadAlerts, setUnreadAlerts] = useState<number>(0);
+
+  // Subscribe to real-time unresolved alerts for unread badge
+  useEffect(() => {
+    if (!isAdminAuthenticated) return;
+    const unsub = AlertService.subscribeToAlerts((alertsList) => {
+      setUnreadAlerts(alertsList.filter(a => !a.resolved).length);
+    });
+    return () => unsub();
+  }, [isAdminAuthenticated]);
 
   // Close menus on path change
   useEffect(() => {
@@ -105,19 +117,15 @@ function AdminLayoutInner() {
 
   const navItems = [
     { label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
+    { label: 'User Management', path: '/admin/users', icon: Users },
     { label: 'Transactions', path: '/admin/ledger', icon: Wallet },
-    { label: 'Pending Payments', path: '/admin/pending', icon: Clock },
-    { label: 'Analytics', path: '/admin/analytics', icon: BarChart3 },
-    { label: 'Reports Center', path: '/admin/reports', icon: FileText },
-    { label: 'Backup & Recovery', path: '/admin/backup', icon: Cloud },
-    { label: 'Scheduled Jobs', path: '/admin/jobs', icon: CalendarClock },
-    { label: 'Gullak Savings', path: '/admin/gullak', icon: Database },
-    { label: 'Reminders', path: '/admin/reminders', icon: Bell },
-    { label: 'Admin RBAC', path: '/admin/users', icon: Users },
+    { label: 'Gullak Savings', path: '/admin/gullak', icon: PiggyBank },
     { label: 'Trusted Devices', path: '/admin/trusted-devices', icon: Smartphone },
-    { label: 'Security Logs', path: '/admin/logs', icon: Activity },
-    { label: 'Recycle Bin', path: '/admin/recycle-bin', icon: Trash2 },
-    { label: 'Settings', path: '/admin/settings', icon: Settings },
+    { label: 'Alert Center', path: '/admin/alerts', icon: Bell },
+    { label: 'Scheduled Jobs', path: '/admin/jobs', icon: CalendarClock },
+    { label: 'Backup & Recovery', path: '/admin/backup', icon: Cloud },
+    { label: 'Reports Center', path: '/admin/reports', icon: FileText },
+    { label: 'System Mode', path: '/admin/system-mode', icon: Settings },
   ];
 
   const currentNav = navItems.find((item) => location.pathname.startsWith(item.path)) || navItems[0];
@@ -394,6 +402,25 @@ function AdminLayoutInner() {
             >
               User App
             </M3Button>
+
+            {/* Real-time Notification Bell */}
+            <div className="relative">
+              <button
+                onClick={() => navigate('/admin/alerts')}
+                className={cn(
+                  'p-2.5 rounded-full transition-colors flex items-center justify-center relative',
+                  isDark ? 'hover:bg-white/10 text-[#a8c7fa]' : 'hover:bg-black/10 text-[#0b57d0]'
+                )}
+                title="Operational Alert Center"
+              >
+                <Bell size={19} />
+                {unreadAlerts > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-rose-500 text-white rounded-full text-[9px] font-extrabold flex items-center justify-center animate-pulse">
+                    {unreadAlerts}
+                  </span>
+                )}
+              </button>
+            </div>
 
             {/* Theme Toggle (Light / Dark / System dropdown) */}
             <div className="relative">

@@ -902,3 +902,52 @@ export function checkFailedLoginRateLimit(ip: string): boolean {
   entry.count++;
   return true;
 }
+
+// --- 10. Write Enterprise Alert to Firestore REST API ---
+export async function writeAlertToFirestore(
+  alert: {
+    type: string;
+    title: string;
+    description: string;
+    severity: 'Critical' | 'Warning' | 'Success' | 'Information';
+    userId?: string;
+    metadata?: any;
+    source?: string;
+  },
+  projectId: string,
+  apiKey: string
+): Promise<boolean> {
+  try {
+    const docId = `alert_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/admin_alerts?documentId=${docId}&key=${apiKey}`;
+
+    const fields: Record<string, any> = {
+      id: { stringValue: docId },
+      type: { stringValue: alert.type },
+      title: { stringValue: alert.title },
+      description: { stringValue: alert.description },
+      severity: { stringValue: alert.severity },
+      createdAt: { stringValue: new Date().toISOString() },
+      resolved: { booleanValue: false },
+      resolvedAt: { nullValue: null },
+      resolvedBy: { nullValue: null },
+      userId: { stringValue: alert.userId || 'system' },
+      source: { stringValue: alert.source || 'server' }
+    };
+
+    if (alert.metadata) {
+      fields.metadata = { stringValue: typeof alert.metadata === 'string' ? alert.metadata : JSON.stringify(alert.metadata) };
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields })
+    });
+
+    return response.ok;
+  } catch (err) {
+    console.error('[writeAlertToFirestore] Failed:', err);
+    return false;
+  }
+}

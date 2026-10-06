@@ -6,7 +6,7 @@ import { Resend } from "resend";
 import { Server as SocketIOServer } from "socket.io";
 import http from "http";
 import { generateAndSendReport } from "./src/server/report-generator";
-import { callGroqWithRetry, listAvailableModels } from "./src/server/groq-service";
+import { callGroqWithRetry, listAvailableModels, executeAurexAI } from "./src/server/groq-service";
 import { executeBackupPipeline, getBackupStatusSummary, getBackupHistory, verifyBackupChecksumStorage, checkAndRunScheduledBackups } from "./src/server/backup-service";
 import { 
   hashPassword, 
@@ -35,7 +35,8 @@ import {
   addAuthoritativeEvent,
   getAuthoritativeEvents,
   checkFailedLoginRateLimit,
-  AuthoritativeSecurityEvent
+  AuthoritativeSecurityEvent,
+  writeAlertToFirestore
 } from "./src/server/security-service";
 import {
   sendLoginSuccessEmail,
@@ -46,12 +47,17 @@ import {
 } from "./src/server/resend-service";
 import {
   initJobsStorage,
-  startAllScheduledJobsCron,
   getAllScheduledJobs,
   getScheduledJobsSummary,
   getJobRuns,
   executeScheduledJob,
-  toggleJobEnabled
+  toggleJobEnabled,
+  createScheduledJob,
+  updateScheduledJob,
+  deleteScheduledJob,
+  cancelRunningJob,
+  getSchedulerSettings,
+  updateSchedulerSettings
 } from "./src/server/scheduled-jobs-service";
 import {
   getSystemConfig,
@@ -79,6 +85,23 @@ try {
   if (cfg.projectId) firebaseProjectId = cfg.projectId;
   if (cfg.apiKey) firebaseApiKey = cfg.apiKey;
 } catch (e) {}
+
+const triggerAlert = async (alert: {
+  type: string;
+  title: string;
+  description: string;
+  severity: 'Critical' | 'Warning' | 'Success' | 'Information';
+  userId?: string;
+  metadata?: any;
+  source?: string;
+}) => {
+  try {
+    return await writeAlertToFirestore(alert, firebaseProjectId, firebaseApiKey);
+  } catch (err) {
+    console.error('[triggerAlert] Error:', err);
+    return false;
+  }
+};
 
 const AUTHORIZED_ADMIN_EMAILS = [
   "souvikbbsr811@gmail.com",
@@ -117,7 +140,6 @@ app.use(express.json());
 // Initialize server-side scheduled jobs registry & continuous 24/7 background cron
 try {
   initJobsStorage();
-  startAllScheduledJobsCron();
   startAutoRestoreMonitor();
   startScheduledReportsWorker();
 } catch (e) {
@@ -138,12 +160,75 @@ try {
         return res.status(500).json({ success: false, error: "AI service not configured on server" });
       }
 
-      const response = await callGroqWithRetry(prompt, history || [], context);
-      if (!response) {
+      // 1. Authentication Check & Token Extraction
+      const authHeader = req.headers.authorization;
+      const idToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : "";
+      
+      let userId = "guest_user";
+      let role: 'admin' | 'user' = 'user';
+      let email = "";
+
+      if (idToken) {
+        // Verify Firebase ID Token
+        const verify = await verifyFirebaseIdToken(idToken, firebaseApiKey);
+        if (verify.valid && verify.uid) {
+          userId = verify.uid;
+          email = verify.email || "";
+
+          // 2. Role Verification
+          // Check standard whitelisted administrative emails first
+          if (email && AUTHORIZED_ADMIN_EMAILS.includes(email.toLowerCase())) {
+            role = 'admin';
+          } else {
+            // Read Firestore profile information to detect custom admin roles
+            try {
+              const profileUrl = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/users/${verify.uid}/profile/info?key=${firebaseApiKey}`;
+              const pRes = await fetch(profileUrl);
+              if (pRes.ok) {
+                const pData = await pRes.json();
+                const fields = pData.fields || {};
+                const userRole = fields.role?.stringValue;
+                if (userRole === 'Admin' || userRole === 'Owner' || userRole === 'Super Admin' || userRole === 'admin') {
+                  role = 'admin';
+                }
+              }
+            } catch (roleErr) {
+              console.warn("[Aurex Auth] Failed to check Firestore profile role, falling back to email check:", roleErr);
+            }
+          }
+        } else {
+          return res.status(401).json({ success: false, error: "Session expired or invalid credentials. Please log in again." });
+        }
+      } else {
+        // Admin session token check as fallback
+        const adminToken = req.headers['x-admin-token'] as string;
+        if (adminToken && verifySessionToken(adminToken)) {
+          role = 'admin';
+          userId = 'admin';
+          email = 'admin@smartledgerx.io';
+        } else {
+          // If no token, default to guest/legacy user mode securely
+          userId = "legacy_user";
+          role = "user";
+        }
+      }
+
+      console.log(`[Aurex AI Auth] User: ${userId} (${email}), Resolved Mode: ${role.toUpperCase()}`);
+
+      // 3. Permission Validation & centralized Aurex Engine Execution
+      const result = await executeAurexAI(prompt, history || [], userId, role);
+      if (!result || !result.reply) {
         return res.status(500).json({ success: false, error: "AI service returned no response" });
       }
 
-      res.json({ success: true, response });
+      res.json({ 
+        success: true, 
+        response: result.reply, 
+        metadata: { 
+          role, 
+          toolsExecuted: result.toolsExecuted 
+        } 
+      });
     } catch (err: any) {
       console.error("SERVER FUNCTION ERROR:", err);
       res.status(500).json({ 
@@ -972,6 +1057,214 @@ try {
     }
   });
 
+  // 5.5. Create scheduled job
+  app.post("/api/admin/jobs/create", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
+      }
+
+      const jobData = req.body;
+      const createdJob = await createScheduledJob(jobData, auth.email);
+
+      // Record administrative audit trail
+      const clientIp = extractClientIp(req);
+      const loc = await getApproximateLocation(clientIp);
+      const dev = parseDeviceAndBrowser(req);
+      addAuthoritativeEvent({
+        id: `audit_job_create_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+        uid: auth.uid,
+        email: auth.email,
+        eventType: 'JOB_CONFIG_TOGGLE' as any,
+        authProvider: 'none',
+        timestamp: new Date().toISOString(),
+        serverTimestampMs: Date.now(),
+        ip: clientIp,
+        location: loc,
+        device: dev,
+        sessionId: `sess_${Date.now()}`,
+        newDevice: false,
+        authorizationResult: 'admin',
+        details: `Background job '${createdJob.jobName}' created by ${auth.email}.`
+      });
+
+      return res.json({ success: true, job: createdJob });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message || "Failed to create scheduled job" });
+    }
+  });
+
+  // 5.6. Edit scheduled job
+  app.post("/api/admin/jobs/:jobId/edit", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
+      }
+
+      const { jobId } = req.params;
+      const jobData = req.body;
+      const updatedJob = await updateScheduledJob(jobId, jobData, auth.email);
+
+      // Record administrative audit trail
+      const clientIp = extractClientIp(req);
+      const loc = await getApproximateLocation(clientIp);
+      const dev = parseDeviceAndBrowser(req);
+      addAuthoritativeEvent({
+        id: `audit_job_edit_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+        uid: auth.uid,
+        email: auth.email,
+        eventType: 'JOB_CONFIG_TOGGLE' as any,
+        authProvider: 'none',
+        timestamp: new Date().toISOString(),
+        serverTimestampMs: Date.now(),
+        ip: clientIp,
+        location: loc,
+        device: dev,
+        sessionId: `sess_${Date.now()}`,
+        newDevice: false,
+        authorizationResult: 'admin',
+        details: `Background job '${jobId}' reconfigured by ${auth.email}.`
+      });
+
+      return res.json({ success: true, job: updatedJob });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message || "Failed to edit scheduled job" });
+    }
+  });
+
+  // 5.7. Delete scheduled job
+  app.delete("/api/admin/jobs/:jobId", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
+      }
+
+      const { jobId } = req.params;
+      await deleteScheduledJob(jobId, auth.email);
+
+      // Record administrative audit trail
+      const clientIp = extractClientIp(req);
+      const loc = await getApproximateLocation(clientIp);
+      const dev = parseDeviceAndBrowser(req);
+      addAuthoritativeEvent({
+        id: `audit_job_delete_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+        uid: auth.uid,
+        email: auth.email,
+        eventType: 'JOB_CONFIG_TOGGLE' as any,
+        authProvider: 'none',
+        timestamp: new Date().toISOString(),
+        serverTimestampMs: Date.now(),
+        ip: clientIp,
+        location: loc,
+        device: dev,
+        sessionId: `sess_${Date.now()}`,
+        newDevice: false,
+        authorizationResult: 'admin',
+        details: `Background job '${jobId}' deleted by ${auth.email}.`
+      });
+
+      return res.json({ success: true, message: "Job deleted successfully." });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message || "Failed to delete scheduled job" });
+    }
+  });
+
+  // 5.8. Cancel currently executing job
+  app.post("/api/admin/jobs/:jobId/cancel", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
+      }
+
+      const { jobId } = req.params;
+      const success = await cancelRunningJob(jobId, auth.email);
+      if (!success) {
+        return res.status(400).json({ success: false, error: `Job '${jobId}' is not currently running.` });
+      }
+
+      // Record administrative audit trail
+      const clientIp = extractClientIp(req);
+      const loc = await getApproximateLocation(clientIp);
+      const dev = parseDeviceAndBrowser(req);
+      addAuthoritativeEvent({
+        id: `audit_job_cancel_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+        uid: auth.uid,
+        email: auth.email,
+        eventType: 'JOB_CONFIG_TOGGLE' as any,
+        authProvider: 'none',
+        timestamp: new Date().toISOString(),
+        serverTimestampMs: Date.now(),
+        ip: clientIp,
+        location: loc,
+        device: dev,
+        sessionId: `sess_${Date.now()}`,
+        newDevice: false,
+        authorizationResult: 'admin',
+        details: `Currently running background thread for '${jobId}' cancelled by ${auth.email}.`
+      });
+
+      return res.json({ success: true, message: "Execution thread terminated successfully." });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message || "Failed to cancel executing job" });
+    }
+  });
+
+  // 5.9. Get global scheduler settings
+  app.get("/api/admin/scheduler/settings", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
+      }
+
+      const settings = getSchedulerSettings();
+      return res.json({ success: true, settings });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: "Failed to fetch scheduler settings" });
+    }
+  });
+
+  // 5.10. Update global scheduler settings
+  app.post("/api/admin/scheduler/settings", async (req, res) => {
+    try {
+      const auth = await verifyAdminAuth(req);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
+      }
+
+      const updated = await updateSchedulerSettings(req.body);
+
+      // Record administrative audit trail
+      const clientIp = extractClientIp(req);
+      const loc = await getApproximateLocation(clientIp);
+      const dev = parseDeviceAndBrowser(req);
+      addAuthoritativeEvent({
+        id: `audit_scheduler_settings_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+        uid: auth.uid,
+        email: auth.email,
+        eventType: 'JOB_CONFIG_TOGGLE' as any,
+        authProvider: 'none',
+        timestamp: new Date().toISOString(),
+        serverTimestampMs: Date.now(),
+        ip: clientIp,
+        location: loc,
+        device: dev,
+        sessionId: `sess_${Date.now()}`,
+        newDevice: false,
+        authorizationResult: 'admin',
+        details: `Global scheduler settings reconfigured by ${auth.email}. Timezone updated to: ${updated.timezone}.`
+      });
+
+      return res.json({ success: true, settings: updated });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: "Failed to save scheduler settings" });
+    }
+  });
+
   // =========================================================================
   // SYSTEM AVAILABILITY & MAINTENANCE MODE API ENDPOINTS
   // =========================================================================
@@ -1405,6 +1698,15 @@ try {
         console.error("[Send Monthly Report] Provider Response Error:", JSON.stringify(data.error, null, 2));
         const rawMessage = data.error.message || "Failed to send email via Resend.";
         
+        await triggerAlert({
+          type: 'Monthly Report Failed',
+          title: 'Monthly Report Sending Failed',
+          description: `Failed to deliver monthly report to ${finalToAddress}. Error: ${rawMessage}`,
+          severity: 'Critical',
+          userId: cleanEmail,
+          metadata: data.error
+        });
+        
         // Return clear, actionable error for Resend unverified domain limitation
         if (
           rawMessage.includes("You can only send testing emails to your own email address") ||
@@ -1427,6 +1729,14 @@ try {
       }
 
       console.log("[Send Monthly Report] Email delivery successful! Message ID:", data.data?.id);
+      await triggerAlert({
+        type: 'Monthly Report Generated',
+        title: 'Monthly Report Sent',
+        description: `Successfully dispatched monthly report to ${finalToAddress}. Message ID: ${data.data?.id}`,
+        severity: 'Success',
+        userId: cleanEmail,
+        metadata: data.data
+      });
       res.json({ success: true, messageId: data.data?.id, recipient: finalToAddress });
     } catch (error: any) {
       console.error("[Send Monthly Report] Unhandled Server Error:", error);
@@ -1712,13 +2022,38 @@ try {
     try {
       const userId = (req.body && req.body.userId) || 'system_admin';
       console.log(`[BackupAPI] Manual backup triggered via run-now for user: ${userId}`);
-      const result = await executeBackupPipeline(userId, 'manual');
+      const result = await executeBackupPipeline(userId, 'manual') as any;
+      
+      if (result.status === 'success') {
+        await triggerAlert({
+          type: 'Backup Completed',
+          title: 'Database Cloud Backup Successful',
+          description: `Cloud backup created successfully for user ${userId}. Checksum verified: ${result.checksumSha256 || 'N/A'}. Size: ${result.fileSize || result.size || 0} bytes.`,
+          severity: 'Success',
+          userId
+        });
+      } else {
+        await triggerAlert({
+          type: 'Backup Failed',
+          title: 'Database Cloud Backup Failed',
+          description: `Database backup failed for user ${userId}. Error: ${result.error_message || 'Storage write failed'}`,
+          severity: 'Critical',
+          userId
+        });
+      }
+
       return res.json({
         success: result.status === 'success',
         backup: result,
         error: result.error_message
       });
     } catch (err: any) {
+      await triggerAlert({
+        type: 'Backup Failed',
+        title: 'Database Cloud Backup Exception',
+        description: `Unexpected exception during backup execution. Error: ${err.message}`,
+        severity: 'Critical'
+      });
       return res.status(400).json({ success: false, error: err.message || 'Backup run failed' });
     }
   });

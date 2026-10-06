@@ -16,6 +16,7 @@ import BalanceCard from '../components/BalanceCard';
 import EnterpriseCard from '../components/ui/EnterpriseCard';
 import CountUp from '../components/ui/CountUp';
 import DataStateGuard from '../components/ui/DataStateGuard';
+import SmartFinancialProfileCard from '../components/home/SmartFinancialProfileCard';
 
 // Lazy Loaded Interactive Modules
 const AIAssistantSection = lazy(() => import('../components/home/AIAssistantSection'));
@@ -231,14 +232,18 @@ export default function Dashboard() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Primary Enterprise Card */}
-                <motion.div whileHover={{ scale: 1.01 }} onClick={() => navigate('/balance')} className="lg:col-span-2 cursor-pointer transition-all duration-300">
-                  <BalanceCard
-                    currentBalance={currentBalance}
-                    startingBalance={startingBalance}
-                    totalReceived={totalReceived}
-                  />
-                </motion.div>
+                {/* Primary Enterprise Card & Smart Financial Profile Card stacked */}
+                <div className="lg:col-span-2 space-y-6 flex flex-col">
+                  <motion.div whileHover={{ scale: 1.01 }} onClick={() => navigate('/balance')} className="cursor-pointer transition-all duration-300">
+                    <BalanceCard
+                      currentBalance={currentBalance}
+                      startingBalance={startingBalance}
+                      totalReceived={totalReceived}
+                    />
+                  </motion.div>
+                  
+                  <SmartFinancialProfileCard />
+                </div>
 
                 {/* Secondary Liquidity Caps in Enterprise Style */}
                 <div className="lg:col-span-1 flex flex-col sm:flex-row lg:flex-col gap-3 sm:gap-4 justify-between">

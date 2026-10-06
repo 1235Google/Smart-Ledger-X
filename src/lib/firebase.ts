@@ -231,11 +231,34 @@ export async function testConnection() {
 export async function ensureUserProfileDoc(user: User, customFullName?: string): Promise<void> {
   if (!user || !user.uid) return;
   try {
+    const displayName = customFullName || user.displayName || user.email?.split('@')[0] || 'Ledger User';
+    
+    // Write directly to users/{uid} as requested in the Google Account Profile Integration specification
+    const userRootRef = doc(db, 'users', user.uid);
+    const rootPayload = {
+      uid: user.uid,
+      name: displayName,
+      email: user.email || '',
+      photoURL: user.photoURL || '',
+      provider: user.providerData?.[0]?.providerId || 'google.com',
+      createdAt: new Date().toISOString(),
+      lastLogin: new Date().toISOString(),
+      emailVerified: user.emailVerified
+    };
+    
+    const rootSnap = await getDoc(userRootRef);
+    if (rootSnap.exists()) {
+      const existingData = rootSnap.data();
+      rootPayload.createdAt = existingData.createdAt || rootPayload.createdAt;
+    }
+    
+    await setDoc(userRootRef, rootPayload, { merge: true });
+    console.log('[Firebase Auth] Root users/{uid} document updated successfully for:', user.uid);
+
+    // Write to subcollection profile/info for compatibility
     const profileRef = doc(db, 'users', user.uid, 'profile', 'info');
     const profileSnap = await getDoc(profileRef);
-    
     if (!profileSnap.exists()) {
-      const displayName = customFullName || user.displayName || user.email?.split('@')[0] || 'Ledger User';
       const initialProfile = {
         uid: user.uid,
         name: displayName,
@@ -244,13 +267,10 @@ export async function ensureUserProfileDoc(user: User, customFullName?: string):
         photoURL: user.photoURL || '',
         businessName: '',
         mobile: user.phoneNumber || '',
-        createdAt: new Date().toISOString(),
+        createdAt: rootPayload.createdAt,
         updatedAt: new Date().toISOString()
       };
       await setDoc(profileRef, initialProfile, { merge: true });
-      console.log('[Firebase Auth] User profile document successfully created for:', user.uid);
-    } else {
-      console.log('[Firebase Auth] User profile document already exists for:', user.uid);
     }
   } catch (err) {
     console.warn('[Firebase Auth] User profile document notice (non-fatal):', err);

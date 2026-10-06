@@ -92,7 +92,7 @@ export default function BackupDashboard() {
   
   // Latest successful backup in Firestore
   const lastSuccessfulBackup = backups.find(
-    (b) => b.status === 'verified' || b.status === 'success'
+    (b) => b.status === 'verified' || (b.status as string) === 'success'
   );
 
   // Most recent backup overall (to detect failures)
@@ -110,7 +110,7 @@ export default function BackupDashboard() {
 
   // Real 7-day successful backups count from Firestore
   const firestoreSuccessCount7d = backups.filter((b) => {
-    const isSuccess = b.status === 'verified' || b.status === 'success';
+    const isSuccess = b.status === 'verified' || (b.status as string) === 'success';
     const time = new Date(b.createdAt || (b as any).timestamp || 0).getTime();
     return isSuccess && time >= sevenDaysAgo;
   }).length;

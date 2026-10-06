@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Clock, 
@@ -29,13 +29,24 @@ import {
   ChevronRight,
   Info,
   Layers,
-  Power
+  Power,
+  Trash2,
+  Edit2,
+  Copy,
+  Settings2,
+  X,
+  Plus,
+  Ban,
+  Activity,
+  Download,
+  AlertCircle
 } from 'lucide-react';
 import { useM3Theme } from '../../components/admin/material3/M3ThemeContext';
 import { M3Card } from '../../components/admin/material3/M3Card';
 import { M3Button } from '../../components/admin/material3/M3Button';
 import { M3Chip } from '../../components/admin/material3/M3Chip';
 import { M3Dialog } from '../../components/admin/material3/M3Dialog';
+import { M3TextField } from '../../components/admin/material3/M3TextField';
 import { 
   ScheduledJob, 
   ScheduledJobRun, 
@@ -47,11 +58,18 @@ import {
   fetchJobHistory, 
   runJobNow, 
   retryJobNow, 
-  toggleJobState 
+  toggleJobState,
+  createScheduledJob,
+  updateScheduledJob,
+  deleteScheduledJob,
+  cancelRunningJob,
+  fetchSchedulerSettings,
+  saveSchedulerSettings
 } from '../../lib/scheduledJobsService';
+import { useToast } from '../../context/ToastContext';
 import { cn } from '../../lib/utils';
 
-// Helper for relative time
+// Helper for relative time countdown or delay formatting
 function formatRelativeTime(dateString?: string | null): string {
   if (!dateString) return 'Never';
   try {
@@ -61,7 +79,6 @@ function formatRelativeTime(dateString?: string | null): string {
     if (isNaN(diffMs)) return 'Invalid date';
 
     if (diffMs < 0) {
-      // Future
       const absSec = Math.floor(Math.abs(diffMs) / 1000);
       if (absSec < 60) return `in ${absSec}s`;
       const absMin = Math.floor(absSec / 60);
@@ -100,992 +117,1145 @@ function formatExactDateTime(dateString?: string | null): string {
       hour12: true
     });
   } catch {
-    return dateString;
+    return dateString || '';
   }
 }
 
 export default function AdminScheduledJobs() {
   const { resolvedTheme } = useM3Theme();
   const isDark = resolvedTheme === 'dark';
+  const { showSuccess, showError, showInfo } = useToast();
 
-  // State
+  // Primary state
   const [jobs, setJobs] = useState<ScheduledJob[]>([]);
   const [summary, setSummary] = useState<ScheduledJobsSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
-  // Filters
+  // Filters & query parameters
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'HEALTHY' | 'DELAYED' | 'FAILED' | 'DISABLED'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'HEALTHY' | 'RUNNING' | 'DELAYED' | 'FAILED' | 'DISABLED'>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
 
-  // Confirmation modal
-  const [confirmModal, setConfirmModal] = useState<{
-    isOpen: boolean;
-    job: ScheduledJob | null;
-    mode: 'RUN' | 'RETRY';
-    isLoading: boolean;
-  }>({
-    isOpen: false,
-    job: null,
-    mode: 'RUN',
-    isLoading: false
+  // Selected Job for Profile Drawer
+  const [selectedJob, setSelectedJob] = useState<ScheduledJob | null>(null);
+  const [drawerHistory, setDrawerHistory] = useState<ScheduledJobRun[]>([]);
+  const [isDrawerHistoryLoading, setIsDrawerHistoryLoading] = useState(false);
+  const [logSearchQuery, setLogSearchQuery] = useState('');
+
+  // Modals state
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settingsData, setSettingsData] = useState({
+    timezone: 'Asia/Kolkata',
+    maxConcurrentJobs: 5,
+    maxRetries: 3,
+    retryDelay: 60,
+    jobTimeout: 300,
+    logRetentionDays: 30,
+    autoCleanup: true,
+    notificationsEnabled: true
   });
+  const [isSettingsSaving, setIsSettingsSaving] = useState(false);
 
-  // History modal
-  const [historyModal, setHistoryModal] = useState<{
-    isOpen: boolean;
-    job: ScheduledJob | null;
-    runs: ScheduledJobRun[];
-    isLoading: boolean;
-    selectedRun: ScheduledJobRun | null;
-  }>({
-    isOpen: false,
-    job: null,
-    runs: [],
-    isLoading: false,
-    selectedRun: null
+  // Create & Edit modal
+  const [showJobModal, setShowJobModal] = useState(false);
+  const [jobModalMode, setJobModalMode] = useState<'CREATE' | 'EDIT'>('CREATE');
+  const [jobFormData, setJobModalData] = useState({
+    jobId: '',
+    jobName: '',
+    description: '',
+    category: 'Maintenance',
+    scheduleCron: '0 0 * * *',
+    scheduleHuman: 'Every day at 12:00 AM',
+    estimatedDurationMs: 3000,
+    timeout: 300,
+    safeToRetry: true,
+    safeToRunManually: true,
+    iconType: 'broom' as ScheduledJob['iconType']
   });
+  const [isJobSaving, setIsJobSaving] = useState(false);
+  const [jobSaveError, setJobSaveError] = useState('');
 
-  // Toggling state per job
+  // Action loaders per job row
   const [togglingJobId, setTogglingJobId] = useState<string | null>(null);
+  const [runningJobId, setRunningJobId] = useState<string | null>(null);
 
-  // Live timer for relative countdowns
-  const [clockTick, setClockTick] = useState<number>(Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setClockTick(Date.now()), 10000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Fetch jobs
+  // Refresh interval setup
   const loadJobsData = useCallback(async (showIndicator = false) => {
     if (showIndicator) setIsRefreshing(true);
-    setErrorMsg(null);
     try {
       const data = await fetchScheduledJobs();
       setJobs(data.jobs);
       setSummary(data.summary);
+      
+      // Update selected drawer target if currently open
+      if (selectedJob) {
+        const fresh = data.jobs.find(j => j.jobId === selectedJob.jobId);
+        if (fresh) setSelectedJob(fresh);
+      }
     } catch (err: any) {
       console.error('Error fetching jobs:', err);
-      setErrorMsg(err.message || 'Failed to fetch scheduled jobs. Ensure server backend is running.');
+      setErrorMsg(err.message || 'Failed to sync with job scheduling backend.');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [selectedJob]);
 
   useEffect(() => {
     loadJobsData();
-    // Auto refresh every 30 seconds
-    const interval = setInterval(() => {
-      loadJobsData(false);
-    }, 30000);
-    return () => clearInterval(interval);
+    const timer = setInterval(() => loadJobsData(false), 12000);
+    return () => clearInterval(timer);
   }, [loadJobsData]);
 
-  // Execute job (Run or Retry)
-  const handleExecuteConfirmed = async () => {
-    const { job, mode } = confirmModal;
-    if (!job) return;
-
-    setConfirmModal(prev => ({ ...prev, isLoading: true }));
+  // Load selected drawer history
+  const loadSelectedJobHistory = useCallback(async (jobId: string) => {
+    setIsDrawerHistoryLoading(true);
     try {
-      let result;
-      if (mode === 'RUN') {
-        result = await runJobNow(job.jobId);
-      } else {
-        result = await retryJobNow(job.jobId);
+      const runs = await fetchJobHistory(jobId, 40);
+      setDrawerHistory(runs);
+    } catch (err) {
+      console.error('Failed to load history for job:', jobId);
+    } finally {
+      setIsDrawerHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedJob) {
+      loadSelectedJobHistory(selectedJob.jobId);
+    } else {
+      setDrawerHistory([]);
+    }
+  }, [selectedJob, loadSelectedJobHistory]);
+
+  // Fetch Scheduler Settings
+  const handleOpenSettings = async () => {
+    setShowSettingsModal(true);
+    try {
+      const res = await fetchSchedulerSettings();
+      if (res.success && res.settings) {
+        setSettingsData(res.settings);
       }
-
-      setStatusMessage({
-        text: `Success: '${job.jobName}' executed (${result.run.status}) in ${(result.run.durationMs / 1000).toFixed(2)}s.`,
-        type: result.run.status === 'SUCCESS' ? 'success' : 'error'
-      });
-
-      // Reload jobs
-      await loadJobsData(false);
-      setConfirmModal({ isOpen: false, job: null, mode: 'RUN', isLoading: false });
-    } catch (err: any) {
-      setStatusMessage({
-        text: `Execution failed: ${err.message || 'Server error encountered'}`,
-        type: 'error'
-      });
-      setConfirmModal(prev => ({ ...prev, isLoading: false }));
+    } catch (e: any) {
+      showError('Load Failed', 'Could not load scheduler configuration.');
     }
   };
 
-  // Open history modal
-  const handleOpenHistory = async (job: ScheduledJob) => {
-    setHistoryModal({
-      isOpen: true,
-      job,
-      runs: [],
-      isLoading: true,
-      selectedRun: null
-    });
-
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSettingsSaving(true);
     try {
-      const runs = await fetchJobHistory(job.jobId, 50);
-      setHistoryModal(prev => ({
-        ...prev,
-        runs,
-        isLoading: false,
-        selectedRun: runs[0] || null
-      }));
+      await saveSchedulerSettings(settingsData);
+      showSuccess('Settings Applied', 'Scheduler parameters immediately synchronized.');
+      setShowSettingsModal(false);
+      await loadJobsData(false);
     } catch (err: any) {
-      setHistoryModal(prev => ({
-        ...prev,
-        isLoading: false
-      }));
-      setStatusMessage({
-        text: `Could not load history for '${job.jobName}': ${err.message}`,
-        type: 'error'
-      });
+      showError('Save Failed', err.message || 'Error occurred while saving settings.');
+    } finally {
+      setIsSettingsSaving(false);
     }
   };
 
-  // Toggle enabled state
+  // Run Job Immediately
+  const handleRunNow = async (job: ScheduledJob) => {
+    setRunningJobId(job.jobId);
+    try {
+      const result = await runJobNow(job.jobId);
+      if (result.success) {
+        showSuccess('Job Started', `'${job.jobName}' initiated successfully. Status: ${result.run.status}.`);
+        await loadJobsData(false);
+        if (selectedJob?.jobId === job.jobId) {
+          loadSelectedJobHistory(job.jobId);
+        }
+      }
+    } catch (err: any) {
+      showError('Trigger Failed', err.message || 'Execution request failed.');
+    } finally {
+      setRunningJobId(null);
+    }
+  };
+
+  // Toggle Job State (Pause / Resume)
   const handleToggleState = async (job: ScheduledJob) => {
     setTogglingJobId(job.jobId);
+    const nextState = !job.enabled;
     try {
-      const targetState = !job.enabled;
-      await toggleJobState(job.jobId, targetState);
-      setStatusMessage({
-        text: `'${job.jobName}' has been ${targetState ? 'enabled' : 'disabled'}.`,
-        type: 'info'
-      });
+      await toggleJobState(job.jobId, nextState);
+      showSuccess('Status Changed', `'${job.jobName}' schedule ${nextState ? 'resumed' : 'paused'} successfully.`);
       await loadJobsData(false);
     } catch (err: any) {
-      setStatusMessage({
-        text: `Toggle failed: ${err.message}`,
-        type: 'error'
-      });
+      showError('Failed Toggle', err.message || 'Operation failed.');
     } finally {
       setTogglingJobId(null);
     }
   };
 
-  // Get icon for job
-  const getJobIcon = (iconType: ScheduledJob['iconType']) => {
-    switch (iconType) {
-      case 'backup':
-        return Cloud;
-      case 'bell':
-        return Bell;
-      case 'calculator':
-        return Calculator;
-      case 'camera':
-        return Camera;
-      case 'broom':
-        return Sparkles;
-      case 'shield':
-        return ShieldCheck;
-      case 'report':
-        return FileText;
-      default:
-        return Cpu;
+  // Cancel Running Job Thread
+  const handleCancelRunning = async (job: ScheduledJob) => {
+    if (!window.confirm(`Are you sure you want to terminate the executing background thread for '${job.jobName}'?`)) return;
+    setIsJobSaving(true);
+    try {
+      const res = await cancelRunningJob(job.jobId);
+      if (res.success) {
+        showSuccess('Execution Terminated', `Active worker thread cancelled successfully.`);
+        await loadJobsData(false);
+        if (selectedJob?.jobId === job.jobId) {
+          loadSelectedJobHistory(job.jobId);
+        }
+      }
+    } catch (err: any) {
+      showError('Cancellation Failed', err.message || 'Termination signal failed to deliver.');
+    } finally {
+      setIsJobSaving(false);
     }
   };
 
-  // Get status badge properties
+  // Retry Failed Job
+  const handleRetryJob = async (job: ScheduledJob) => {
+    setRunningJobId(job.jobId);
+    try {
+      const res = await retryJobNow(job.jobId);
+      if (res.success) {
+        showSuccess('Retry Success', `'${job.jobName}' completed retry attempt: ${res.run.status}`);
+        await loadJobsData(false);
+        if (selectedJob?.jobId === job.jobId) {
+          loadSelectedJobHistory(job.jobId);
+        }
+      }
+    } catch (err: any) {
+      showError('Retry Failed', err.message || 'Failed to retry job execution.');
+    } finally {
+      setRunningJobId(null);
+    }
+  };
+
+  // Create or Update Job Submit
+  const handleJobSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setJobSaveError('');
+    setIsJobSaving(true);
+
+    try {
+      if (jobModalMode === 'CREATE') {
+        await createScheduledJob(jobFormData);
+        showSuccess('Job Created', `Background worker '${jobFormData.jobName}' registered successfully.`);
+      } else {
+        await updateScheduledJob(jobFormData.jobId, jobFormData);
+        showSuccess('Job Configured', `Parameters updated successfully for '${jobFormData.jobName}'.`);
+      }
+      setShowJobModal(false);
+      await loadJobsData(false);
+    } catch (err: any) {
+      setJobSaveError(err.message || 'Database validation error.');
+    } finally {
+      setIsJobSaving(false);
+    }
+  };
+
+  // Duplicate Job Config
+  const handleDuplicateJob = async (job: ScheduledJob) => {
+    const copyId = `${job.jobId}_copy_${Math.floor(Math.random() * 1000)}`;
+    const copyData = {
+      jobId: copyId,
+      jobName: `${job.jobName} (Copy)`,
+      description: job.description,
+      category: jobs.find(j => j.jobId === job.jobId)?.scheduleCron ? 'Custom' : 'Custom',
+      scheduleCron: job.scheduleCron,
+      scheduleHuman: `Copy of ${job.scheduleHuman}`,
+      estimatedDurationMs: job.estimatedDurationMs,
+      timeout: 300,
+      safeToRetry: job.safeToRetry,
+      safeToRunManually: job.safeToRunManually,
+      iconType: job.iconType
+    };
+
+    try {
+      await createScheduledJob(copyData);
+      showSuccess('Job Duplicated', `'${job.jobName}' configuration cloned successfully.`);
+      await loadJobsData(false);
+    } catch (err: any) {
+      showError('Clone Failed', 'Could not duplicate target job.');
+    }
+  };
+
+  // Delete Job Config
+  const handleDeleteJob = async (job: ScheduledJob) => {
+    if (!window.confirm(`Are you absolutely sure you want to permanently delete background operation '${job.jobName}'? This clears scheduler references and config.`)) return;
+    try {
+      await deleteScheduledJob(job.jobId);
+      showSuccess('Job Purged', `Successfully deleted background scheduled task.`);
+      setSelectedJob(null);
+      await loadJobsData(false);
+    } catch (err: any) {
+      showError('Delete Failed', 'Failed to delete target job config.');
+    }
+  };
+
+  const handleOpenEdit = (job: ScheduledJob) => {
+    setJobModalMode('EDIT');
+    setJobModalData({
+      jobId: job.jobId,
+      jobName: job.jobName,
+      description: job.description,
+      category: 'Maintenance',
+      scheduleCron: job.scheduleCron,
+      scheduleHuman: job.scheduleHuman,
+      estimatedDurationMs: job.estimatedDurationMs,
+      timeout: 300,
+      safeToRetry: job.safeToRetry,
+      safeToRunManually: job.safeToRunManually,
+      iconType: job.iconType
+    });
+    setJobSaveError('');
+    setShowJobModal(true);
+  };
+
+  const handleOpenCreate = () => {
+    setJobModalMode('CREATE');
+    setJobModalData({
+      jobId: `custom_${Date.now()}`,
+      jobName: '',
+      description: '',
+      category: 'Custom',
+      scheduleCron: '*/15 * * * *',
+      scheduleHuman: 'Every 15 minutes',
+      estimatedDurationMs: 3000,
+      timeout: 300,
+      safeToRetry: true,
+      safeToRunManually: true,
+      iconType: 'broom'
+    });
+    setJobSaveError('');
+    setShowJobModal(true);
+  };
+
+  // Export logs helper
+  const handleExportRuns = (jobId: string, jobName: string) => {
+    if (drawerHistory.length === 0) {
+      showInfo('No Logs', 'No active execution records registered to compile.');
+      return;
+    }
+
+    const reportHeaders = ['Execution ID', 'Run ID', 'Job ID', 'Job Name', 'Started At', 'Completed At', 'Status', 'Duration (ms)', 'Trigger Type', 'Executed By', 'Error Details'];
+    const reportRows = drawerHistory.map(r => [
+      r.executionId,
+      r.runId,
+      r.jobId,
+      r.jobName,
+      r.startedAt,
+      r.completedAt || '',
+      r.status,
+      r.durationMs,
+      r.triggerType,
+      r.executedBy || 'SYSTEM',
+      r.errorSummary || ''
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [reportHeaders.join(','), ...reportRows.map(r => r.join(','))].join('\n');
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `${jobId}_execution_logs_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showSuccess('Export Succeeded', 'Operational CSV logs generated successfully.');
+  };
+
+  // Category and Search Filtering log
+  const filteredJobs = useMemo(() => {
+    return jobs.filter((job) => {
+      // 1. Search Query Box
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const name = (job.jobName || '').toLowerCase();
+        const desc = (job.description || '').toLowerCase();
+        const jId = (job.jobId || '').toLowerCase();
+        
+        if (!name.includes(q) && !desc.includes(q) && !jId.includes(q)) return false;
+      }
+
+      // 2. Status Select Filter
+      if (statusFilter !== 'ALL' && job.status !== statusFilter) return false;
+
+      // 3. Category Filter
+      if (categoryFilter !== 'ALL') {
+        const detailsCategory = job.scheduleHuman; // fallback category mappings if undefined
+        if (categoryFilter === 'Reporting' && !job.jobName.includes('Report')) return false;
+        if (categoryFilter === 'Backup' && !job.jobName.includes('Backup')) return false;
+        if (categoryFilter === 'Security' && !job.jobName.includes('Security') && !job.jobName.includes('Purge')) return false;
+      }
+
+      return true;
+    });
+  }, [jobs, searchQuery, statusFilter, categoryFilter]);
+
+  // Drawer History filtering based on Search Query
+  const filteredDrawerHistory = useMemo(() => {
+    if (!logSearchQuery.trim()) return drawerHistory;
+    const q = logSearchQuery.toLowerCase().trim();
+    return drawerHistory.filter(run => {
+      const eId = (run.executionId || '').toLowerCase();
+      const trigger = (run.triggerType || '').toLowerCase();
+      const status = (run.status || '').toLowerCase();
+      const error = (run.errorSummary || '').toLowerCase();
+      return eId.includes(q) || trigger.includes(q) || status.includes(q) || error.includes(q);
+    });
+  }, [drawerHistory, logSearchQuery]);
+
+  const getJobIcon = (iconType: ScheduledJob['iconType']) => {
+    switch (iconType) {
+      case 'backup': return Cloud;
+      case 'bell': return Bell;
+      case 'calculator': return Calculator;
+      case 'camera': return Camera;
+      case 'broom': return Sparkles;
+      case 'shield': return ShieldCheck;
+      case 'report': return FileText;
+      default: return Cpu;
+    }
+  };
+
   const getStatusBadge = (status: ScheduledJobStatus) => {
     switch (status) {
       case 'HEALTHY':
         return {
           label: 'Healthy',
           icon: CheckCircle2,
-          containerClass: isDark ? 'bg-[#0f5223]/30 text-[#85e197] border-[#1d7d3d]/50' : 'bg-[#e6f4ea] text-[#137333] border-[#ceead6]',
+          containerClass: isDark ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-emerald-50 text-emerald-700 border-emerald-200',
           dotClass: 'bg-emerald-400'
         };
       case 'RUNNING':
         return {
           label: 'Running...',
           icon: RefreshCw,
-          containerClass: isDark ? 'bg-[#004a77]/30 text-[#c2e7ff] border-[#0077c2]/50' : 'bg-[#c2e7ff] text-[#004a77] border-[#7fcfff]',
+          containerClass: isDark ? 'bg-sky-500/10 text-sky-400 border-sky-500/20' : 'bg-sky-50 text-sky-700 border-sky-200',
           dotClass: 'bg-sky-400 animate-spin'
         };
       case 'DELAYED':
         return {
           label: 'Delayed',
           icon: Clock,
-          containerClass: isDark ? 'bg-[#5c3e00]/30 text-[#fdd663] border-[#916200]/50' : 'bg-[#fef7e0] text-[#b06000] border-[#fde293]',
-          dotClass: 'bg-amber-400 animate-pulse'
-        };
-      case 'CRITICAL_DELAY':
-        return {
-          label: 'Scheduler Delayed',
-          icon: AlertTriangle,
-          containerClass: isDark ? 'bg-[#601410]/30 text-[#f28b82] border-[#a52714]/50' : 'bg-[#fce8e6] text-[#c5221f] border-[#fad2cf]',
-          dotClass: 'bg-rose-500 animate-ping'
+          containerClass: isDark ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-amber-50 text-amber-700 border-amber-200',
+          dotClass: 'bg-amber-400'
         };
       case 'FAILED':
         return {
           label: 'Failed',
           icon: XCircle,
-          containerClass: isDark ? 'bg-[#601410]/30 text-[#f28b82] border-[#a52714]/50' : 'bg-[#fce8e6] text-[#c5221f] border-[#fad2cf]',
+          containerClass: isDark ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-rose-50 text-rose-700 border-rose-200',
           dotClass: 'bg-rose-500'
-        };
-      case 'DISABLED':
-        return {
-          label: 'Disabled',
-          icon: MinusCircle,
-          containerClass: isDark ? 'bg-[#303030]/50 text-[#9e9e9e] border-[#424242]' : 'bg-[#f1f3f4] text-[#5f6368] border-[#dadce0]',
-          dotClass: 'bg-neutral-400'
         };
       default:
         return {
-          label: 'Unknown',
-          icon: HelpCircle,
-          containerClass: isDark ? 'bg-[#2a2a2a] text-[#aaa]' : 'bg-gray-100 text-gray-700',
-          dotClass: 'bg-gray-400'
+          label: 'Paused',
+          icon: MinusCircle,
+          containerClass: isDark ? 'bg-slate-500/10 text-slate-400 border-slate-500/20' : 'bg-slate-50 text-slate-700 border-slate-200',
+          dotClass: 'bg-slate-500'
         };
     }
   };
 
-  // Filter jobs
-  const filteredJobs = jobs.filter(job => {
-    // Status filter
-    if (statusFilter === 'HEALTHY' && job.status !== 'HEALTHY') return false;
-    if (statusFilter === 'DELAYED' && job.status !== 'DELAYED' && job.status !== 'CRITICAL_DELAY') return false;
-    if (statusFilter === 'FAILED' && job.status !== 'FAILED') return false;
-    if (statusFilter === 'DISABLED' && job.status !== 'DISABLED') return false;
-
-    // Search query
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      return (
-        job.jobName.toLowerCase().includes(q) ||
-        job.description.toLowerCase().includes(q) ||
-        job.scheduleHuman.toLowerCase().includes(q) ||
-        job.scheduleCron.toLowerCase().includes(q)
-      );
-    }
-    return true;
-  });
-
   return (
-    <div className="space-y-6 pb-16">
-      {/* Header Section */}
+    <div className="space-y-6 max-w-7xl mx-auto pb-16 relative animate-fade-in">
+      {/* Upper header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className={cn(
-              "text-2xl sm:text-3xl font-bold tracking-tight",
-              isDark ? "text-white" : "text-gray-900"
-            )}>
-              Scheduled Jobs Monitor
-            </h1>
-            <span className={cn(
-              "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border",
-              isDark 
-                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" 
-                : "bg-emerald-50 text-emerald-700 border-emerald-200"
-            )}>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              24/7 Engine Active
-            </span>
-          </div>
-          <p className={cn(
-            "text-sm mt-1 max-w-3xl",
-            isDark ? "text-neutral-400" : "text-gray-600"
-          )}>
-            Continuous background job scheduler running on the server. Inspects real execution history, 
-            detects schedule delays, and manages automated backups even when user devices are off.
+        <div className="space-y-1">
+          <h1 className={cn('text-2xl sm:text-3xl font-extrabold tracking-tight', isDark ? 'text-white' : 'text-[#1f1f1f]')}>
+            Enterprise Scheduled Jobs Center
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-400">
+            Configure dynamic, Firestore-backed automatic schedules, audit logs, and operational tasks.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+        <div className="flex items-center gap-2">
           <M3Button
             variant="tonal"
-            size="sm"
-            onClick={() => loadJobsData(true)}
-            disabled={isRefreshing}
-            className="flex items-center gap-2"
+            icon={Settings2}
+            onClick={handleOpenSettings}
           >
-            <RefreshCw className={cn("w-4 h-4", isRefreshing && "animate-spin")} />
-            <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+            Scheduler Config
+          </M3Button>
+          <M3Button
+            variant="filled"
+            icon={Plus}
+            onClick={handleOpenCreate}
+          >
+            Create Custom Job
           </M3Button>
         </div>
       </div>
 
-      {/* Status banner */}
-      {statusMessage && (
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0 }}
-          className={cn(
-            "p-3.5 rounded-xl border flex items-center justify-between text-sm transition-all",
-            statusMessage.type === 'success' && (isDark ? "bg-emerald-950/40 text-emerald-300 border-emerald-800/60" : "bg-emerald-50 text-emerald-800 border-emerald-200"),
-            statusMessage.type === 'error' && (isDark ? "bg-rose-950/40 text-rose-300 border-rose-800/60" : "bg-rose-50 text-rose-800 border-rose-200"),
-            statusMessage.type === 'info' && (isDark ? "bg-sky-950/40 text-sky-300 border-sky-800/60" : "bg-sky-50 text-sky-800 border-sky-200")
-          )}
-        >
-          <div className="flex items-center gap-2.5">
-            {statusMessage.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
-            {statusMessage.type === 'error' && <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />}
-            {statusMessage.type === 'info' && <Info className="w-4 h-4 text-sky-400 shrink-0" />}
-            <span>{statusMessage.text}</span>
-          </div>
-          <button 
-            onClick={() => setStatusMessage(null)}
-            className="text-xs font-semibold hover:underline opacity-80 hover:opacity-100 ml-4"
-          >
-            Dismiss
-          </button>
-        </motion.div>
-      )}
-
-      {/* Error alert */}
-      {errorMsg && (
-        <div className={cn(
-          "p-4 rounded-xl border flex items-start gap-3",
-          isDark ? "bg-rose-950/30 text-rose-300 border-rose-800/50" : "bg-rose-50 text-rose-800 border-rose-200"
-        )}>
-          <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-          <div>
-            <h4 className="font-semibold text-sm">Scheduler Connection Error</h4>
-            <p className="text-xs mt-0.5 opacity-90">{errorMsg}</p>
-          </div>
+      {/* Telemetry Dashboard Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+        <div className="p-4 rounded-3xl bg-[#1e1e2d]/60 border border-white/[0.08] backdrop-blur-xl">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 leading-none">Total Jobs</p>
+          <p className="text-xl font-mono font-extrabold text-white">{summary?.totalJobs || 0}</p>
         </div>
-      )}
-
-      {/* Top Metrics Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 sm:gap-4">
-        <M3Card variant="filled" padding="md" className="relative overflow-hidden">
-          <div className="flex items-center justify-between text-xs font-medium opacity-70">
-            <span>Total Registered</span>
-            <Cpu className="w-4 h-4 text-sky-400" />
-          </div>
-          <div className="text-2xl font-bold mt-2">{summary?.totalJobs ?? jobs.length}</div>
-          <div className="text-xs text-neutral-400 mt-1">Real background jobs</div>
-        </M3Card>
-
-        <M3Card variant="filled" padding="md" className="relative overflow-hidden">
-          <div className="flex items-center justify-between text-xs font-medium text-emerald-400">
-            <span>Healthy</span>
-            <CheckCircle2 className="w-4 h-4" />
-          </div>
-          <div className="text-2xl font-bold mt-2 text-emerald-400">{summary?.healthyCount ?? 0}</div>
-          <div className="text-xs text-neutral-400 mt-1">On schedule</div>
-        </M3Card>
-
-        <M3Card variant="filled" padding="md" className="relative overflow-hidden">
-          <div className="flex items-center justify-between text-xs font-medium text-amber-400">
-            <span>Delayed</span>
-            <Clock className="w-4 h-4" />
-          </div>
-          <div className="text-2xl font-bold mt-2 text-amber-400">{summary?.delayedCount ?? 0}</div>
-          <div className="text-xs text-neutral-400 mt-1">Execution overdue</div>
-        </M3Card>
-
-        <M3Card variant="filled" padding="md" className="relative overflow-hidden">
-          <div className="flex items-center justify-between text-xs font-medium text-rose-400">
-            <span>Failed</span>
-            <XCircle className="w-4 h-4" />
-          </div>
-          <div className="text-2xl font-bold mt-2 text-rose-400">{summary?.failedCount ?? 0}</div>
-          <div className="text-xs text-neutral-400 mt-1">Errors encountered</div>
-        </M3Card>
-
-        <M3Card variant="filled" padding="md" className="relative overflow-hidden col-span-2 sm:col-span-1">
-          <div className="flex items-center justify-between text-xs font-medium opacity-70">
-            <span>Server Clock</span>
-            <Server className="w-4 h-4 text-indigo-400" />
-          </div>
-          <div className="text-base font-semibold mt-2.5 font-mono truncate">
-            {summary?.serverTime ? new Date(summary.serverTime).toLocaleTimeString('en-US', { hour12: false }) : '--:--:--'}
-          </div>
-          <div className="text-xs text-neutral-400 mt-1">UTC Server Time</div>
-        </M3Card>
+        <div className="p-4 rounded-3xl bg-[#1e1e2d]/60 border border-sky-500/20 backdrop-blur-xl">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-sky-400 mb-1 leading-none">Active Workers</p>
+          <p className="text-xl font-mono font-extrabold text-sky-400 animate-pulse">{summary?.runningCount || 0}</p>
+        </div>
+        <div className="p-4 rounded-3xl bg-[#1e1e2d]/60 border border-emerald-500/20 backdrop-blur-xl">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 mb-1 leading-none">Healthy Threads</p>
+          <p className="text-xl font-mono font-extrabold text-emerald-400">{summary?.healthyCount || 0}</p>
+        </div>
+        <div className="p-4 rounded-3xl bg-[#1e1e2d]/60 border border-white/[0.08] backdrop-blur-xl">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 leading-none">Paused</p>
+          <p className="text-xl font-mono font-extrabold text-slate-300">{summary?.disabledCount || 0}</p>
+        </div>
+        <div className="p-4 rounded-3xl bg-[#1e1e2d]/60 border border-rose-500/20 backdrop-blur-xl">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-rose-400 mb-1 leading-none">Overdue Tasks</p>
+          <p className="text-xl font-mono font-extrabold text-rose-400">{summary?.delayedCount || 0}</p>
+        </div>
+        <div className="p-4 rounded-3xl bg-[#1e1e2d]/60 border border-rose-500/20 backdrop-blur-xl">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-rose-400 mb-1 leading-none">Failures Today</p>
+          <p className="text-xl font-mono font-extrabold text-rose-500">{summary?.failedCount || 0}</p>
+        </div>
       </div>
 
-      {/* Dedicated Automatic Disaster-Recovery Backup Health Card */}
-      {summary?.autoBackupSystem && (
-        <M3Card 
-          variant="elevated" 
-          padding="lg"
-          className={cn(
-            "relative overflow-hidden transition-all",
-            summary.autoBackupSystem.status === 'WARNING' && (isDark ? "border-amber-500/40 bg-amber-950/10" : "border-amber-300 bg-amber-50/50"),
-            summary.autoBackupSystem.status === 'FAILED' && (isDark ? "border-rose-500/40 bg-rose-950/10" : "border-rose-300 bg-rose-50/50")
-          )}
-        >
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-[#3c4043]/30">
-            <div className="flex items-center gap-3">
-              <div className={cn(
-                "p-2.5 rounded-xl border flex items-center justify-center shrink-0",
-                summary.autoBackupSystem.status === 'HEALTHY' && (isDark ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400" : "bg-emerald-50 border-emerald-200 text-emerald-700"),
-                summary.autoBackupSystem.status === 'WARNING' && (isDark ? "bg-amber-500/15 border-amber-500/30 text-amber-400" : "bg-amber-50 border-amber-200 text-amber-700"),
-                summary.autoBackupSystem.status === 'FAILED' && (isDark ? "bg-rose-500/15 border-rose-500/30 text-rose-400" : "bg-rose-50 border-rose-200 text-rose-700")
-              )}>
-                <Cloud className="w-6 h-6" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold">Automatic Backup Scheduler</h3>
-                  <span className={cn(
-                    "px-2.5 py-0.5 rounded-full text-xs font-semibold border flex items-center gap-1.5",
-                    summary.autoBackupSystem.status === 'HEALTHY' && (isDark ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-emerald-50 text-emerald-700 border-emerald-200"),
-                    summary.autoBackupSystem.status === 'WARNING' && (isDark ? "bg-amber-500/10 text-amber-400 border-amber-500/30" : "bg-amber-50 text-amber-800 border-amber-300"),
-                    summary.autoBackupSystem.status === 'FAILED' && (isDark ? "bg-rose-500/10 text-rose-400 border-rose-500/30" : "bg-rose-50 text-rose-800 border-rose-300"),
-                    summary.autoBackupSystem.status === 'DISABLED' && (isDark ? "bg-neutral-500/10 text-neutral-400 border-neutral-500/30" : "bg-gray-100 text-gray-700 border-gray-200")
-                  )}>
-                    <span className={cn(
-                      "w-1.5 h-1.5 rounded-full",
-                      summary.autoBackupSystem.status === 'HEALTHY' ? "bg-emerald-400" : summary.autoBackupSystem.status === 'WARNING' ? "bg-amber-400 animate-pulse" : "bg-rose-400"
-                    )} />
-                    {summary.autoBackupSystem.status === 'HEALTHY' ? 'Working' : summary.autoBackupSystem.status}
-                  </span>
-                </div>
-                <p className="text-xs text-neutral-400 mt-0.5">
-                  {summary.autoBackupSystem.message}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 self-start lg:self-auto">
-              <M3Button
-                variant="filled"
-                size="sm"
-                onClick={() => {
-                  const autoBackupJob = jobs.find(j => j.jobId === 'auto_backup');
-                  if (autoBackupJob) {
-                    setConfirmModal({
-                      isOpen: true,
-                      job: autoBackupJob,
-                      mode: 'RUN',
-                      isLoading: false
-                    });
-                  }
-                }}
-                className="flex items-center gap-1.5"
-              >
-                <Play className="w-3.5 h-3.5 fill-current" />
-                <span>Run Backup Now</span>
-              </M3Button>
-            </div>
-          </div>
-
-          {/* Proactive Warning Banner if Backup Scheduled ON but No Recent Real Backup */}
-          {summary.autoBackupSystem.status === 'WARNING' && (
-            <div className={cn(
-              "mt-3.5 p-3 rounded-lg border flex items-center gap-2.5 text-xs font-medium",
-              isDark ? "bg-amber-950/40 border-amber-800/60 text-amber-300" : "bg-amber-50 border-amber-200 text-amber-900"
-            )}>
-              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>
-                Attention: Automatic backup is configured ON, but no verified cloud archive has been created within the last 24 hours. 
-                Use &quot;Run Backup Now&quot; to test immediate server-side snapshot creation.
-              </span>
-            </div>
-          )}
-
-          {/* Backup stats grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 pt-4 text-xs">
-            <div>
-              <span className="text-neutral-400 block">Verified Archives</span>
-              <span className="font-semibold text-sm mt-0.5 block">{summary.autoBackupSystem.realBackupsFound} snapshots</span>
-            </div>
-            <div>
-              <span className="text-neutral-400 block">Last Attempt</span>
-              <span className="font-semibold text-sm mt-0.5 block">{formatRelativeTime(summary.autoBackupSystem.lastAttempt)}</span>
-            </div>
-            <div>
-              <span className="text-neutral-400 block">Last Successful</span>
-              <span className="font-semibold text-sm mt-0.5 block">{formatRelativeTime(summary.autoBackupSystem.lastSuccessfulBackup)}</span>
-            </div>
-            <div>
-              <span className="text-neutral-400 block">Next Scheduled</span>
-              <span className="font-semibold text-sm mt-0.5 block">{formatRelativeTime(summary.autoBackupSystem.nextBackup)}</span>
-            </div>
-            <div>
-              <span className="text-neutral-400 block">Last Duration</span>
-              <span className="font-semibold text-sm mt-0.5 block">{summary.autoBackupSystem.backupDuration}</span>
-            </div>
-            <div>
-              <span className="text-neutral-400 block">Recent Failures</span>
-              <span className={cn(
-                "font-semibold text-sm mt-0.5 block",
-                summary.autoBackupSystem.failureCount > 0 ? "text-rose-400" : "text-emerald-400"
-              )}>
-                {summary.autoBackupSystem.failureCount}
-              </span>
-            </div>
-          </div>
-        </M3Card>
-      )}
-
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        {/* Search */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search by job name, schedule, or purpose..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className={cn(
-              "w-full pl-10 pr-4 py-2 text-sm rounded-xl border transition-colors outline-none",
-              isDark 
-                ? "bg-[#1e1f20] border-[#3c4043] text-white placeholder:text-neutral-500 focus:border-sky-400" 
-                : "bg-white border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500"
-            )}
-          />
-        </div>
-
-        {/* Status Filter Chips */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-          {(['ALL', 'HEALTHY', 'DELAYED', 'FAILED', 'DISABLED'] as const).map(st => (
-            <M3Chip
-              key={st}
-              label={st === 'ALL' ? 'All Jobs' : st.charAt(0) + st.slice(1).toLowerCase()}
-              selected={statusFilter === st}
-              onClick={() => setStatusFilter(st)}
-              className="text-xs shrink-0"
+      {/* Advanced Search & Filtering Box */}
+      <M3Card variant="elevated" padding="lg" className="space-y-4">
+        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search Job Name, ID, category..."
+              className="w-full text-xs bg-slate-900 border border-white/10 rounded-full pl-10 pr-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
             />
-          ))}
+          </div>
+
+          <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto">
+            <span className="text-xs font-bold text-slate-400 shrink-0">Status:</span>
+            {(['ALL', 'HEALTHY', 'RUNNING', 'DELAYED', 'FAILED', 'DISABLED'] as const).map((s) => (
+              <M3Chip
+                key={s}
+                selected={statusFilter === s}
+                onClick={() => setStatusFilter(s)}
+                label={s === 'ALL' ? 'All Status' : s.charAt(0) + s.slice(1).toLowerCase()}
+              />
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* Jobs List Table / Cards */}
-      <M3Card variant="filled" padding="none" className="overflow-hidden border border-[#3c4043]/30">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={cn(
-              "text-xs font-semibold uppercase tracking-wider border-b",
-              isDark ? "bg-[#171819] text-neutral-400 border-[#2d2f31]" : "bg-gray-50 text-gray-500 border-gray-200"
-            )}>
-              <tr>
-                <th className="py-3.5 px-4">Job Name & Purpose</th>
-                <th className="py-3.5 px-3">Status</th>
-                <th className="py-3.5 px-3">Schedule</th>
-                <th className="py-3.5 px-3">Last Run</th>
-                <th className="py-3.5 px-3">Next Expected</th>
-                <th className="py-3.5 px-3">Duration</th>
-                <th className="py-3.5 px-3">Failures</th>
-                <th className="py-3.5 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className={cn(
-              "divide-y",
-              isDark ? "divide-[#2d2f31]" : "divide-gray-100"
-            )}>
-              {isLoading ? (
-                <tr>
-                  <td colSpan={8} className="py-12 text-center text-neutral-400">
-                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-sky-400" />
-                    <span>Loading real backend jobs status...</span>
-                  </td>
-                </tr>
-              ) : filteredJobs.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-12 text-center text-neutral-400">
-                    <p className="font-medium text-sm">No scheduled jobs match your criteria.</p>
-                    <p className="text-xs mt-1">Try changing the search keyword or filter chip.</p>
-                  </td>
-                </tr>
-              ) : (
-                filteredJobs.map(job => {
-                  const Icon = getJobIcon(job.iconType);
-                  const statusBadge = getStatusBadge(job.status);
-                  const isJobToggling = togglingJobId === job.jobId;
+        <div className="flex flex-wrap items-center gap-4 pt-3 border-t border-white/[0.05] text-xs">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-slate-400">Task Group/Category:</span>
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="bg-slate-900 text-slate-300 border border-white/10 rounded-xl px-2.5 py-1.5 focus:outline-none"
+            >
+              <option value="ALL">All Categories</option>
+              <option value="Backup">Backups & Recovery</option>
+              <option value="Reporting">Analytics & Reports</option>
+              <option value="Security">Database & Session Security</option>
+              <option value="Maintenance">Maintenance Cleanups</option>
+            </select>
+          </div>
 
-                  return (
-                    <tr 
-                      key={job.jobId}
-                      className={cn(
-                        "transition-colors",
-                        isDark ? "hover:bg-[#282a2d]/50" : "hover:bg-gray-50/80"
-                      )}
-                    >
-                      {/* Job Name */}
-                      <td className="py-4 px-4 max-w-xs">
-                        <div className="flex items-start gap-3">
-                          <div className={cn(
-                            "p-2 rounded-lg border mt-0.5 shrink-0",
-                            isDark ? "bg-[#282a2d] border-[#3c4043] text-sky-400" : "bg-sky-50 border-sky-200 text-sky-600"
-                          )}>
-                            <Icon className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <div className="font-semibold text-sm flex items-center gap-1.5">
-                              <span>{job.jobName}</span>
-                              {!job.enabled && (
-                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-neutral-700/50 text-neutral-400 font-normal">
-                                  Disabled
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-xs text-neutral-400 line-clamp-1 mt-0.5">
-                              {job.description}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-4 px-3 whitespace-nowrap">
-                        <div className="flex flex-col gap-1">
-                          <span className={cn(
-                            "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium border w-max",
-                            statusBadge.containerClass
-                          )}>
-                            <span className={cn("w-1.5 h-1.5 rounded-full", statusBadge.dotClass)} />
-                            {statusBadge.label}
-                          </span>
-                          {job.isOverdue && (
-                            <span className="text-[10px] text-amber-400 flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3" />
-                              Delayed {Math.round((job.overdueDurationMs || 0) / 60000)}m
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Schedule */}
-                      <td className="py-4 px-3 whitespace-nowrap">
-                        <div className="text-xs">
-                          <span className="font-medium block">{job.scheduleHuman}</span>
-                          <span className="font-mono text-[11px] text-neutral-400 block mt-0.5">
-                            {job.scheduleCron}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Last Run */}
-                      <td className="py-4 px-3 whitespace-nowrap">
-                        {job.lastRun ? (
-                          <div className="text-xs">
-                            <span className="font-medium block">{formatRelativeTime(job.lastRun.startedAt)}</span>
-                            <span className={cn(
-                              "text-[10px] font-semibold block mt-0.5",
-                              job.lastRun.status === 'SUCCESS' ? "text-emerald-400" : "text-rose-400"
-                            )}>
-                              {job.lastRun.result}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-neutral-500">None yet</span>
-                        )}
-                      </td>
-
-                      {/* Next Expected */}
-                      <td className="py-4 px-3 whitespace-nowrap">
-                        <div className="text-xs">
-                          <span className="font-medium block">{formatRelativeTime(job.nextExpectedRun)}</span>
-                          <span className="text-[10px] text-neutral-400 block mt-0.5">
-                            {new Date(job.nextExpectedRun).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Duration */}
-                      <td className="py-4 px-3 whitespace-nowrap text-xs font-mono">
-                        {job.lastRun ? `${(job.lastRun.durationMs / 1000).toFixed(1)}s` : '--'}
-                      </td>
-
-                      {/* Failures */}
-                      <td className="py-4 px-3 whitespace-nowrap">
-                        {job.recentFailureCount > 0 ? (
-                          <span className="px-2 py-0.5 rounded text-xs font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                            {job.recentFailureCount}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-emerald-400 font-medium">0</span>
-                        )}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-4 px-4 whitespace-nowrap text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {/* Run Now */}
-                          {job.safeToRunManually && (
-                            <button
-                              title="Execute job now manually"
-                              onClick={() => setConfirmModal({
-                                isOpen: true,
-                                job,
-                                mode: 'RUN',
-                                isLoading: false
-                              })}
-                              disabled={job.status === 'RUNNING'}
-                              className={cn(
-                                "p-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1",
-                                isDark 
-                                  ? "hover:bg-neutral-700/60 text-sky-400" 
-                                  : "hover:bg-sky-50 text-sky-600"
-                              )}
-                            >
-                              <Play className="w-3.5 h-3.5 fill-current" />
-                              <span className="hidden xl:inline text-xs">Run</span>
-                            </button>
-                          )}
-
-                          {/* Retry (if safe & failed/delayed) */}
-                          {job.safeToRetry && (job.status === 'FAILED' || job.status === 'DELAYED' || job.status === 'CRITICAL_DELAY') && (
-                            <button
-                              title="Retry execution now"
-                              onClick={() => setConfirmModal({
-                                isOpen: true,
-                                job,
-                                mode: 'RETRY',
-                                isLoading: false
-                              })}
-                              className={cn(
-                                "p-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1",
-                                isDark 
-                                  ? "hover:bg-neutral-700/60 text-amber-400" 
-                                  : "hover:bg-amber-50 text-amber-600"
-                              )}
-                            >
-                              <RotateCcw className="w-3.5 h-3.5" />
-                              <span className="hidden xl:inline text-xs">Retry</span>
-                            </button>
-                          )}
-
-                          {/* Execution History */}
-                          <button
-                            title="View authoritative execution runs"
-                            onClick={() => handleOpenHistory(job)}
-                            className={cn(
-                              "p-1.5 rounded-lg text-xs font-medium transition-colors",
-                              isDark 
-                                ? "hover:bg-neutral-700/60 text-neutral-300" 
-                                : "hover:bg-gray-100 text-gray-700"
-                            )}
-                          >
-                            <History className="w-4 h-4" />
-                          </button>
-
-                          {/* Toggle Enabled / Disabled */}
-                          <button
-                            title={job.enabled ? "Disable this job" : "Enable this job"}
-                            onClick={() => handleToggleState(job)}
-                            disabled={isJobToggling}
-                            className={cn(
-                              "p-1.5 rounded-lg text-xs font-medium transition-colors",
-                              job.enabled ? "text-emerald-400 hover:bg-emerald-500/10" : "text-neutral-500 hover:bg-neutral-500/10"
-                            )}
-                          >
-                            <Power className={cn("w-4 h-4", isJobToggling && "animate-pulse")} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+          <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium ml-auto">
+            <Server size={12} />
+            <span>Active Scheduler Timezone: <strong className="text-slate-300 font-mono font-bold">{settingsData.timezone}</strong></span>
+          </div>
         </div>
       </M3Card>
 
-      {/* Confirmation Dialog for Run / Retry */}
-      <M3Dialog
-        isOpen={confirmModal.isOpen}
-        onClose={() => {
-          if (!confirmModal.isLoading) {
-            setConfirmModal({ isOpen: false, job: null, mode: 'RUN', isLoading: false });
-          }
-        }}
-        title={confirmModal.mode === 'RUN' ? `Run '${confirmModal.job?.jobName}' Now?` : `Retry '${confirmModal.job?.jobName}'?`}
-        subtitle="Authoritative server-side execution"
-        icon={confirmModal.mode === 'RUN' ? Play : RotateCcw}
-        iconTone={confirmModal.mode === 'RUN' ? 'primary' : 'amber'}
-        actions={
-          <div className="flex items-center gap-2 justify-end w-full">
-            <M3Button
-              variant="text"
-              onClick={() => setConfirmModal({ isOpen: false, job: null, mode: 'RUN', isLoading: false })}
-              disabled={confirmModal.isLoading}
+      {/* Main Jobs Table Container */}
+      {isLoading ? (
+        <div className="text-center py-16 text-slate-500 text-xs flex items-center justify-center gap-2">
+          <Activity className="animate-spin text-indigo-400" size={16} />
+          <span>Synchronizing with Firestore background schedules...</span>
+        </div>
+      ) : filteredJobs.length > 0 ? (
+        <div className="overflow-x-auto rounded-3xl border border-white/[0.06] bg-slate-950">
+          <table className="w-full text-left border-collapse min-w-[1000px]">
+            <thead>
+              <tr className="border-b border-white/[0.08] bg-slate-900/50 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <th className="py-4 px-6">Scheduled Job Name</th>
+                <th className="py-4 px-4">Cron Expression</th>
+                <th className="py-4 px-4">Status</th>
+                <th className="py-4 px-4">Last Attempt Run</th>
+                <th className="py-4 px-4">Next Expected Trigger</th>
+                <th className="py-4 px-4 text-right">Avg Duration</th>
+                <th className="py-4 px-6 text-right">Operational Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/[0.04]">
+              {filteredJobs.map((job) => {
+                const Icon = getJobIcon(job.iconType);
+                const badge = getStatusBadge(job.status);
+                const isJobRunning = job.status === 'RUNNING';
+                return (
+                  <tr
+                    key={job.jobId}
+                    onClick={() => setSelectedJob(job)}
+                    className="text-xs hover:bg-white/5 transition-colors cursor-pointer"
+                  >
+                    {/* Job metadata details */}
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 flex items-center justify-center shrink-0">
+                          <Icon size={18} />
+                        </div>
+                        <div>
+                          <p className="font-bold text-white tracking-tight leading-none">{job.jobName}</p>
+                          <p className="text-[11px] text-slate-500 mt-1.5 font-normal truncate max-w-sm">{job.description}</p>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="py-4 px-4 font-mono text-[11px] text-slate-400">
+                      {job.scheduleCron}
+                    </td>
+
+                    {/* Computed status */}
+                    <td className="py-4 px-4">
+                      <span className={cn('px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border inline-flex items-center gap-1.5', badge.containerClass)}>
+                        <span className={cn('w-1.5 h-1.5 rounded-full', badge.dotClass)} />
+                        <span>{badge.label}</span>
+                      </span>
+                    </td>
+
+                    {/* Timestamps */}
+                    <td className="py-4 px-4 font-mono text-[11px] text-slate-400">
+                      {job.lastRun ? formatRelativeTime(job.lastRun.startedAt) : 'Never Run'}
+                    </td>
+                    <td className="py-4 px-4 font-mono text-[11px] text-[#a8c7fa] font-bold">
+                      {job.enabled ? formatRelativeTime(job.nextExpectedRun) : 'Paused'}
+                    </td>
+
+                    <td className="py-4 px-4 text-right font-mono text-slate-400">
+                      {job.lastRun ? `${(job.lastRun.durationMs / 1000).toFixed(1)}s` : `${(job.estimatedDurationMs / 1000).toFixed(1)}s`}
+                    </td>
+
+                    {/* Operational Action triggers */}
+                    <td className="py-4 px-6 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1 ml-auto">
+                        {isJobRunning ? (
+                          <button
+                            onClick={() => handleCancelRunning(job)}
+                            title="Abort manual thread"
+                            className="p-2 rounded-xl text-rose-400 hover:bg-rose-500/10 transition-colors"
+                          >
+                            <Ban size={15} />
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => handleRunNow(job)}
+                              disabled={runningJobId === job.jobId}
+                              title="Force immediately execution"
+                              className="p-2 rounded-xl text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-40"
+                            >
+                              <Play size={15} className={cn(runningJobId === job.jobId && 'animate-spin')} />
+                            </button>
+                            {job.status === 'FAILED' && (
+                              <button
+                                onClick={() => handleRetryJob(job)}
+                                title="Retry failure"
+                                className="p-2 rounded-xl text-amber-400 hover:bg-amber-500/10 transition-colors"
+                              >
+                                <RotateCcw size={15} />
+                              </button>
+                            )}
+                          </>
+                        )}
+                        <button
+                          onClick={() => handleToggleState(job)}
+                          disabled={togglingJobId === job.jobId}
+                          title={job.enabled ? 'Pause schedule' : 'Resume schedule'}
+                          className={cn(
+                            'p-2 rounded-xl transition-colors',
+                            job.enabled ? 'text-indigo-400 hover:bg-indigo-500/10' : 'text-slate-400 hover:bg-slate-400/10'
+                          )}
+                        >
+                          <Power size={15} />
+                        </button>
+                        <button
+                          onClick={() => handleOpenEdit(job)}
+                          title="Configure Parameters"
+                          className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+                        >
+                          <Edit2 size={15} />
+                        </button>
+                        <button
+                          onClick={() => handleDuplicateJob(job)}
+                          title="Clone Job configuration"
+                          className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+                        >
+                          <Copy size={15} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteJob(job)}
+                          title="Delete scheduled job"
+                          className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="text-center py-16 rounded-3xl border border-white/[0.05] bg-white/[0.01]">
+          <p className="text-slate-400 font-bold text-sm">No scheduled jobs registered</p>
+          <p className="text-slate-500 text-xs mt-1">Configure parameters or click "Create Custom Job" above to whitelist execution.</p>
+        </div>
+      )}
+
+      {/* JOB PROFILE SIDE DRAWER (Deep audit trails logs) */}
+      <AnimatePresence>
+        {selectedJob && (
+          <>
+            {/* Scrim */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedJob(null)}
+              className="fixed inset-0 bg-black z-40"
+            />
+
+            {/* Slide Drawer Panel */}
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 250 }}
+              className={cn(
+                'fixed top-0 right-0 bottom-0 w-full sm:max-w-2xl z-50 overflow-y-auto flex flex-col border-l shadow-[0_0_40px_rgba(0,0,0,0.5)]',
+                isDark ? 'bg-[#181824] border-white/[0.08]' : 'bg-white border-[#e1e3e1]'
+              )}
             >
+              {/* Drawer Title Header */}
+              <div className="p-6 border-b border-white/[0.08] flex items-center justify-between sticky top-0 bg-[#181824]/95 backdrop-blur z-10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 flex items-center justify-center shrink-0">
+                    {React.createElement(getJobIcon(selectedJob.iconType), { size: 20 })}
+                  </div>
+                  <div>
+                    <h2 className="text-base font-extrabold text-white tracking-tight leading-none">{selectedJob.jobName}</h2>
+                    <p className="text-[11px] text-slate-400 mt-1.5 font-mono">{selectedJob.jobId}</p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setSelectedJob(null)}
+                  className="p-2 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Drawer content */}
+              <div className="p-6 space-y-6 flex-1">
+                {/* Info Card */}
+                <M3Card variant="outlined" padding="lg">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+                    <Info size={13} className="text-blue-400" /> Operational Information
+                  </h3>
+                  <p className="text-xs text-slate-300 leading-relaxed mb-4">{selectedJob.description}</p>
+
+                  <div className="grid grid-cols-2 gap-y-3.5 gap-x-4 text-xs">
+                    <div>
+                      <p className="text-slate-500 font-semibold mb-0.5">Cron Schedule Expression</p>
+                      <p className="text-white font-mono">{selectedJob.scheduleCron}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500 font-semibold mb-0.5">Human Schedule</p>
+                      <p className="text-white font-medium">{selectedJob.scheduleHuman}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500 font-semibold mb-0.5">Last Completion Run</p>
+                      <p className="text-slate-300 font-mono">{selectedJob.lastRun ? formatExactDateTime(selectedJob.lastRun.startedAt) : 'Never Run'}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500 font-semibold mb-0.5">Next Execution Countdown</p>
+                      <p className="text-[#a8c7fa] font-bold font-mono">{selectedJob.enabled ? formatRelativeTime(selectedJob.nextExpectedRun) : 'Schedule Paused'}</p>
+                    </div>
+                  </div>
+                </M3Card>
+
+                {/* Statistics panel */}
+                <M3Card variant="outlined" padding="lg">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+                    <History size={13} className="text-indigo-400" /> Execution Statistics
+                  </h3>
+
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div className="p-3 bg-white/[0.02] border border-white/[0.04] rounded-2xl">
+                      <p className="text-[10px] text-slate-500 font-bold uppercase">Total Runs</p>
+                      <p className="text-lg font-mono font-extrabold text-white mt-1">
+                        {drawerHistory.length}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl">
+                      <p className="text-[10px] text-emerald-400 font-bold uppercase">Success</p>
+                      <p className="text-lg font-mono font-extrabold text-emerald-400 mt-1">
+                        {drawerHistory.filter(r => r.status === 'SUCCESS').length}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-rose-500/5 border border-rose-500/10 rounded-2xl">
+                      <p className="text-[10px] text-rose-400 font-bold uppercase">Failures</p>
+                      <p className="text-lg font-mono font-extrabold text-rose-400 mt-1">
+                        {drawerHistory.filter(r => r.status === 'FAILED').length}
+                      </p>
+                    </div>
+                  </div>
+                </M3Card>
+
+                {/* Active control center triggers */}
+                <M3Card variant="outlined" padding="lg">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+                    <Activity size={13} className="text-amber-400" /> Administrator Controls
+                  </h3>
+
+                  <div className="flex flex-wrap gap-2">
+                    {selectedJob.status === 'RUNNING' ? (
+                      <M3Button
+                        variant="filled"
+                        size="sm"
+                        icon={Ban}
+                        onClick={() => handleCancelRunning(selectedJob)}
+                        className="bg-rose-600 hover:bg-rose-700"
+                      >
+                        Cancel Running Job
+                      </M3Button>
+                    ) : (
+                      <M3Button
+                        variant="tonal"
+                        size="sm"
+                        icon={Play}
+                        onClick={() => handleRunNow(selectedJob)}
+                      >
+                        Run Immediately
+                      </M3Button>
+                    )}
+
+                    <M3Button
+                      variant={selectedJob.enabled ? 'outlined' : 'filled'}
+                      size="sm"
+                      icon={Power}
+                      onClick={() => handleToggleState(selectedJob)}
+                    >
+                      {selectedJob.enabled ? 'Pause Scheduler' : 'Resume Scheduler'}
+                    </M3Button>
+
+                    <M3Button
+                      variant="outlined"
+                      size="sm"
+                      icon={Download}
+                      onClick={() => handleExportRuns(selectedJob.jobId, selectedJob.jobName)}
+                    >
+                      Export Logs (.csv)
+                    </M3Button>
+                  </div>
+                </M3Card>
+
+                {/* Audit execution log history */}
+                <M3Card variant="outlined" padding="lg" className="space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                      <FileText size={13} className="text-cyan-400" /> Complete Execution History & Logs
+                    </h3>
+                    
+                    <div className="relative w-full sm:max-w-xs">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" size={13} />
+                      <input
+                        type="text"
+                        value={logSearchQuery}
+                        onChange={(e) => setLogSearchQuery(e.target.value)}
+                        placeholder="Search logs by Execution ID or Trigger..."
+                        className="w-full text-[10px] bg-slate-900 border border-white/10 rounded-full pl-8 pr-4 py-1.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  {isDrawerHistoryLoading ? (
+                    <div className="py-8 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                      <Activity size={13} className="animate-spin text-indigo-400" />
+                      <span>Reading log entries...</span>
+                    </div>
+                  ) : filteredDrawerHistory.length > 0 ? (
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {filteredDrawerHistory.map((run) => (
+                        <div key={run.runId} className="p-3 bg-white/[0.01] border border-white/[0.05] rounded-2xl text-xs space-y-1">
+                          <div className="flex items-center justify-between font-mono text-[10px]">
+                            <span className="text-slate-400 truncate max-w-[200px]" title={run.executionId}>{run.executionId}</span>
+                            <span className={cn('px-2 py-0.2 rounded font-bold uppercase', run.status === 'SUCCESS' ? 'text-emerald-400 bg-emerald-400/5' : 'text-rose-400 bg-rose-400/5')}>
+                              {run.status}
+                            </span>
+                          </div>
+                          
+                          <div className="text-[11px] text-slate-300">
+                            Triggered by: <span className="text-indigo-300 font-semibold">{run.triggerType} ({run.executedBy || 'SYSTEM'})</span>
+                          </div>
+
+                          {run.errorSummary && (
+                            <p className="text-[10px] text-rose-400 leading-normal p-2 rounded bg-rose-500/5 border border-rose-500/10 font-mono">
+                              Error: {run.errorSummary}
+                            </p>
+                          )}
+
+                          <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
+                            <span>Duration: {(run.durationMs / 1000).toFixed(1)}s</span>
+                            <span>{new Date(run.startedAt).toLocaleString()}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500 py-4 text-center">No logs matching search query filters.</p>
+                  )}
+                </M3Card>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* DIALOG 1: Scheduler settings manager */}
+      <M3Dialog
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        title="Scheduler settings"
+        subtitle="Configure global execution and telemetry rules"
+        icon={Settings2}
+        iconTone="primary"
+        actions={
+          <>
+            <M3Button variant="text" onClick={() => setShowSettingsModal(false)}>
               Cancel
             </M3Button>
-            <M3Button
-              variant="filled"
-              onClick={handleExecuteConfirmed}
-              disabled={confirmModal.isLoading}
-              className="flex items-center gap-2"
-            >
-              {confirmModal.isLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-              <span>{confirmModal.mode === 'RUN' ? 'Execute Live Job' : 'Retry Now'}</span>
+            <M3Button variant="filled" loading={isSettingsSaving} onClick={handleSaveSettings}>
+              Apply Settings
             </M3Button>
-          </div>
+          </>
         }
       >
-        <div className="space-y-3 py-2 text-sm text-neutral-300">
-          <p>
-            You are initiating immediate execution for <strong className="text-white">{confirmModal.job?.jobName}</strong> on the SmartLedger backend server.
-          </p>
-          <div className={cn(
-            "p-3 rounded-lg border text-xs space-y-1.5",
-            isDark ? "bg-[#171819] border-[#2d2f31]" : "bg-gray-50 border-gray-200"
-          )}>
-            <div className="flex justify-between">
-              <span className="text-neutral-400">Scheduled Frequency:</span>
-              <span className="font-semibold text-white">{confirmModal.job?.scheduleHuman}</span>
+        <form onSubmit={handleSaveSettings} className="space-y-4 pt-2 text-xs">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-400">System Timezone</label>
+              <select
+                value={settingsData.timezone}
+                onChange={(e) => setSettingsData(prev => ({ ...prev, timezone: e.target.value }))}
+                className="w-full h-12 px-3 rounded-2xl bg-[#1e1f20] border border-[#3c4043] text-white focus:border-[#a8c7fa] outline-none"
+              >
+                <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+                <option value="UTC">UTC (Universal)</option>
+                <option value="America/New_York">America/New_York (EST)</option>
+              </select>
             </div>
-            <div className="flex justify-between">
-              <span className="text-neutral-400">Trigger Type:</span>
-              <span className="font-semibold text-sky-400">MANUAL_ADMIN</span>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-400">Max Concurrent Threads</label>
+              <input
+                type="number"
+                value={settingsData.maxConcurrentJobs}
+                onChange={(e) => setSettingsData(prev => ({ ...prev, maxConcurrentJobs: parseInt(e.target.value, 10) }))}
+                className="w-full h-12 px-3 rounded-2xl bg-[#1e1f20] border border-[#3c4043] text-white outline-none"
+                required
+              />
             </div>
-            <div className="flex justify-between">
-              <span className="text-neutral-400">Safety Guard:</span>
-              <span className="text-emerald-400 font-medium">Safe • Server locks enabled</span>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-400">Maximum Retries on Failure</label>
+              <input
+                type="number"
+                value={settingsData.maxRetries}
+                onChange={(e) => setSettingsData(prev => ({ ...prev, maxRetries: parseInt(e.target.value, 10) }))}
+                className="w-full h-12 px-3 rounded-2xl bg-[#1e1f20] border border-[#3c4043] text-white outline-none"
+                required
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-400">Retry Delay (seconds)</label>
+              <input
+                type="number"
+                value={settingsData.retryDelay}
+                onChange={(e) => setSettingsData(prev => ({ ...prev, retryDelay: parseInt(e.target.value, 10) }))}
+                className="w-full h-12 px-3 rounded-2xl bg-[#1e1f20] border border-[#3c4043] text-white outline-none"
+                required
+              />
             </div>
           </div>
-          <p className="text-xs text-neutral-400">
-            This action is recorded in the security audit logs and will not interrupt regular 24/7 background cron triggers.
-          </p>
-        </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-400">Job Timeout Threshold (sec)</label>
+              <input
+                type="number"
+                value={settingsData.jobTimeout}
+                onChange={(e) => setSettingsData(prev => ({ ...prev, jobTimeout: parseInt(e.target.value, 10) }))}
+                className="w-full h-12 px-3 rounded-2xl bg-[#1e1f20] border border-[#3c4043] text-white outline-none"
+                required
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-400">Log Retention (days)</label>
+              <input
+                type="number"
+                value={settingsData.logRetentionDays}
+                onChange={(e) => setSettingsData(prev => ({ ...prev, logRetentionDays: parseInt(e.target.value, 10) }))}
+                className="w-full h-12 px-3 rounded-2xl bg-[#1e1f20] border border-[#3c4043] text-white outline-none"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 pt-2 border-t border-white/5">
+            <label className="flex items-center gap-2.5 cursor-pointer text-slate-300">
+              <input
+                type="checkbox"
+                checked={settingsData.autoCleanup}
+                onChange={(e) => setSettingsData(prev => ({ ...prev, autoCleanup: e.target.checked }))}
+                className="w-4 h-4 rounded border-slate-700 bg-slate-900"
+              />
+              <span>Enable Automatic Logs Purge after retention period</span>
+            </label>
+            <label className="flex items-center gap-2.5 cursor-pointer text-slate-300">
+              <input
+                type="checkbox"
+                checked={settingsData.notificationsEnabled}
+                onChange={(e) => setSettingsData(prev => ({ ...prev, notificationsEnabled: e.target.checked }))}
+                className="w-4 h-4 rounded border-slate-700 bg-slate-900"
+              />
+              <span>Dispatch real-time alerts to Administrative Alert Center</span>
+            </label>
+          </div>
+        </form>
       </M3Dialog>
 
-      {/* Execution History Dialog / Drawer */}
+      {/* DIALOG 2: Create / Edit Custom job config */}
       <M3Dialog
-        isOpen={historyModal.isOpen}
-        onClose={() => setHistoryModal(prev => ({ ...prev, isOpen: false }))}
-        title={historyModal.job ? `${historyModal.job.jobName} — Execution History` : 'Execution History'}
-        subtitle="Authoritative server-side run logs and verification records"
-        icon={History}
-        maxWidth="2xl"
+        isOpen={showJobModal}
+        onClose={() => setShowJobModal(false)}
+        title={jobModalMode === 'CREATE' ? 'Create Scheduled Job' : 'Edit Job configuration'}
+        subtitle={jobModalMode === 'CREATE' ? 'Register a custom background worker in node-cron' : `Configure parameters for job ${jobFormData.jobId}`}
+        icon={Clock}
+        iconTone="primary"
         actions={
-          <M3Button
-            variant="tonal"
-            onClick={() => setHistoryModal(prev => ({ ...prev, isOpen: false }))}
-          >
-            Close
-          </M3Button>
+          <>
+            <M3Button variant="text" onClick={() => setShowJobModal(false)}>
+              Cancel
+            </M3Button>
+            <M3Button variant="filled" loading={isJobSaving} onClick={handleJobSubmit}>
+              {jobModalMode === 'CREATE' ? 'Create Job' : 'Save Parameters'}
+            </M3Button>
+          </>
         }
       >
-        <div className="space-y-4 py-2">
-          {historyModal.isLoading ? (
-            <div className="py-12 text-center text-neutral-400">
-              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-sky-400" />
-              <span>Fetching authoritative job runs from server...</span>
+        <form onSubmit={handleJobSubmit} className="space-y-4 pt-2 text-xs">
+          <div className="grid grid-cols-2 gap-4">
+            <M3TextField
+              label="Unique Job Identifier"
+              value={jobFormData.jobId}
+              disabled={jobModalMode === 'EDIT'}
+              onChange={(e) => setJobModalData(prev => ({ ...prev, jobId: e.target.value }))}
+              placeholder="e.g. daily_snapshot_purge"
+              required
+            />
+            <M3TextField
+              label="Job Display Name"
+              value={jobFormData.jobName}
+              onChange={(e) => setJobModalData(prev => ({ ...prev, jobName: e.target.value }))}
+              placeholder="e.g. Daily Snapshots Purge"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <M3TextField
+              label="Cron Expression Pattern"
+              value={jobFormData.scheduleCron}
+              onChange={(e) => setJobModalData(prev => ({ ...prev, scheduleCron: e.target.value }))}
+              placeholder="e.g. 0 1 * * *"
+              required
+            />
+            <M3TextField
+              label="Human readable Interval Description"
+              value={jobFormData.scheduleHuman}
+              onChange={(e) => setJobModalData(prev => ({ ...prev, scheduleHuman: e.target.value }))}
+              placeholder="e.g. Every day at 1:00 AM"
+              required
+            />
+          </div>
+
+          <M3TextField
+            label="Job Description Summary"
+            value={jobFormData.description}
+            onChange={(e) => setJobModalData(prev => ({ ...prev, description: e.target.value }))}
+            placeholder="Describe what backend task this job executes automatically..."
+            required
+          />
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-400">Estimated Duration (ms)</label>
+              <input
+                type="number"
+                value={jobFormData.estimatedDurationMs}
+                onChange={(e) => setJobModalData(prev => ({ ...prev, estimatedDurationMs: parseInt(e.target.value, 10) }))}
+                className="w-full h-12 px-3 rounded-2xl bg-[#1e1f20] border border-[#3c4043] text-white outline-none"
+                required
+              />
             </div>
-          ) : historyModal.runs.length === 0 ? (
-            <div className="py-12 text-center text-neutral-400">
-              <History className="w-8 h-8 opacity-40 mx-auto mb-2" />
-              <p className="font-medium text-sm">No execution history recorded for this job yet.</p>
-              <p className="text-xs mt-1">Run the job manually or await next cron schedule trigger.</p>
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-400">Job Timeout Limit (sec)</label>
+              <input
+                type="number"
+                value={jobFormData.timeout}
+                onChange={(e) => setJobModalData(prev => ({ ...prev, timeout: parseInt(e.target.value, 10) }))}
+                className="w-full h-12 px-3 rounded-2xl bg-[#1e1f20] border border-[#3c4043] text-white outline-none"
+                required
+              />
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Runs List */}
-              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-                <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider block mb-1">
-                  Recorded Executions ({historyModal.runs.length})
-                </span>
-                {historyModal.runs.map(run => {
-                  const isSelected = historyModal.selectedRun?.runId === run.runId;
-                  return (
-                    <button
-                      key={run.runId}
-                      onClick={() => setHistoryModal(prev => ({ ...prev, selectedRun: run }))}
-                      className={cn(
-                        "w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between",
-                        isSelected 
-                          ? (isDark ? "bg-[#282a2d] border-sky-400" : "bg-sky-50 border-sky-400")
-                          : (isDark ? "bg-[#1e1f20] border-[#3c4043]/50 hover:border-neutral-500" : "bg-gray-50 border-gray-200 hover:border-gray-300")
-                      )}
-                    >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className={cn(
-                            "w-2 h-2 rounded-full",
-                            run.status === 'SUCCESS' ? "bg-emerald-400" : "bg-rose-400"
-                          )} />
-                          <span className="font-semibold text-xs text-white">
-                            {formatExactDateTime(run.startedAt)}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-neutral-400 mt-1 flex items-center gap-2">
-                          <span className="uppercase font-mono text-[10px] px-1 rounded bg-neutral-800">
-                            {run.triggerType}
-                          </span>
-                          <span>•</span>
-                          <span>{(run.durationMs / 1000).toFixed(2)}s</span>
-                        </div>
-                      </div>
-                      <ChevronRight className={cn(
-                        "w-4 h-4 transition-transform",
-                        isSelected ? "text-sky-400 translate-x-0.5" : "text-neutral-500"
-                      )} />
-                    </button>
-                  );
-                })}
-              </div>
+          </div>
 
-              {/* Selected Run Details Inspector */}
-              <div className="p-4 rounded-xl border bg-[#171819] border-[#2d2f31] flex flex-col justify-between max-h-96 overflow-y-auto">
-                {historyModal.selectedRun ? (
-                  <div className="space-y-3 text-xs">
-                    <div className="flex items-center justify-between pb-2 border-b border-[#2d2f31]">
-                      <span className="font-bold text-white text-sm">Run Inspector</span>
-                      <span className={cn(
-                        "px-2 py-0.5 rounded text-[11px] font-semibold border",
-                        historyModal.selectedRun.status === 'SUCCESS'
-                          ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-                          : "bg-rose-500/15 text-rose-300 border-rose-500/30"
-                      )}>
-                        {historyModal.selectedRun.status}
-                      </span>
-                    </div>
+          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-white/5">
+            <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+              <input
+                type="checkbox"
+                checked={jobFormData.safeToRetry}
+                onChange={(e) => setJobModalData(prev => ({ ...prev, safeToRetry: e.target.checked }))}
+                className="w-4 h-4 rounded border-slate-700 bg-slate-900"
+              />
+              <span>Allow Retry on Failure</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+              <input
+                type="checkbox"
+                checked={jobFormData.safeToRunManually}
+                onChange={(e) => setJobModalData(prev => ({ ...prev, safeToRunManually: e.target.checked }))}
+                className="w-4 h-4 rounded border-slate-700 bg-slate-900"
+              />
+              <span>Allow Manual Immediate Run</span>
+            </label>
+          </div>
 
-                    <div className="space-y-1.5">
-                      <div>
-                        <span className="text-neutral-400 block text-[10px]">Run ID</span>
-                        <span className="font-mono text-white select-all break-all">{historyModal.selectedRun.runId}</span>
-                      </div>
-                      <div>
-                        <span className="text-neutral-400 block text-[10px]">Trigger Source</span>
-                        <span className="font-semibold text-sky-400">{historyModal.selectedRun.triggerType}</span>
-                      </div>
-                      <div>
-                        <span className="text-neutral-400 block text-[10px]">Initiator</span>
-                        <span className="text-white">{historyModal.selectedRun.executedBy || 'SYSTEM_SCHEDULER'}</span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                        <div>
-                          <span className="text-neutral-400 block text-[10px]">Started At</span>
-                          <span className="text-white">{formatExactDateTime(historyModal.selectedRun.startedAt)}</span>
-                        </div>
-                        <div>
-                          <span className="text-neutral-400 block text-[10px]">Duration</span>
-                          <span className="font-mono text-white">{(historyModal.selectedRun.durationMs / 1000).toFixed(3)}s</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Output details / Verification notes */}
-                    {historyModal.selectedRun.details && (
-                      <div className="pt-2 border-t border-[#2d2f31]">
-                        <span className="text-neutral-400 block text-[10px] mb-1">Execution Metrics & Diagnostics</span>
-                        <pre className="p-2.5 rounded bg-black/50 text-[11px] font-mono text-neutral-300 overflow-x-auto border border-neutral-800">
-                          {JSON.stringify(historyModal.selectedRun.details, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-
-                    {historyModal.selectedRun.errorSummary && (
-                      <div className="p-2.5 rounded bg-rose-950/40 border border-rose-800/60 text-rose-300 text-xs">
-                        <strong className="block font-semibold">Error Summary:</strong>
-                        <span>{historyModal.selectedRun.errorSummary}</span>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-16 text-neutral-500 text-xs">
-                    Select a run from the list to view its execution audit details.
-                  </div>
-                )}
-              </div>
+          {jobSaveError && (
+            <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center gap-2">
+              <AlertCircle size={14} />
+              <span>{jobSaveError}</span>
             </div>
           )}
-        </div>
+        </form>
       </M3Dialog>
     </div>
   );

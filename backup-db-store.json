@@ -1,0 +1,54 @@
+{
+  "backups": [
+    {
+      "id": "backup_1791262549220_35bd67f0",
+      "user_id": "smartledger_demo_user",
+      "status": "success",
+      "triggered_by": "manual",
+      "started_at": "2026-10-06T04:55:49.220Z",
+      "completed_at": "2026-10-06T04:55:49.546Z",
+      "size_bytes": 1053,
+      "checksum_sha256": "26e4e20e3133a0735e82c1bf2871c665300de13dd38f2266d148cac294bcb30e",
+      "checksum_verified": true,
+      "storage_path": "/app/applet/backup_storage/smartledger_demo_user/backup_1791262549220_35bd67f0.backup",
+      "error_message": null,
+      "created_at": "2026-10-06T04:55:49.220Z",
+      "file_name": "backup_1791262549220_35bd67f0.backup"
+    },
+    {
+      "id": "backup_1791262506558_b0c8f7fd",
+      "user_id": "smartledger_demo_user",
+      "status": "success",
+      "triggered_by": "manual",
+      "started_at": "2026-10-06T04:55:06.558Z",
+      "completed_at": "2026-10-06T04:55:07.733Z",
+      "size_bytes": 1056,
+      "checksum_sha256": "dc8b2e78d77876508f035c102ada9135e7172e5ac1c053abe9509543c1a23917",
+      "checksum_verified": true,
+      "storage_path": "/app/applet/backup_storage/smartledger_demo_user/backup_1791262506558_b0c8f7fd.backup",
+      "error_message": null,
+      "created_at": "2026-10-06T04:55:06.558Z",
+      "file_name": "backup_1791262506558_b0c8f7fd.backup"
+    }
+  ],
+  "schedules": {
+    "system_admin": {
+      "user_id": "system_admin",
+      "frequency_hours": 24,
+      "preferred_time": "02:00",
+      "timezone": "Asia/Kolkata",
+      "enabled": true,
+      "last_run_at": null,
+      "next_run_at": "2026-10-07T04:55:44.449Z"
+    },
+    "smartledger_demo_user": {
+      "user_id": "smartledger_demo_user",
+      "frequency_hours": 24,
+      "preferred_time": "02:00",
+      "timezone": "Asia/Kolkata",
+      "enabled": true,
+      "last_run_at": "2026-10-06T04:55:49.546Z",
+      "next_run_at": "2026-10-07T04:55:50.020Z"
+    }
+  }
+}

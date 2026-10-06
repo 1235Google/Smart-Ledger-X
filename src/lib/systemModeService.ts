@@ -204,10 +204,9 @@ class SystemModeService {
       }
     }
 
-    // 2. Also write to Firestore /system/config for instant real-time sync across connected clients
+    // 2. Also write to Firestore /system/config AND /systemConfig/appState for instant real-time sync across connected clients
     try {
-      const configDocRef = doc(db, 'system', 'config');
-      await setDoc(configDocRef, {
+      const payload = {
         mode,
         reason,
         changedAt: returnedConfig.changedAt,
@@ -216,7 +215,13 @@ class SystemModeService {
         autoRestore: Boolean(autoRestore),
         previousMode: returnedConfig.previousMode || 'normal',
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      };
+      const configDocRef = doc(db, 'system', 'config');
+      const appStateDocRef = doc(db, 'systemConfig', 'appState');
+      await Promise.allSettled([
+        setDoc(configDocRef, payload, { merge: true }),
+        setDoc(appStateDocRef, payload, { merge: true })
+      ]);
     } catch (fsErr) {
       console.warn('[SystemModeService] Firestore doc update notice (server API succeeded):', fsErr);
     }

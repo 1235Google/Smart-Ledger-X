@@ -528,6 +528,13 @@ export class BackupService {
       const backupDocRef = doc(db, 'users', uid, 'backups', backupId);
       await withTimeout(setDoc(backupDocRef, record), 10000, 'Saving Firestore backup metadata');
 
+      try {
+        const historyDocRef = doc(db, 'backups', uid, 'history', backupId);
+        await setDoc(historyDocRef, record);
+      } catch (histErr) {
+        console.warn('[BackupService] History collection sync notice:', histErr);
+      }
+
       // Step 9b: Upload snapshot and metadata to Supabase 'smart-ledger-backups' bucket if configured
       if (isSupabaseConfigured()) {
         try {
@@ -667,8 +674,10 @@ export class BackupService {
           errorMessage: classified.message,
         });
 
-        // Update Firestore error state if possible
+        // Update Firestore error state and save failed backup record
         try {
+          await setDoc(doc(db, 'backups', errorUid, 'history', failedRecord.id), failedRecord);
+          await setDoc(doc(db, 'users', errorUid, 'backups', failedRecord.id), failedRecord);
           await setDoc(
             doc(db, 'users', errorUid, 'backups_meta', 'status'),
             {
@@ -704,39 +713,53 @@ export class BackupService {
 
       console.log(`[BackupService] Fetching backups for user ${uid}...`);
       const backupsCol = collection(db, 'users', uid, 'backups');
+      const historyCol = collection(db, 'backups', uid, 'history');
       const q = query(backupsCol, orderBy('createdAt', 'desc'));
+      const qHistory = query(historyCol, orderBy('createdAt', 'desc'));
       
       const backups: BackupMetadata[] = [];
       const seenIds = new Set<string>();
 
-      try {
-        const querySnap = await withTimeout(getDocs(q), 10000, 'Fetching Firestore backups');
-        querySnap.forEach((docSnap) => {
-          const data = docSnap.data() as BackupMetadata;
-          const bId = data.backupId || data.id || docSnap.id;
-          const bSize = data.fileSize || data.size || 0;
-          seenIds.add(bId);
-          backups.push({
-            ...data,
-            id: bId,
-            backupId: bId,
-            name: data.name || data.fileName || bId,
-            fileName: data.fileName || `${bId}.backup`,
-            createdAt: data.createdAt || new Date().toISOString(),
-            date: data.date || new Date(data.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
-            time: data.time || new Date(data.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
-            fileSize: bSize,
-            size: bSize,
-            status: data.status || 'verified',
-            version: data.version || data.appVersion || APP_VERSION,
-            appVersion: data.appVersion || APP_VERSION,
-            encryptionVersion: data.encryptionVersion || ENCRYPTION_VERSION,
-            type: data.type || 'manual',
-            checksum: data.checksum || data.checksumSha256 || '',
-            checksumSha256: data.checksumSha256 || data.checksum || '',
-            storagePath: data.storagePath || `backups/${uid}/${data.fileName || `${bId}.backup`}`,
-          });
+      const processDocSnap = (docSnap: any) => {
+        const data = docSnap.data() as BackupMetadata;
+        const bId = data.backupId || data.id || docSnap.id;
+        if (seenIds.has(bId)) return;
+        const bSize = data.fileSize || data.size || 0;
+        seenIds.add(bId);
+        backups.push({
+          ...data,
+          id: bId,
+          backupId: bId,
+          name: data.name || data.fileName || bId,
+          fileName: data.fileName || `${bId}.backup`,
+          createdAt: data.createdAt || (data as any).timestamp || new Date().toISOString(),
+          date: data.date || new Date(data.createdAt || (data as any).timestamp || Date.now()).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
+          time: data.time || new Date(data.createdAt || (data as any).timestamp || Date.now()).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+          fileSize: bSize,
+          size: bSize,
+          status: data.status || 'verified',
+          version: data.version || data.appVersion || APP_VERSION,
+          appVersion: data.appVersion || APP_VERSION,
+          encryptionVersion: data.encryptionVersion || ENCRYPTION_VERSION,
+          type: data.type || (data as any).triggeredBy === 'scheduled' ? 'automatic' : 'manual',
+          checksum: data.checksum || data.checksumSha256 || '',
+          checksumSha256: data.checksumSha256 || data.checksum || '',
+          storagePath: data.storagePath || `backups/${uid}/${data.fileName || `${bId}.backup`}`,
         });
+      };
+
+      try {
+        const [querySnap, historySnap] = await Promise.all([
+          withTimeout(getDocs(q), 10000, 'Fetching Firestore users backups').catch(() => null),
+          withTimeout(getDocs(qHistory), 10000, 'Fetching Firestore backups history').catch(() => null)
+        ]);
+
+        if (historySnap) {
+          historySnap.forEach(processDocSnap);
+        }
+        if (querySnap) {
+          querySnap.forEach(processDocSnap);
+        }
       } catch (firestoreErr) {
         console.warn('[BackupService] Firestore list notice:', firestoreErr);
       }

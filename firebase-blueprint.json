@@ -254,6 +254,10 @@
       "schema": "BackupRecord",
       "description": "User backup metadata records"
     },
+    "/backups/{uid}/history/{backupId}": {
+      "schema": "BackupRecord",
+      "description": "User automated daily and manual cloud backup history records"
+    },
     "/users/{uid}/loginHistory/{historyId}": {
       "schema": "LoginHistoryRecord",
       "description": "User login activity history"

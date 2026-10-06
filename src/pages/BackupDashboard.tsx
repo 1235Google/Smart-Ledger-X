@@ -16,10 +16,12 @@ import BackupDetailsModal from '../components/backup/BackupDetailsModal';
 import BackupSettingsModal from '../components/backup/BackupSettingsModal';
 import { BackupMetadata } from '../types';
 import { useStore } from '../context/StoreContext';
+import { useToast } from '../context/ToastContext';
 import { Server, Clock, CheckCircle2, AlertTriangle, Play, Shield, Cpu, RefreshCcw } from 'lucide-react';
 
 export default function BackupDashboard() {
   const { backupSettings } = useStore();
+  const { showSuccess, showError } = useToast();
   const {
     authStatus,
     authUser,
@@ -52,20 +54,12 @@ export default function BackupDashboard() {
   const [inspectTarget, setInspectTarget] = useState<BackupMetadata | null>(null);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
-  const formatIST = (dateStr?: string, defaultText = 'Scheduled daily at 6:00 AM IST') => {
+  const formatIST = (dateStr?: string | null, defaultText = 'Scheduled daily at 2:00 AM IST') => {
     if (!dateStr) return defaultText;
     try {
       return new Date(dateStr).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
     } catch (e) {
       return new Date(dateStr).toLocaleString();
-    }
-  };
-
-  const handleRunBackup = async () => {
-    try {
-      await runBackup('manual');
-    } catch (e) {
-      // Error handled in hook & banner
     }
   };
 
@@ -76,7 +70,8 @@ export default function BackupDashboard() {
 
   const fetchServerStatus = async () => {
     try {
-      const res = await fetch('/api/backup/status');
+      const uid = authUser?.uid || 'system_admin';
+      const res = await fetch(`/api/backup/status?userId=${encodeURIComponent(uid)}`);
       const data = await res.json();
       if (data.success) {
         setServerStatus(data);
@@ -90,28 +85,74 @@ export default function BackupDashboard() {
     fetchServerStatus();
     const interval = setInterval(fetchServerStatus, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [authUser?.uid]);
 
-  const handleSimulateCron = async () => {
+  // Derived directly from REAL Firestore backups collection
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  
+  // Latest successful backup in Firestore
+  const lastSuccessfulBackup = backups.find(
+    (b) => b.status === 'verified' || b.status === 'success'
+  );
+
+  // Most recent backup overall (to detect failures)
+  const mostRecentBackup = backups[0] || null;
+  const isMostRecentFailed = mostRecentBackup?.status === 'failed';
+
+  // Next automatic backup: (last successful backup timestamp + 24 hours)
+  const lastBackupTimeMs = lastSuccessfulBackup
+    ? new Date(lastSuccessfulBackup.createdAt || (lastSuccessfulBackup as any).timestamp).getTime()
+    : null;
+
+  const nextAutoBackupIso = lastBackupTimeMs
+    ? new Date(lastBackupTimeMs + 24 * 60 * 60 * 1000).toISOString()
+    : serverStatus?.nextBackup || null;
+
+  // Real 7-day successful backups count from Firestore
+  const firestoreSuccessCount7d = backups.filter((b) => {
+    const isSuccess = b.status === 'verified' || b.status === 'success';
+    const time = new Date(b.createdAt || (b as any).timestamp || 0).getTime();
+    return isSuccess && time >= sevenDaysAgo;
+  }).length;
+
+  const displaySuccessCount7d = Math.max(firestoreSuccessCount7d, serverStatus?.successCount7d ?? 0);
+  const displayLastBackupTime = lastSuccessfulBackup?.createdAt || (lastSuccessfulBackup as any)?.timestamp || serverStatus?.lastBackup?.completed_at || null;
+
+  const handleRunBackup = async () => {
     setIsSimulatingCron(true);
     setCronSimulationResult(null);
     try {
-      // BUG FIX: removed hardcoded/mock backup data, using real POST /api/backup/run-now
+      const uid = authUser?.uid || 'system_admin';
       const res = await fetch('/api/backup/run-now', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: authUser?.uid || 'system_admin' })
+        body: JSON.stringify({ userId: uid })
       });
       const data = await res.json();
-      setCronSimulationResult({
-        success: data.success,
-        message: data.success ? 'Real-time backup pipeline completed & verified successfully' : (data.error || 'Backup failed'),
-        details: data.backup
-      });
-      fetchServerStatus();
-      refreshBackups();
+      if (data.success) {
+        setCronSimulationResult({
+          success: true,
+          message: 'Real-time backup pipeline completed & verified successfully',
+          details: data.backup
+        });
+        showSuccess('✅ Backup Completed', `Cloud backup snapshot saved to Firestore and verified.`);
+      } else {
+        setCronSimulationResult({
+          success: false,
+          message: data.error || 'Backup failed',
+          details: data.backup
+        });
+        showError('❌ Backup Failed', data.error || 'Backup pipeline encountered an error.');
+      }
+      await refreshBackups();
+      await fetchServerStatus();
     } catch (e: any) {
-      setCronSimulationResult({ success: false, error: e.message });
+      console.warn('[BackupDashboard] Server run-now fallback:', e);
+      try {
+        await runBackup('manual');
+      } catch (err: any) {
+        showError('❌ Backup Failed', err?.message || 'Backup failed');
+      }
     } finally {
       setIsSimulatingCron(false);
     }
@@ -187,6 +228,22 @@ export default function BackupDashboard() {
         {/* Metrics Grid Cards */}
         <BackupMetricCards stats={stats} />
 
+        {/* Failure Handling & Alert Banner */}
+        {isMostRecentFailed && (
+          <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-start gap-3 text-rose-200 text-xs">
+            <AlertTriangle size={18} className="text-rose-400 flex-shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <h4 className="font-bold text-rose-300">Automated Cloud Backup Failure Alert</h4>
+              <p className="text-rose-200/90 font-mono">
+                Last backup failed: {mostRecentBackup?.errorMessage || 'Cloud backup pipeline encountered an error during execution'}
+              </p>
+              <p className="text-[11px] text-rose-300/70 pt-0.5">
+                Timestamp: {mostRecentBackup?.date} {mostRecentBackup?.time} • The server-side scheduler will retry automatically. You can also click &quot;Run Backup Now&quot; above.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* TRUE Server-Side 24h Automatic Backup Status Card */}
         <div className="p-6 bg-slate-900/60 backdrop-blur-xl border border-indigo-500/20 rounded-3xl shadow-xl space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-4">
@@ -198,20 +255,22 @@ export default function BackupDashboard() {
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                   <span>Automated Daily Cloud Backup</span>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                    serverStatus?.successCount7d > 0
-                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                      : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                    isMostRecentFailed
+                      ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                      : displaySuccessCount7d > 0
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                   }`}>
-                    {serverStatus?.healthStatus || 'Active & Cloud Protected'}
+                    {isMostRecentFailed 
+                      ? 'Backup Failed • Retry Scheduled' 
+                      : (displaySuccessCount7d > 0 ? 'Optimal • Cloud Verified' : (displayLastBackupTime ? 'Active & Cloud Protected' : 'Pending Initial Backup'))}
                   </span>
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Your ledger is securely backed up in the cloud every 24 hours—even when your app is closed or your device is turned off.
+                  Your ledger is securely backed up on Google cloud servers every 24 hours—even when your app is closed or your device is turned off.
                 </p>
               </div>
             </div>
-
-
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
@@ -220,7 +279,7 @@ export default function BackupDashboard() {
                 <Clock size={13} className="text-indigo-400" /> Last Cloud Backup (IST)
               </span>
               <p className="text-white font-semibold text-sm">
-                {serverStatus?.lastBackup?.completed_at ? formatIST(serverStatus.lastBackup.completed_at, 'Pending Initial Backup') : 'Pending Initial Backup'}
+                {displayLastBackupTime ? formatIST(displayLastBackupTime, 'Pending Initial Backup') : 'Pending Initial Backup'}
               </p>
             </div>
 
@@ -229,7 +288,7 @@ export default function BackupDashboard() {
                 <Clock size={13} className="text-emerald-400" /> Next Automatic Backup (IST)
               </span>
               <p className="text-emerald-300 font-semibold text-sm">
-                {serverStatus?.nextBackup ? formatIST(serverStatus.nextBackup, 'Within 24 Hours (IST)') : 'Scheduled (24h)'}
+                {nextAutoBackupIso ? formatIST(nextAutoBackupIso, 'Within 24 Hours (IST)') : 'Scheduled (24h)'}
               </p>
             </div>
 
@@ -238,7 +297,7 @@ export default function BackupDashboard() {
                 <CheckCircle2 size={13} className="text-emerald-400" /> Successful Backups (7d)
               </span>
               <p className="text-white font-semibold text-sm">
-                {serverStatus?.successCount7d ?? 0} Automatic Backups
+                {displaySuccessCount7d} Automatic Backups
               </p>
             </div>
 
@@ -247,7 +306,7 @@ export default function BackupDashboard() {
                 <Shield size={13} className="text-indigo-400" /> Security & Integrity
               </span>
               <p className="text-white font-semibold text-sm">
-                {serverStatus?.checksumVerified ? 'SHA-256 Checksum: Verified' : 'Pending Verification'}
+                {lastSuccessfulBackup?.checksumSha256 || serverStatus?.checksumVerified ? 'SHA-256 Checksum: Verified' : 'Pending Verification'}
               </p>
             </div>
           </div>

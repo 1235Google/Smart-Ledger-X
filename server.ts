@@ -69,8 +69,8 @@ import {
   VERIFIED_ADMIN_RECIPIENT_EMAILS
 } from "./src/server/admin-reports-service";
 
-// Load environment variables from .env file
-dotenv.config();
+// Load environment variables from .env file with override enabled
+dotenv.config({ override: true });
 
 let firebaseProjectId = "studio-3200340687-9f052";
 let firebaseApiKey = "AIzaSyBGtChtK6JEwE7gTfSSQUkv1JD7px0Bep0";
@@ -1393,7 +1393,7 @@ try {
 
       const finalToAddress = cleanEmail;
 
-      console.log(`Sending HTML report email to configured recipient: ${finalToAddress}...`);
+      console.log(`[Send Monthly Report] Dispatching HTML report email to recipient: ${finalToAddress} from ${fromAddress}...`);
       const data = await resend.emails.send({
         from: fromAddress,
         to: finalToAddress,
@@ -1402,20 +1402,38 @@ try {
       });
 
       if (data.error) {
-        console.error("Provider Response Error:", data.error);
-        let errorMsg = data.error.message;
-        if (errorMsg.includes("verify") || errorMsg.includes("onboarding")) {
-          errorMsg = "Domain verification issue. Ensure your domain is verified on Resend, or test using the verified owner's email address.";
+        console.error("[Send Monthly Report] Provider Response Error:", JSON.stringify(data.error, null, 2));
+        const rawMessage = data.error.message || "Failed to send email via Resend.";
+        
+        // Return clear, actionable error for Resend unverified domain limitation
+        if (
+          rawMessage.includes("You can only send testing emails to your own email address") ||
+          rawMessage.includes("verify a domain") ||
+          data.error.name === "validation_error"
+        ) {
+          const registeredOwner = process.env.RESEND_ACCOUNT_EMAIL || "smartledgerx811@gmail.com";
+          console.warn(`[Send Monthly Report] Resend testing account limitation detected for ${finalToAddress}.`);
+          return res.status(403).json({
+            error: `Resend Free Sandbox Restriction: In Resend's free tier without a verified custom domain, emails can ONLY be sent to your registered account email (${registeredOwner}). Please set the report email to ${registeredOwner}, or verify a custom domain at resend.com/domains.`,
+            rawError: data.error,
+            allowedEmail: registeredOwner
+          });
         }
-        res.status(400).json({ error: errorMsg });
-        return;
+
+        return res.status(400).json({ 
+          error: rawMessage,
+          details: data.error 
+        });
       }
 
-      console.log("Email delivery successful! Message ID:", data.data?.id);
-      res.json({ success: true, messageId: data.data?.id });
+      console.log("[Send Monthly Report] Email delivery successful! Message ID:", data.data?.id);
+      res.json({ success: true, messageId: data.data?.id, recipient: finalToAddress });
     } catch (error: any) {
-      console.error("Email Error:", error);
-      res.status(500).json({ error: error.message || "An error occurred while sending the email." });
+      console.error("[Send Monthly Report] Unhandled Server Error:", error);
+      res.status(500).json({ 
+        error: error.message || "An unexpected error occurred while sending the email.",
+        stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined 
+      });
     }
   });
 
@@ -1612,38 +1630,41 @@ try {
     try {
       const resendApiKey = process.env.RESEND_API_KEY;
       if (!resendApiKey) {
-        return res.json({ configured: false });
+        return res.json({ configured: false, error: "RESEND_API_KEY missing" });
       }
       const resend = new Resend(resendApiKey);
       const domains = await resend.domains.list();
       
-      if (domains.error) {
-        return res.json({
-          configured: true,
-          isTestingMode: true,
-          fromAddress: process.env.RESEND_FROM_EMAIL || "SmartLedger <onboarding@resend.dev>",
-          error: domains.error.message
-        });
-      }
-
       const domainList = Array.isArray(domains.data) ? domains.data : (domains.data?.data || []);
       const verifiedDomain = domainList.find((d: any) => d.status === 'verified');
+      const isTestingMode = !verifiedDomain;
+
+      // Resend Free Tier Sandbox restriction: Can only send to account owner
+      const sandboxAllowedEmail = process.env.RESEND_ACCOUNT_EMAIL || "smartledgerx811@gmail.com";
 
       if (verifiedDomain) {
         res.json({
           configured: true,
           isTestingMode: false,
-          fromAddress: `SmartLedger <updates@${verifiedDomain.name}>`
+          verifiedDomain: verifiedDomain.name,
+          fromAddress: process.env.RESEND_FROM_EMAIL || `SmartLedger <updates@${verifiedDomain.name}>`,
+          allowedRecipient: null
         });
       } else {
         res.json({
           configured: true,
           isTestingMode: true,
-          fromAddress: process.env.RESEND_FROM_EMAIL || "SmartLedger <onboarding@resend.dev>"
+          fromAddress: "SmartLedger <onboarding@resend.dev>",
+          allowedRecipient: sandboxAllowedEmail,
+          note: `Resend Free Tier active: Using onboarding@resend.dev sender. In free sandbox mode without a verified domain, Resend delivers to your registered account email (${sandboxAllowedEmail}).`
         });
       }
     } catch (err: any) {
-      res.json({ configured: false, error: err.message });
+      res.json({ 
+        configured: false, 
+        error: err.message,
+        allowedRecipient: process.env.RESEND_ACCOUNT_EMAIL || "smartledgerx811@gmail.com"
+      });
     }
   });
 

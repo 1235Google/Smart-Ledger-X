@@ -44,6 +44,7 @@ import UserProfileDropdown from './UserProfileDropdown';
 import SyncStatusBadge from './SyncStatusBadge';
 import LiquidSpotlight from './ui/LiquidSpotlight';
 import SystemModeBanner from './SystemModeBanner';
+import MaintenanceScreen from './MaintenanceScreen';
 import PageTransitionWrapper from './PageTransitionWrapper';
 
 // Primary Apple Floating Bottom Tab Bar Items - Simple & Clear
@@ -108,7 +109,11 @@ export default function Layout() {
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [location.pathname]);
-  const { transactions } = useStore();
+  const { transactions, systemConfig, isAdminAuthenticated } = useStore();
+
+  if (systemConfig?.mode === 'maintenance' && !isAdminAuthenticated) {
+    return <MaintenanceScreen />;
+  }
 
   // Count active pending dues for live indicator
   const pendingDuesCount = useMemo(() => {

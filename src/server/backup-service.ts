@@ -498,6 +498,7 @@ export async function executeBackupPipeline(userId: string = 'system_admin', tri
     };
 
     await saveFirestoreDocument(`users/${userId}/backups`, backupId, firebaseBackupRecord);
+    await saveFirestoreDocument(`backups/${userId}/history`, backupId, firebaseBackupRecord);
 
     // Fetch user schedule and advance dates
     let sched = await fetchFirestoreDocument(`users/${userId}/backups_schedule`, 'config');
@@ -540,6 +541,31 @@ export async function executeBackupPipeline(userId: string = 'system_admin', tri
     record.status = 'failed';
     record.checksum_verified = false;
     record.error_message = lastError || 'Backup failed after 3 retry attempts';
+
+    const failedRecord = {
+      id: backupId,
+      backupId,
+      userId,
+      name: `Failed Snapshot (${backupId.substring(0, 16)})`,
+      fileName,
+      createdAt: startedAt,
+      timestamp: startedAt,
+      date: new Date(startedAt).toLocaleDateString(),
+      time: new Date(startedAt).toLocaleTimeString(),
+      fileSize: 0,
+      size: 0,
+      status: 'failed',
+      version: '2.0.0',
+      appVersion: '2.0.0',
+      type: triggeredBy,
+      checksum: '',
+      checksumSha256: '',
+      storagePath: '',
+      errorMessage: record.error_message
+    };
+
+    await saveFirestoreDocument(`backups/${userId}/history`, backupId, failedRecord);
+    await saveFirestoreDocument(`users/${userId}/backups`, backupId, failedRecord);
 
     // Update global status with error in Firestore
     const errorStatus = {
@@ -700,6 +726,7 @@ export function getBackupHistory(queryOpts: { search?: string; type?: string; pa
 }
 
 export async function getBackupStatusSummary(userId: string = 'system_admin') {
+  loadBackupDb();
   // 1. Fetch user schedule config from Firestore
   let sched = await fetchFirestoreDocument(`users/${userId}/backups_schedule`, 'config');
   
@@ -728,12 +755,40 @@ export async function getBackupStatusSummary(userId: string = 'system_admin') {
 
   dbStore.schedules[userId] = sched;
 
-  // 2. Fetch backups list from Firestore users/{userId}/backups
-  const userBackups = await fetchFirestoreCollection(`users/${userId}/backups`) || [];
+  // 2. Fetch backups list from Firestore backups/{userId}/history and users/{userId}/backups
+  const historyBackups = await fetchFirestoreCollection(`backups/${userId}/history`) || [];
+  const legacyBackups = await fetchFirestoreCollection(`users/${userId}/backups`) || [];
+  const localDbBackups = dbStore.backups.filter(b => b.user_id === userId).map(b => ({
+    id: b.id,
+    backupId: b.id,
+    user_id: b.user_id,
+    status: b.status,
+    triggered_by: b.triggered_by,
+    started_at: b.started_at,
+    completed_at: b.completed_at,
+    createdAt: b.started_at,
+    timestamp: b.started_at,
+    fileSize: b.size_bytes,
+    size: b.size_bytes,
+    checksum: b.checksum_sha256,
+    checksumSha256: b.checksum_sha256,
+    storagePath: b.storage_path,
+    errorMessage: b.error_message,
+    fileName: b.file_name
+  }));
+  
+  const userBackupsMap = new Map<string, any>();
+  for (const b of [...historyBackups, ...legacyBackups, ...localDbBackups]) {
+    const bId = b.id || b.backupId;
+    if (bId && !userBackupsMap.has(bId)) {
+      userBackupsMap.set(bId, b);
+    }
+  }
+  const userBackups = Array.from(userBackupsMap.values());
   
   userBackups.sort((a, b) => {
-    const timeA = new Date(a.createdAt || a.started_at || 0).getTime();
-    const timeB = new Date(b.createdAt || b.started_at || 0).getTime();
+    const timeA = new Date(a.timestamp || a.createdAt || a.started_at || 0).getTime();
+    const timeB = new Date(b.timestamp || b.createdAt || b.started_at || 0).getTime();
     return timeB - timeA;
   });
 

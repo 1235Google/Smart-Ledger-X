@@ -168,9 +168,11 @@ export default function AutomaticBackupRunner() {
     }
   }, [isAuthenticated, currentUser?.uid, backupSettings?.autoBackupEnabled, backupSettings?.lastBackupTime, runAutoBackup]);
 
-  // Background Scheduling & Event Listeners
+  // Event Listeners for network changes and offline queue processing
   useEffect(() => {
     if (!isAuthenticated || !currentUser?.uid) return;
+
+    console.log('[AutomaticBackupRunner] Initialized. Server-side Cloud Scheduler runs backups every 24 hours independently of browser/device state.');
 
     // Process offline queue if connection was restored
     const handleOnline = () => {
@@ -182,43 +184,10 @@ export default function AutomaticBackupRunner() {
     // Initial check for offline queue items without running backup
     BackupService.processOfflineQueue();
 
-    // 1. Periodic Background Check (runs every 15 minutes while app is active)
-    const intervalTimer = setInterval(() => {
-      checkAndRunBackup();
-    }, CHECK_INTERVAL_MS);
-
-    // 2. Service Worker Message Listener (for background sync triggers)
-    const handleServiceWorkerMessage = (event: MessageEvent) => {
-      if (event.data && event.data.type === 'CHECK_AUTOMATIC_BACKUP') {
-        console.log('[AutomaticBackupRunner] Received CHECK_AUTOMATIC_BACKUP message from ServiceWorker.');
-        checkAndRunBackup();
-      }
-    };
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
-    }
-
-    // 3. Register Periodic Background Sync if supported (PWA)
-    if ('serviceWorker' in navigator && 'periodicSync' in (navigator as any).serviceWorker) {
-      navigator.serviceWorker.ready.then((registration: any) => {
-        if (registration.periodicSync) {
-          registration.periodicSync.register('smart-ledger-backup-check', {
-            minInterval: TWENTY_FOUR_HOURS_MS,
-          }).catch((err: any) => {
-            console.log('[AutomaticBackupRunner] Periodic sync registration info:', err?.message);
-          });
-        }
-      }).catch(() => {});
-    }
-
     return () => {
       window.removeEventListener('online', handleOnline);
-      clearInterval(intervalTimer);
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
-      }
     };
-  }, [isAuthenticated, currentUser?.uid, checkAndRunBackup]);
+  }, [isAuthenticated, currentUser?.uid]);
 
   return null;
 }

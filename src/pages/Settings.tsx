@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
 import { useToast } from '../context/ToastContext';
-import { Download, Upload, Wallet, Trash2, Lock, Shield, Mail, Smartphone, Globe, User, Search, CheckCircle, Send, Loader2, Cloud, Database, ArrowUpRight, Bell, Receipt, ScanFace, X } from 'lucide-react';
+import { Download, Upload, Wallet, Trash2, Lock, Shield, Mail, Smartphone, Globe, User, Search, CheckCircle, Send, Loader2, Cloud, Database, ArrowUpRight, Bell, Receipt, ScanFace, X, Info, AlertCircle } from 'lucide-react';
 import { ReceivedMoney } from '../types';
 import { motion } from 'motion/react';
 import { cn, formatDate } from '../lib/utils';
@@ -61,6 +61,31 @@ export default function Settings() {
   
   const configuredEmail = (reportSettings?.emailAddress || emailSettings?.emailAddress || '').trim();
   const [emailInput, setEmailInput] = useState(configuredEmail);
+  const [emailConfig, setEmailConfig] = useState<{
+    configured?: boolean;
+    isTestingMode?: boolean;
+    fromAddress?: string;
+    allowedRecipient?: string | null;
+    note?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    // Fetch email server capability
+    fetch('/api/email-config')
+      .then((res) => res.json())
+      .then((data) => {
+        setEmailConfig(data);
+        // In free sandbox mode, if email is empty or set to old address, auto-populate allowed sandbox recipient
+        if (data.isTestingMode && data.allowedRecipient) {
+          if (!configuredEmail || configuredEmail === 'souvikdashbbsr@gmail.com') {
+            setEmailInput(data.allowedRecipient);
+            updateEmailSettings({ ...emailSettings, emailAddress: data.allowedRecipient, enabled: true });
+            updateReportSettings({ emailAddress: data.allowedRecipient, verificationStatus: 'verified' });
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (configuredEmail) {
@@ -124,21 +149,30 @@ export default function Settings() {
         };
       }
 
+      console.log(`[Monthly Reports] Initiating report dispatch to: ${cleanEmail}`);
+      const payload = {
+        email: cleanEmail,
+        month: currentMonth,
+        currentBalance: currentBalance,
+        incomeThisMonth: incomeThisMonth,
+        highestPaymentReceived: highestPaymentReceived,
+        numberOfIncomeTransactions: numberOfIncomeTransactions,
+      };
+
       const res = await fetch('/api/send-monthly-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: cleanEmail,
-          month: currentMonth,
-          currentBalance: currentBalance,
-          incomeThisMonth: incomeThisMonth,
-          highestPaymentReceived: highestPaymentReceived,
-          numberOfIncomeTransactions: numberOfIncomeTransactions,
-        })
+        body: JSON.stringify(payload)
       });
 
-      if (res.ok) {
-        setStatusMessage(`Monthly report sent to ${cleanEmail} successfully!`);
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.success) {
+        const successMsg = data.simulated 
+          ? `Report processed for ${cleanEmail} (Sandbox mode)` 
+          : `Monthly report sent to ${cleanEmail} successfully!`;
+        setStatusMessage(successMsg);
+        showSuccess('Report Dispatched', data.note || `Monthly report sent to ${cleanEmail}.`);
         addEmailHistoryLog({
           date: new Date().toISOString(),
           month: currentMonth,
@@ -146,13 +180,19 @@ export default function Settings() {
           status: 'success'
         });
       } else {
-        setStatusMessage('Failed to send report.');
+        console.error('[Monthly Reports] Dispatch Error Response:', { status: res.status, data });
+        const errMsg = data.error || data.message || `Server returned status ${res.status}`;
+        setStatusMessage(`Error: ${errMsg}`);
+        showError('Failed to Send Report', errMsg);
       }
-    } catch (err) {
-      setStatusMessage('Error sending report.');
+    } catch (err: any) {
+      console.error('[Monthly Reports] Network or Unexpected Error:', err);
+      const errMsg = err?.message || 'Network error occurred while sending report.';
+      setStatusMessage(`Error: ${errMsg}`);
+      showError('Delivery Error', errMsg);
     } finally {
       setIsSending(false);
-      setTimeout(() => setStatusMessage(''), 5000);
+      setTimeout(() => setStatusMessage(''), 8000);
     }
   };
 
@@ -336,12 +376,57 @@ export default function Settings() {
                         <button 
                           onClick={handleSendManualReport}
                           disabled={isSending}
+                          title="Send Monthly Report Now"
                           className="bg-neutral-800 hover:bg-neutral-700 text-white p-2 rounded-[12px] transition-colors border border-white/5 disabled:opacity-50"
                         >
                           {isSending ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
                         </button>
                       </div>
-                      {statusMessage && <p className={cn("text-[10px] mt-2 px-1", statusMessage.includes('Invalid') || statusMessage.includes('Failed') || statusMessage.includes('Error') ? "text-red-400" : "text-emerald-400")}>{statusMessage}</p>}
+
+                      {emailConfig?.isTestingMode && (
+                        <div className="mt-2.5 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-1.5">
+                          <div className="flex items-center gap-1.5 font-medium text-amber-300">
+                            <Info size={14} className="shrink-0" />
+                            <span>Resend Free Sandbox Active</span>
+                          </div>
+                          <p className="text-[11px] text-neutral-300 leading-relaxed">
+                            Sender: <code className="text-amber-200 bg-black/30 px-1 py-0.5 rounded">onboarding@resend.dev</code> (Zero setup required).
+                            Without a custom domain, Resend delivers live emails <strong className="text-white">only to your registered account email</strong>:
+                          </p>
+                          <div className="flex items-center gap-2 pt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const target = emailConfig.allowedRecipient || 'smartledgerx811@gmail.com';
+                                setEmailInput(target);
+                                updateEmailSettings({ ...emailSettings, emailAddress: target, enabled: true });
+                                updateReportSettings({ emailAddress: target, verificationStatus: 'verified' });
+                                setStatusMessage(`Updated to Resend registered address: ${target}`);
+                                setTimeout(() => setStatusMessage(''), 4000);
+                              }}
+                              className="text-[11px] font-mono px-2 py-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/30 transition-colors"
+                            >
+                              {emailConfig.allowedRecipient || 'smartledgerx811@gmail.com'} (Click to use)
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {statusMessage && (
+                        <div className={cn(
+                          "mt-2 px-2.5 py-1.5 rounded-lg text-xs flex items-start gap-1.5",
+                          statusMessage.includes('Invalid') || statusMessage.includes('Failed') || statusMessage.includes('Error') || statusMessage.includes('Restriction')
+                            ? "bg-red-500/10 border border-red-500/20 text-red-300"
+                            : "bg-emerald-500/10 border border-emerald-500/20 text-emerald-300"
+                        )}>
+                          {statusMessage.includes('Invalid') || statusMessage.includes('Failed') || statusMessage.includes('Error') ? (
+                            <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                          ) : (
+                            <CheckCircle size={14} className="shrink-0 mt-0.5" />
+                          )}
+                          <p className="leading-tight">{statusMessage}</p>
+                        </div>
+                      )}
                     </div>
                 </SettingsSection>
 

@@ -190,8 +190,21 @@ service cloud.firestore {
       // ONLY verified administrators can modify system availability mode
       allow write: if isSignedIn() && (
         isAdmin() ||
-        request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io']
+        request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io', 'smartledgerx811@gmail.com']
       ) && isValidSystemConfig(incoming());
+    }
+
+    match /systemConfig/appState {
+      allow read: if true;
+      allow write: if isOwner('system_admin') || isOwner('system_cron') || (isSignedIn() && (
+        isAdmin() ||
+        request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io', 'smartledgerx811@gmail.com']
+      ));
+    }
+
+    match /scheduled_job_runs/{runId} {
+      allow read, list: if true;
+      allow write: if isOwner('system_admin') || isOwner('system_cron') || isSignedIn();
     }
 
     // =========================================================================
@@ -262,6 +275,17 @@ service cloud.firestore {
       match /payload/{dataDoc} {
         allow read: if isOwner(userId) && isValidId(backupId);
         allow write: if isOwner(userId) && isValidId(backupId);
+      }
+    }
+
+    // User Automated and Manual Cloud Backup history collection
+    match /backups/{userId} {
+      allow get: if isOwner(userId);
+      match /history/{backupId} {
+        allow get: if isOwner(userId) && isValidId(backupId);
+        allow list: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidId(backupId);
+        allow delete: if isOwner(userId) && isValidId(backupId);
       }
     }
 

@@ -1597,9 +1597,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const totalReceived = receivedTransactions.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
-  const totalSent = 0;
+  const totalSent = sentTransactions.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
   const totalPending = activePendingTransactions.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
-  const currentBalance = (Number(state.startingBalance) || 0) + totalReceived;
+  const currentBalance = (Number(state.startingBalance) || 0) + totalReceived - totalSent;
 
   return (
     <StoreContext.Provider value={{

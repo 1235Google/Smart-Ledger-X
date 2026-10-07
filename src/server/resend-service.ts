@@ -10,7 +10,7 @@ export async function sendResendEmail(to: string, subject: string, htmlContent: 
   try {
     const resend = new Resend(apiKey);
     const response = await resend.emails.send({
-      from: 'Smart Ledger Security <onboarding@resend.dev>',
+      from: process.env.RESEND_FROM_EMAIL || 'Smart Ledger Security <security@smartledgerx.io>',
       to: [to],
       subject,
       html: htmlContent,

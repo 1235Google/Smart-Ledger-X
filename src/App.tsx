@@ -1,6 +1,9 @@
 import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { StoreProvider, useStore } from './context/StoreContext';
+import { NotificationProvider } from './context/NotificationContext';
+import { ToastProvider } from './context/ToastContext';
+import { ThemeProvider } from './components/ui/ThemeProvider';
 import Layout from './components/Layout';
 import SecurityWrapper from './components/SecurityWrapper';
 import MaintenanceScreen from './components/MaintenanceScreen';
@@ -23,6 +26,7 @@ const Calculator = lazy(() => import('./pages/Calculator'));
 const TimelineReplay = lazy(() => import('./pages/TimelineReplay'));
 const SecurityCenter = lazy(() => import('./pages/SecurityCenter'));
 const BackupDashboard = lazy(() => import('./pages/BackupDashboard'));
+const SmartGuardDashboard = lazy(() => import('./components/smartguard/SmartGuardDashboard'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const Help = lazy(() => import('./pages/Help'));
 const About = lazy(() => import('./pages/About'));
@@ -121,8 +125,6 @@ function LoginRoute({ children }: { children: React.ReactNode }) {
 }
 
 import ErrorBoundary from './components/ErrorBoundary';
-import { ToastProvider } from './context/ToastContext';
-import { NotificationProvider } from './context/NotificationContext';
 import ToastContainer from './components/ui/ToastContainer';
 import CommandPalette from './components/CommandPalette';
 import SplashScreen from './components/SplashScreen';
@@ -188,6 +190,7 @@ function AppRoutes() {
           <Route path="reports" element={<MonthlyReports />} />
           <Route path="settings" element={<Settings />} />
           <Route path="security" element={<SecurityCenter />} />
+          <Route path="smartguard" element={<SmartGuardDashboard />} />
           <Route path="profile" element={<Profile />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="backup" element={<BackupDashboard />} />
@@ -238,15 +241,17 @@ function MainAppContent() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <StoreProvider>
-        <NotificationProvider>
-          <ToastProvider>
-            <BrowserRouter>
-              <MainAppContent />
-            </BrowserRouter>
-          </ToastProvider>
-        </NotificationProvider>
-      </StoreProvider>
+      <ThemeProvider>
+        <StoreProvider>
+          <NotificationProvider>
+            <ToastProvider>
+              <BrowserRouter>
+                <MainAppContent />
+              </BrowserRouter>
+            </ToastProvider>
+          </NotificationProvider>
+        </StoreProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

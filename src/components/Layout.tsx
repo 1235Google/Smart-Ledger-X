@@ -379,13 +379,13 @@ export default function Layout() {
           )}
         >
           {navCategories.map((group, groupIdx) => (
-            <div key={group.title} className="space-y-0.5">
+            <div key={group.title} className="space-y-1">
               {!isCollapsed ? (
-                <div className="px-3 pt-2 pb-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                <div className="px-3 pt-4 pb-1 text-xs font-semibold text-[var(--md-sys-color-on-surface-variant)] tracking-wider">
                   {group.title}
                 </div>
               ) : (
-                groupIdx > 0 && <div className="h-px bg-white/[0.06] my-2 mx-2" />
+                groupIdx > 0 && <div className="h-px bg-outline-variant/30 my-3 mx-2" />
               )}
 
               {group.items.map((item) => (
@@ -400,38 +400,33 @@ export default function Layout() {
                   }}
                   className={({ isActive }) =>
                     cn(
-                      "group relative flex items-center rounded-xl transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-[#0a84ff]",
-                      isCollapsed ? "justify-center h-10 w-10 mx-auto my-0.5" : "px-2.5 py-2 gap-2.5 w-full",
+                      "group relative flex items-center rounded-xl transition-all duration-200 outline-none m3-focus-ring m3-state-layer",
+                      isCollapsed 
+                        ? "justify-center h-12 w-12 mx-auto my-1 rounded-2xl" 
+                        : "mx-3 px-4 h-14 gap-3.5",
                       isActive 
-                        ? "text-white font-semibold bg-gradient-to-r from-[#0a84ff]/20 via-[#5e5ce6]/12 to-transparent border border-[#0a84ff]/35 shadow-[0_2px_12px_rgba(10,132,255,0.18)]" 
-                        : "text-slate-400 hover:text-white hover:bg-white/[0.05]"
+                        ? "bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)] font-medium shadow-sm" 
+                        : "text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-container-high)] hover:text-[var(--md-sys-color-on-surface)]"
                     )
                   }
                 >
                   {({ isActive }) => (
                     <>
-                      {/* Active Indicator Bar on left for expanded sidebar */}
-                      {!isCollapsed && isActive && (
-                        <div className="absolute left-1 top-2 bottom-2 w-1 rounded-full bg-gradient-to-b from-[#0a84ff] to-[#5e5ce6] shadow-[0_0_8px_#0a84ff]" />
-                      )}
-
-                      {/* Squircle Icon Container */}
+                      {/* Icon Container */}
                       <div 
                         className={cn(
-                          "relative z-10 w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-150 shrink-0",
-                          isActive 
-                            ? "bg-gradient-to-tr from-[#0a84ff] to-[#5e5ce6] text-white shadow-md shadow-[#0a84ff]/40 border border-white/20" 
-                            : "bg-white/[0.04] text-slate-400 group-hover:text-white group-hover:bg-white/[0.08] border border-white/[0.04]"
+                          "relative z-10 w-6 h-6 flex items-center justify-center transition-transform duration-200 group-hover:scale-105 shrink-0",
+                          isActive ? "text-[var(--md-sys-color-on-primary-container)]" : "text-[var(--md-sys-color-on-surface-variant)]"
                         )}
                       >
-                        <item.icon size={15} className={cn("transition-colors", isActive ? "text-white" : "text-slate-400 group-hover:text-white")} />
+                        <item.icon size={20} className="transition-colors" />
                       </div>
                       
                       {/* Label */}
                       {!isCollapsed && (
                         <span className={cn(
-                          "text-xs font-medium whitespace-nowrap overflow-hidden transition-colors z-10 flex-1",
-                          isActive ? "text-white font-semibold" : "text-slate-400 group-hover:text-white"
+                          "text-sm font-medium whitespace-nowrap overflow-hidden transition-colors z-10 flex-1 tracking-tight",
+                          isActive ? "text-[var(--md-sys-color-on-primary-container)] font-semibold" : "text-[var(--md-sys-color-on-surface)]"
                         )}>
                           {item.label}
                         </span>
@@ -439,15 +434,15 @@ export default function Layout() {
 
                       {/* Live Badge for Due Money */}
                       {!isCollapsed && (item as any).isDueTab && pendingDuesCount > 0 && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 shadow-sm">
+                        <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-[var(--md-sys-color-error-container)] text-[var(--md-sys-color-on-error-container)] shadow-sm">
                           {pendingDuesCount}
                         </span>
                       )}
 
                       {/* Biometric Protection Badge for Secret Vault */}
                       {!isCollapsed && item.path === '/vault' && (
-                        <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 shadow-sm">
-                          <Lock size={9} /> Locked
+                        <span className="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface-variant)] flex items-center gap-1 shadow-sm">
+                          <Lock size={10} /> Locked
                         </span>
                       )}
 
@@ -455,11 +450,11 @@ export default function Layout() {
                       {isCollapsed && (
                         <div 
                           role="tooltip" 
-                          className="absolute left-full ml-3 px-3 py-1.5 bg-[#141520]/95 backdrop-blur-2xl border border-white/15 text-white text-xs font-semibold rounded-xl shadow-[0_12px_32px_rgba(0,0,0,0.9)] whitespace-nowrap pointer-events-none opacity-0 scale-95 -translate-x-1 group-hover:opacity-100 group-hover:scale-100 group-hover:translate-x-0 transition-all duration-150 z-50 flex items-center gap-1.5"
+                          className="absolute left-full ml-3 px-3 py-1.5 bg-[var(--md-sys-color-surface-container-highest)] text-[var(--md-sys-color-on-surface)] text-xs font-semibold rounded-xl shadow-xl whitespace-nowrap pointer-events-none opacity-0 scale-95 -translate-x-1 group-hover:opacity-100 group-hover:scale-100 group-hover:translate-x-0 transition-all duration-150 z-50 flex items-center gap-1.5 border border-outline-variant/20"
                         >
                           <span>{item.label}</span>
                           {(item as any).isDueTab && pendingDuesCount > 0 && (
-                            <span className="px-1.5 py-0.2 text-[9px] font-bold rounded-full bg-amber-500/25 text-amber-300 border border-amber-500/30">
+                            <span className="px-1.5 py-0.2 text-[9px] font-bold rounded-full bg-[var(--md-sys-color-error-container)] text-[var(--md-sys-color-on-error-container)]">
                               {pendingDuesCount}
                             </span>
                           )}

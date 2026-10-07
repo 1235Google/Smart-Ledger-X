@@ -218,7 +218,7 @@ export function parseWebAuthnError(err: any): WebAuthnErrorResult {
   if (errName === 'NotAllowedError') {
     return {
       errorType: 'NotAllowedError',
-      message: '', // Silent reset; no persistent error banner
+      message: 'Face Unlock was cancelled. You can try again or use your password.',
       isUserCancelled: true
     };
   }
@@ -227,7 +227,7 @@ export function parseWebAuthnError(err: any): WebAuthnErrorResult {
   if (errName === 'AbortError' || errMsg.includes('abort')) {
     return {
       errorType: 'AbortError',
-      message: '', // Silent reset
+      message: 'Face Unlock was cancelled. You can try again or use your password.',
       isUserCancelled: true
     };
   }
@@ -236,7 +236,7 @@ export function parseWebAuthnError(err: any): WebAuthnErrorResult {
   if (errMsg.includes('cancel') || errMsg.includes('dismiss') || errMsg.includes('denied')) {
     return {
       errorType: 'NotAllowedError',
-      message: '',
+      message: 'Face Unlock was cancelled. You can try again or use your password.',
       isUserCancelled: true
     };
   }
@@ -245,7 +245,7 @@ export function parseWebAuthnError(err: any): WebAuthnErrorResult {
   if (errName === 'TimeoutError' || errMsg.includes('timed out') || errMsg.includes('timeout')) {
     return {
       errorType: 'TimeoutError',
-      message: 'Biometric verification timed out. Try again.',
+      message: 'We couldn\'t verify your face. Try again or use your password.',
       isUserCancelled: false
     };
   }
@@ -258,7 +258,7 @@ export function parseWebAuthnError(err: any): WebAuthnErrorResult {
   ) {
     return {
       errorType: 'NotSupportedError',
-      message: 'This device or browser does not support Face Unlock.',
+      message: 'Face Unlock isn\'t available on this device.',
       isUserCancelled: false
     };
   }
@@ -284,14 +284,14 @@ export function parseWebAuthnError(err: any): WebAuthnErrorResult {
   ) {
     return {
       errorType: 'InvalidStateError',
-      message: 'This biometric authenticator is already registered on this device.',
+      message: 'Face Unlock needs to be set up again on this device.',
       isUserCancelled: false
     };
   }
 
   return {
     errorType: 'UnknownError',
-    message: err?.message || 'Authentication error. Please try again.',
+    message: 'Something went wrong. Please try again, or use your password to continue.',
     isUserCancelled: false
   };
 }
@@ -333,7 +333,7 @@ export async function registerBiometricCredential(
 
   try {
     // 2. Fetch fresh challenge from backend (never hardcoded)
-    const optionsResp = await fetch('/api/webauthn/generate-registration-options', {
+    const optionsResp = await fetch('/api/auth/face-unlock/register-options', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -437,7 +437,7 @@ export async function registerBiometricCredential(
     };
 
     // 6. Backend verification - do not report success until server verifies
-    const verifyResp = await fetch('/api/webauthn/verify-registration', {
+    const verifyResp = await fetch('/api/auth/face-unlock/register-verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -558,7 +558,7 @@ export async function authenticateWithBiometrics(
 
   try {
     // 2. Fetch fresh challenge from backend
-    const optionsResp = await fetch('/api/webauthn/generate-authentication-options', {
+    const optionsResp = await fetch('/api/auth/face-unlock/auth-options', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -633,7 +633,7 @@ export async function authenticateWithBiometrics(
     const matchedDevice = (registeredDevices || []).find(d => d.id === assertion.id);
 
     try {
-      const verifyResp = await fetch('/api/webauthn/verify-authentication', {
+      const verifyResp = await fetch('/api/auth/face-unlock/auth-verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

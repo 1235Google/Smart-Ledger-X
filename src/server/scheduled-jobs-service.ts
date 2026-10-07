@@ -29,137 +29,37 @@ let schedulerSettings = {
 const jobRunningLocks = new Map<string, { startTime: number; executionId: string; triggerType: ScheduledJobTriggerType }>();
 const activeCronTasks = new Map<string, any>();
 
-// Credentials setup
-let projectId = "studio-3200340687-9f052";
-let apiKey = "AIzaSyBGtChtK6JEwE7gTfSSQUkv1JD7px0Bep0";
-try {
-  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-  if (fs.existsSync(configPath)) {
-    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    if (cfg.projectId) projectId = cfg.projectId;
-    if (cfg.apiKey) apiKey = cfg.apiKey;
-  }
-} catch (e) {
-  console.warn('[ScheduledJobs] Error loading credentials config:', e);
-}
-
-// REST Helper converters
-function toFirestoreFields(obj: Record<string, any>): Record<string, any> {
-  const fields: Record<string, any> = {};
-  for (const [key, val] of Object.entries(obj)) {
-    if (val === null || val === undefined) {
-      fields[key] = { nullValue: null };
-    } else if (typeof val === 'boolean') {
-      fields[key] = { booleanValue: val };
-    } else if (typeof val === 'number') {
-      fields[key] = { doubleValue: val };
-    } else if (typeof val === 'string') {
-      fields[key] = { stringValue: val };
-    } else if (Array.isArray(val)) {
-      fields[key] = {
-        arrayValue: {
-          values: val.map(v => {
-            if (typeof v === 'string') return { stringValue: v };
-            return { stringValue: JSON.stringify(v) };
-          })
-        }
-      };
-    } else {
-      fields[key] = { stringValue: JSON.stringify(val) };
-    }
-  }
-  return fields;
-}
-
-function fromFirestoreFields(fields: Record<string, any>): Record<string, any> {
-  const obj: Record<string, any> = {};
-  if (!fields) return obj;
-  for (const [key, valObj] of Object.entries(fields)) {
-    if ('stringValue' in valObj) {
-      const s = valObj.stringValue;
-      if ((s.startsWith('{') && s.endsWith('}')) || (s.startsWith('[') && s.endsWith(']'))) {
-        try {
-          obj[key] = JSON.parse(s);
-        } catch {
-          obj[key] = s;
-        }
-      } else {
-        obj[key] = s;
-      }
-    } else if ('booleanValue' in valObj) {
-      obj[key] = valObj.booleanValue;
-    } else if ('integerValue' in valObj) {
-      obj[key] = parseInt(valObj.integerValue, 10);
-    } else if ('doubleValue' in valObj) {
-      obj[key] = Number(valObj.doubleValue);
-    } else if ('nullValue' in valObj) {
-      obj[key] = null;
-    } else if ('arrayValue' in valObj) {
-      const arr = valObj.arrayValue.values || [];
-      obj[key] = arr.map((item: any) => item.stringValue || '');
-    } else {
-      obj[key] = valObj;
-    }
-  }
-  return obj;
-}
+import { db, isFirebaseAdminReady } from './db';
 
 async function writeDocToFirestore(collectionName: string, docId: string, data: Record<string, any>): Promise<boolean> {
+  if (!isFirebaseAdminReady) return false;
   try {
-    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collectionName}?documentId=${docId}&key=${apiKey}`;
-    const fields = toFirestoreFields(data);
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields })
-    });
-    if (!res.ok) {
-      // Exist fallback -> update via PATCH
-      const patchUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collectionName}/${docId}?key=${apiKey}`;
-      const patchRes = await fetch(patchUrl, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields })
-      });
-      return patchRes.ok;
-    }
+    await db.collection(collectionName).doc(docId).set(data, { merge: true });
     return true;
   } catch (err) {
-    console.error(`[FirestoreREST] Error writing to ${collectionName}/${docId}:`, err);
+    console.error(`[FirestoreAdmin] Error writing to ${collectionName}/${docId}:`, err);
     return false;
   }
 }
 
 async function fetchCollectionFromFirestore(collectionName: string): Promise<any[]> {
+  if (!isFirebaseAdminReady) return [];
   try {
-    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collectionName}?key=${apiKey}&pageSize=100`;
-    const res = await fetch(url);
-    if (!res.ok) {
-      if (res.status === 404) return [];
-      throw new Error(`REST response status: ${res.status}`);
-    }
-    const data = await res.json();
-    const documents = data.documents || [];
-    return documents.map((docSnap: any) => {
-      const id = docSnap.name.split('/').pop();
-      return {
-        id,
-        ...fromFirestoreFields(docSnap.fields || {})
-      };
-    });
+    const snap = await db.collection(collectionName).get();
+    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (err) {
-    console.error(`[FirestoreREST] Error reading collection ${collectionName}:`, err);
+    console.error(`[FirestoreAdmin] Error reading collection ${collectionName}:`, err);
     return [];
   }
 }
 
 async function deleteDocFromFirestore(collectionName: string, docId: string): Promise<boolean> {
+  if (!isFirebaseAdminReady) return false;
   try {
-    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collectionName}/${docId}?key=${apiKey}`;
-    const res = await fetch(url, { method: 'DELETE' });
-    return res.ok;
+    await db.collection(collectionName).doc(docId).delete();
+    return true;
   } catch (err) {
-    console.error(`[FirestoreREST] Error deleting ${collectionName}/${docId}:`, err);
+    console.error(`[FirestoreAdmin] Error deleting ${collectionName}/${docId}:`, err);
     return false;
   }
 }
@@ -177,7 +77,7 @@ async function triggerLiveAlert(alert: {
     ...alert,
     source: 'Scheduler Engine',
     metadata: { timezone: schedulerSettings.timezone }
-  }, projectId, apiKey);
+  });
 }
 
 // Seed default baseline jobs if empty

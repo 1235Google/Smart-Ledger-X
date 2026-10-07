@@ -85,208 +85,57 @@ function saveBackupDb() {
 
 loadBackupDb();
 
-// =========================================================================
-// FIREBASE FIRESTORE REST CLIENT FOR CLOUD-NATIVE STORAGE
-// =========================================================================
-
-const firebaseConfig = {
-  projectId: 'studio-3200340687-9f052',
-  apiKey: 'AIzaSyBGtChtK6JEwE7gTfSSQUkv1JD7px0Bep0'
-};
-
-try {
-  const cfgPath = path.join(process.cwd(), 'firebase-applet-config.json');
-  if (fs.existsSync(cfgPath)) {
-    const parsed = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
-    if (parsed.projectId) firebaseConfig.projectId = parsed.projectId;
-    if (parsed.apiKey) firebaseConfig.apiKey = parsed.apiKey;
-  }
-} catch (e) {
-  console.warn('[BackupService] Notice: firebase-applet-config.json load error, using default config.', e);
-}
-
-/**
- * Encodes regular JS objects recursively into the Firestore REST JSON payload format
- */
-function convertToFirestoreFields(obj: any): any {
-  if (obj === null || obj === undefined) {
-    return { nullValue: null };
-  }
-  if (typeof obj === 'string') {
-    return { stringValue: obj };
-  }
-  if (typeof obj === 'number') {
-    if (Number.isInteger(obj)) {
-      return { integerValue: obj.toString() };
-    }
-    return { doubleValue: obj };
-  }
-  if (typeof obj === 'boolean') {
-    return { booleanValue: obj };
-  }
-  if (Array.isArray(obj)) {
-    return {
-      arrayValue: {
-        values: obj.map(item => convertToFirestoreFields(item))
-      }
-    };
-  }
-  if (typeof obj === 'object') {
-    if (obj instanceof Date) {
-      return { stringValue: obj.toISOString() };
-    }
-    const fields: any = {};
-    for (const [key, value] of Object.entries(obj)) {
-      if (value !== undefined && typeof value !== 'function') {
-        fields[key] = convertToFirestoreFields(value);
-      }
-    }
-    return {
-      mapValue: {
-        fields
-      }
-    };
-  }
-  return { nullValue: null };
-}
-
-/**
- * Decodes Firestore REST formatted fields into standard plain JavaScript objects
- */
-function parseFirestoreFields(fields: any): any {
-  if (!fields) return {};
-  const res: any = {};
-  for (const [key, value] of Object.entries(fields)) {
-    res[key] = parseFirestoreValue(value);
-  }
-  return res;
-}
-
-function parseFirestoreValue(val: any): any {
-  if (!val) return null;
-  if ('stringValue' in val) return val.stringValue;
-  if ('integerValue' in val) return parseInt(val.integerValue, 10);
-  if ('doubleValue' in val) return parseFloat(val.doubleValue);
-  if ('booleanValue' in val) return val.booleanValue;
-  if ('nullValue' in val) return null;
-  if ('arrayValue' in val) {
-    const values = val.arrayValue?.values || [];
-    return values.map((v: any) => parseFirestoreValue(v));
-  }
-  if ('mapValue' in val) {
-    return parseFirestoreFields(val.mapValue?.fields);
-  }
-  if ('timestampValue' in val) return val.timestampValue;
-  return val;
-}
+import { db, isFirebaseAdminReady } from './db';
 
 async function fetchFirestoreDocument(collectionPath: string, docId: string): Promise<any> {
-  const { projectId, apiKey } = firebaseConfig;
-  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collectionPath}/${docId}?key=${apiKey}`;
+  if (!isFirebaseAdminReady) return null;
   try {
-    const res = await fetch(url);
-    if (!res.ok) {
-      if (res.status === 404) return null;
-      throw new Error(`Firestore Document Fetch returned ${res.status}: ${res.statusText}`);
-    }
-    const json = await res.json();
-    return parseFirestoreFields(json.fields);
+    const doc = await db.doc(`${collectionPath}/${docId}`).get();
+    return doc.exists ? doc.data() : null;
   } catch (err) {
-    console.warn(`[BackupService] fetchFirestoreDocument error for ${collectionPath}/${docId}:`, err);
+    console.warn(`[BackupService] Admin SDK fetch doc error for ${collectionPath}/${docId}:`, err);
     return null;
   }
 }
 
 async function fetchFirestoreCollection(collectionPath: string): Promise<any[]> {
-  const { projectId, apiKey } = firebaseConfig;
-  let url: string | null = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collectionPath}?pageSize=500&key=${apiKey}`;
-  const documents: any[] = [];
-  
+  if (!isFirebaseAdminReady) return [];
   try {
-    while (url) {
-      const res = await fetch(url);
-      if (!res.ok) {
-        if (res.status === 404) return [];
-        throw new Error(`Firestore Collection Fetch returned ${res.status}`);
-      }
-      const json: any = await res.json();
-      if (json.documents && Array.isArray(json.documents)) {
-        for (const doc of json.documents) {
-          documents.push(parseFirestoreFields(doc.fields));
-        }
-      }
-      if (json.nextPageToken) {
-        url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collectionPath}?pageSize=500&pageToken=${json.nextPageToken}&key=${apiKey}`;
-      } else {
-        url = null;
-      }
-    }
+    const snap = await db.collection(collectionPath).get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch (err) {
-    console.warn(`[BackupService] fetchFirestoreCollection error for ${collectionPath}:`, err);
+    console.warn(`[BackupService] Admin SDK fetch collection error for ${collectionPath}:`, err);
+    return [];
   }
-  
-  return documents;
 }
 
 async function saveFirestoreDocument(collectionPath: string, docId: string, data: any): Promise<boolean> {
-  const { projectId, apiKey } = firebaseConfig;
-  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collectionPath}/${docId}?key=${apiKey}`;
-  
-  const fields: any = {};
-  for (const [key, value] of Object.entries(data)) {
-    if (value !== undefined && typeof value !== 'function') {
-      fields[key] = convertToFirestoreFields(value);
-    }
-  }
-
+  if (!isFirebaseAdminReady) return false;
   try {
-    const res = await fetch(url, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields })
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error(`[BackupService] saveFirestoreDocument PATCH failed (${res.status}):`, errText);
-      return false;
-    }
+    await db.doc(`${collectionPath}/${docId}`).set(data, { merge: true });
     return true;
   } catch (err) {
-    console.error(`[BackupService] saveFirestoreDocument error for ${collectionPath}/${docId}:`, err);
+    console.error(`[BackupService] Admin SDK save doc error for ${collectionPath}/${docId}:`, err);
     return false;
   }
 }
 
-/**
- * Dynamic discovery helper that lists all active user IDs registered in Firestore
- */
 export async function fetchAllUserIds(): Promise<string[]> {
-  const { projectId, apiKey } = firebaseConfig;
-  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users?pageSize=100&key=${apiKey}`;
-  const userIds: string[] = [];
+  if (!isFirebaseAdminReady) return [];
   try {
-    const res = await fetch(url);
-    if (!res.ok) {
-      if (res.status === 404) return ['system_admin'];
-      throw new Error(`Firestore REST list users returned ${res.status}`);
-    }
-    const json: any = await res.json();
-    if (json.documents && Array.isArray(json.documents)) {
-      for (const doc of json.documents) {
-        const parts = doc.name.split('/');
-        const userId = parts[parts.length - 1];
-        if (userId && userId !== 'system_admin' && userId !== 'system_cron') {
-          userIds.push(userId);
-        }
+    const snap = await db.collection('users').get();
+    const userIds: string[] = [];
+    for (const doc of snap.docs) {
+      const uid = doc.id;
+      if (uid && uid !== 'system_admin' && uid !== 'system_cron') {
+        userIds.push(uid);
       }
     }
+    return userIds;
   } catch (err) {
-    console.warn('[BackupService] fetchAllUserIds error:', err);
+    console.warn('[BackupService] Admin SDK fetchAllUserIds error:', err);
+    return [];
   }
-  if (!userIds.includes('system_admin')) {
-    userIds.push('system_admin');
-  }
-  return userIds;
 }
 
 // =========================================================================
@@ -298,6 +147,82 @@ function getEncryptionKey(): Buffer {
   return crypto.scryptSync(secret, 'salt_smartledgerx_backup', 32);
 }
 
+export interface BackupLogRecord {
+  id: string;
+  user_id: string;
+  backup_type: string;
+  status: 'SUCCESS' | 'FAILED' | 'RETRYING' | 'OVERDUE';
+  started_at: string;
+  completed_at: string | null;
+  snapshot_id: string | null;
+  storage_location: string | null;
+  error_message: string | null;
+  retry_count: number;
+}
+
+export interface BackupSettingsRecord {
+  user_id: string;
+  enabled: boolean;
+  backup_interval: number;
+  last_successful_backup: string | null;
+  next_backup_time: string;
+}
+
+async function logBackupExecutionAttempt(userId: string, data: {
+  backupId: string;
+  backupType?: string;
+  status: 'SUCCESS' | 'FAILED' | 'RETRYING' | 'OVERDUE';
+  startedAt: string;
+  completedAt?: string | null;
+  storageLocation?: string | null;
+  errorMessage?: string | null;
+  retryCount?: number;
+}) {
+  const logId = `log_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+  const logRecord: BackupLogRecord = {
+    id: logId,
+    user_id: userId,
+    backup_type: data.backupType || 'AUTOMATED_DAILY',
+    status: data.status,
+    started_at: data.startedAt,
+    completed_at: data.completedAt || null,
+    snapshot_id: data.backupId || null,
+    storage_location: data.storageLocation || null,
+    error_message: data.errorMessage || null,
+    retry_count: data.retryCount || 0
+  };
+  try {
+    await saveFirestoreDocument(`users/${userId}/backup_logs`, logId, logRecord);
+    await saveFirestoreDocument(`backup_logs`, `${userId}_${logId}`, logRecord);
+  } catch (err) {
+    console.warn('[BackupService] Failed to record backup execution log:', err);
+  }
+}
+
+async function checkAndAlertOverdueBackups(userId: string, sched: BackupScheduleRecord) {
+  const now = Date.now();
+  const nextRunTime = new Date(sched.next_run_at).getTime();
+
+  if (now - nextRunTime > 26 * 3600 * 1000) {
+    const hoursOverdue = Math.floor((now - nextRunTime) / (3600 * 1000));
+    const notifId = `notif_overdue_${userId}_${Math.floor(now / (3600 * 1000))}`;
+    const alertNotif = {
+      id: notifId,
+      userId,
+      title: '⚠️ Cloud Backup Overdue Warning',
+      message: `Your automated daily cloud backup is overdue by ${hoursOverdue} hours. Please check server status or trigger a manual backup.`,
+      category: 'backup',
+      read: false,
+      createdAt: new Date().toISOString()
+    };
+    try {
+      await saveFirestoreDocument(`users/${userId}/notifications`, notifId, alertNotif);
+    } catch (err) {
+      console.warn('[BackupService] Failed to send overdue alert notification:', err);
+    }
+  }
+}
+
 export function hasInProgressBackup(userId: string): boolean {
   return dbStore.backups.some(b => b.user_id === userId && b.status === 'in_progress');
 }
@@ -306,6 +231,7 @@ export function hasInProgressBackup(userId: string): boolean {
  * AES-256-CBC encrypted and jszip-deflate-compressed production backup generator
  */
 export async function executeBackupPipeline(userId: string = 'system_admin', triggeredBy: 'scheduled' | 'manual' = 'manual'): Promise<BackupRecord> {
+  const startTime = Date.now();
   if (hasInProgressBackup(userId)) {
     throw new Error('A backup operation is already in progress for this user.');
   }
@@ -354,7 +280,7 @@ export async function executeBackupPipeline(userId: string = 'system_admin', tri
   while (attempts < maxAttempts && !success) {
     attempts++;
     try {
-      console.log(`[BackupService] Fetching real application state and transactions from Firestore for ${userId}...`);
+      console.log(`[BackupService] Fetching real application state and transactions from Firestore for ${userId} (Attempt ${attempts}/3)...`);
       
       const stateData = await fetchFirestoreDocument(`users/${userId}/app`, 'state') || {};
       const profileData = await fetchFirestoreDocument(`users/${userId}/profile`, 'info') || {};
@@ -461,6 +387,7 @@ export async function executeBackupPipeline(userId: string = 'system_admin', tri
   const completedAt = new Date().toISOString();
   record.completed_at = completedAt;
   record.size_bytes = finalBlob.length > 0 ? finalBlob.length : rawJsonString.length;
+  const durationMs = Date.now() - startTime;
 
   if (success) {
     record.status = 'success';
@@ -479,8 +406,8 @@ export async function executeBackupPipeline(userId: string = 'system_admin', tri
       time: new Date(startedAt).toLocaleTimeString(),
       fileSize: finalBlob.length,
       size: finalBlob.length,
-      durationMs: Date.now() - new Date(startedAt).getTime(),
-      durationFormatted: `${((Date.now() - new Date(startedAt).getTime()) / 1000).toFixed(1)}s`,
+      durationMs,
+      durationFormatted: `${(durationMs / 1000).toFixed(1)}s`,
       status: 'verified',
       version: '2.0.0',
       appVersion: '2.0.0',
@@ -517,20 +444,30 @@ export async function executeBackupPipeline(userId: string = 'system_admin', tri
     sched.last_run_at = completedAt;
     sched.next_run_at = new Date(Date.now() + sched.frequency_hours * 3600 * 1000).toISOString();
     
-    // Save updated schedule to Firestore
+    // Save updated schedule to Firestore and backup_settings record
     await saveFirestoreDocument(`users/${userId}/backups_schedule`, 'config', sched);
     dbStore.schedules[userId] = sched;
+
+    const backupSettingsRecord: BackupSettingsRecord = {
+      user_id: userId,
+      enabled: true,
+      backup_interval: sched.frequency_hours || 24,
+      last_successful_backup: completedAt,
+      next_backup_time: sched.next_run_at
+    };
+    await saveFirestoreDocument(`users/${userId}/backup_settings`, 'config', backupSettingsRecord);
+    await saveFirestoreDocument(`backup_settings`, userId, backupSettingsRecord);
 
     // Update global status doc in Firestore
     const globalStatus = {
       lastBackupTime: completedAt,
       nextBackupTime: sched.next_run_at,
       lastBackupStatus: 'healthy',
-      backupHealth: 'Optimal • Cloud Verified',
+      backupHealth: 'Optimal',
       backupVersion: '2.0.0',
       backupSize: finalBlob.length,
       backupChecksum: checksum,
-      backupLocation: `backups/${userId}/${fileName}`,
+      backupLocation: `Google Cloud Storage /backups/${userId}/${fileName}`,
       lastError: null,
       updatedAt: completedAt
     };
@@ -540,7 +477,7 @@ export async function executeBackupPipeline(userId: string = 'system_admin', tri
   } else {
     record.status = 'failed';
     record.checksum_verified = false;
-    record.error_message = lastError || 'Backup failed after 3 retry attempts';
+    record.error_message = lastError || 'Backup failed after retry attempts';
 
     const failedRecord = {
       id: backupId,
@@ -554,7 +491,7 @@ export async function executeBackupPipeline(userId: string = 'system_admin', tri
       time: new Date(startedAt).toLocaleTimeString(),
       fileSize: 0,
       size: 0,
-      status: 'failed',
+      status: 'FAILED',
       version: '2.0.0',
       appVersion: '2.0.0',
       type: triggeredBy,
@@ -567,10 +504,9 @@ export async function executeBackupPipeline(userId: string = 'system_admin', tri
     await saveFirestoreDocument(`backups/${userId}/history`, backupId, failedRecord);
     await saveFirestoreDocument(`users/${userId}/backups`, backupId, failedRecord);
 
-    // Update global status with error in Firestore
     const errorStatus = {
       lastBackupStatus: 'error',
-      backupHealth: 'Error: Needs Retry',
+      backupHealth: 'Critical',
       lastError: record.error_message,
       updatedAt: completedAt
     };
@@ -578,6 +514,19 @@ export async function executeBackupPipeline(userId: string = 'system_admin', tri
   }
 
   saveBackupDb();
+
+  // Log execution attempt to backup_logs table/collection with uppercase statuses
+  await logBackupExecutionAttempt(userId, {
+    backupId,
+    backupType: triggeredBy === 'scheduled' ? 'AUTOMATED_DAILY' : 'MANUAL_RUN',
+    status: success ? 'SUCCESS' : 'FAILED',
+    startedAt,
+    completedAt,
+    storageLocation: success ? `Google Cloud Storage /backups/${userId}/${fileName}` : null,
+    errorMessage: record.error_message,
+    retryCount: attempts - 1
+  });
+
   return record;
 }
 
@@ -621,6 +570,9 @@ export async function checkAndRunScheduledBackups(): Promise<number> {
       }
 
       if (!sched) continue;
+
+      // Check for overdue alerts (> 26 hours overdue)
+      await checkAndAlertOverdueBackups(userId, sched);
 
       const nextRunTime = new Date(sched.next_run_at).getTime();
       if (sched.enabled && nextRunTime <= now) {

@@ -712,81 +712,37 @@ export function checkAndRegisterDevice(uid: string, device: ParsedDeviceInfo): b
   return false; // Recognized existing device
 }
 
-// --- 6. Write Authoritative Security Event to Firestore REST API ---
+import { db, isFirebaseAdminReady } from './db';
+
+// --- 6. Write Authoritative Security Event to Firestore Admin SDK ---
 export async function writeSecurityEventToFirestore(
   event: AuthoritativeSecurityEvent,
-  projectId: string,
-  apiKey: string,
+  projectId?: string,
+  apiKey?: string,
   idToken?: string
 ): Promise<boolean> {
+  if (!isFirebaseAdminReady) return false;
   try {
     const docId = event.id;
-    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/adminSecurityLogs?documentId=${docId}&key=${apiKey}`;
-
-    // Convert event object to Firestore REST fields format
-    const fields: Record<string, any> = {
-      id: { stringValue: event.id },
-      uid: { stringValue: event.uid },
-      email: { stringValue: event.email },
-      action: { stringValue: event.eventType },
-      eventType: { stringValue: event.eventType },
-      authProvider: { stringValue: event.authProvider },
-      timestamp: { stringValue: event.timestamp },
-      serverTimestampMs: { integerValue: event.serverTimestampMs.toString() },
-      ip: { stringValue: event.ip },
-      sessionId: { stringValue: event.sessionId },
-      newDevice: { booleanValue: event.newDevice },
-      authorizationResult: { stringValue: event.authorizationResult },
-      device: { stringValue: `${event.device.browser} on ${event.device.os} (${event.device.category})` },
-      browser: { stringValue: event.device.browser },
-      details: { stringValue: event.details || '' },
-      location: {
-        mapValue: {
-          fields: {
-            country: { stringValue: event.location.country || 'Unknown' },
-            region: { stringValue: event.location.region || 'Unavailable' },
-            city: { stringValue: event.location.city || 'Unavailable' },
-            source: { stringValue: event.location.source },
-            status: { stringValue: event.location.status || 'success' },
-            reason: { stringValue: event.location.reason || '' },
-            lat: event.location.lat != null ? { doubleValue: event.location.lat } : { nullValue: null },
-            lng: event.location.lng != null ? { doubleValue: event.location.lng } : { nullValue: null }
-          }
-        }
-      },
-      deviceInfo: {
-        mapValue: {
-          fields: {
-            category: { stringValue: event.device.category },
-            model: { stringValue: event.device.model },
-            os: { stringValue: event.device.os },
-            osVersion: { stringValue: event.device.osVersion },
-            browser: { stringValue: event.device.browser },
-            browserVersion: { stringValue: event.device.browserVersion },
-            userAgent: { stringValue: event.device.userAgent }
-          }
-        }
-      }
-    };
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    };
-    if (idToken) {
-      headers['Authorization'] = `Bearer ${idToken}`;
-    }
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ fields })
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      console.warn('[SecurityService] Firestore REST write response:', res.status, err?.error?.message || err);
-      return false;
-    }
+    await db.collection('adminSecurityLogs').doc(docId).set({
+      id: event.id,
+      uid: event.uid,
+      email: event.email,
+      action: event.eventType,
+      eventType: event.eventType,
+      authProvider: event.authProvider,
+      timestamp: event.timestamp,
+      serverTimestampMs: event.serverTimestampMs,
+      ip: event.ip,
+      sessionId: event.sessionId,
+      newDevice: event.newDevice,
+      authorizationResult: event.authorizationResult,
+      device: `${event.device.browser} on ${event.device.os} (${event.device.category})`,
+      browser: event.device.browser,
+      details: event.details || '',
+      location: event.location,
+      deviceInfo: event.device
+    }, { merge: true });
     return true;
   } catch (err) {
     console.warn('[SecurityService] Error writing security event to Firestore:', err);
@@ -903,7 +859,7 @@ export function checkFailedLoginRateLimit(ip: string): boolean {
   return true;
 }
 
-// --- 10. Write Enterprise Alert to Firestore REST API ---
+// --- 10. Write Enterprise Alert to Firestore Admin SDK ---
 export async function writeAlertToFirestore(
   alert: {
     type: string;
@@ -914,38 +870,27 @@ export async function writeAlertToFirestore(
     metadata?: any;
     source?: string;
   },
-  projectId: string,
-  apiKey: string
+  projectId?: string,
+  apiKey?: string
 ): Promise<boolean> {
+  if (!isFirebaseAdminReady) return false;
   try {
     const docId = `alert_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
-    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/admin_alerts?documentId=${docId}&key=${apiKey}`;
-
-    const fields: Record<string, any> = {
-      id: { stringValue: docId },
-      type: { stringValue: alert.type },
-      title: { stringValue: alert.title },
-      description: { stringValue: alert.description },
-      severity: { stringValue: alert.severity },
-      createdAt: { stringValue: new Date().toISOString() },
-      resolved: { booleanValue: false },
-      resolvedAt: { nullValue: null },
-      resolvedBy: { nullValue: null },
-      userId: { stringValue: alert.userId || 'system' },
-      source: { stringValue: alert.source || 'server' }
-    };
-
-    if (alert.metadata) {
-      fields.metadata = { stringValue: typeof alert.metadata === 'string' ? alert.metadata : JSON.stringify(alert.metadata) };
-    }
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields })
-    });
-
-    return response.ok;
+    await db.collection('admin_alerts').doc(docId).set({
+      id: docId,
+      type: alert.type,
+      title: alert.title,
+      description: alert.description,
+      severity: alert.severity,
+      createdAt: new Date().toISOString(),
+      resolved: false,
+      resolvedAt: null,
+      resolvedBy: null,
+      userId: alert.userId || 'system',
+      source: alert.source || 'server',
+      metadata: alert.metadata ? (typeof alert.metadata === 'string' ? alert.metadata : JSON.stringify(alert.metadata)) : null
+    }, { merge: true });
+    return true;
   } catch (err) {
     console.error('[writeAlertToFirestore] Failed:', err);
     return false;

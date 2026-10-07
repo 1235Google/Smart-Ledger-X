@@ -2,11 +2,12 @@ import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
 import { useToast } from '../context/ToastContext';
-import { Download, Upload, Wallet, Trash2, Lock, Shield, Mail, Smartphone, Globe, User, Search, CheckCircle, Send, Loader2, Cloud, Database, ArrowUpRight, Bell, Receipt, ScanFace, X, Info, AlertCircle } from 'lucide-react';
+import { Download, Upload, Wallet, Trash2, Lock, Shield, Mail, Smartphone, Globe, User, Search, CheckCircle, Send, Loader2, Cloud, Database, ArrowUpRight, Bell, Receipt, ScanFace, X, Info, AlertCircle, Clock } from 'lucide-react';
 import { ReceivedMoney } from '../types';
 import { motion } from 'motion/react';
 import { cn, formatDate } from '../lib/utils';
 import { BackupService } from '../lib/backupService';
+import { getUserTimeZone, setUserTimeZone, formatUserTime } from '../lib/date-time';
 
 import BiometricSettings from '../components/BiometricSettings';
 import ResetDataModal from "../components/ResetDataModal";
@@ -299,6 +300,17 @@ export default function Settings() {
                 </SettingsSection>
                 
                 <SettingsSection title="Security" delay={0.2}>
+                    <SettingsItem 
+                      icon={Shield} 
+                      title="SmartGuard AI Security" 
+                      description="Intelligent financial security system, deep vulnerability audits & logs" 
+                      onClick={() => navigate('/smartguard')}
+                      action={
+                        <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                          Protected 🛡
+                        </span>
+                      }
+                    />
                     <SettingsItem icon={Lock} title="Change PIN" description="Update your security PIN" onClick={() => setShowPinSetup(true)} />
                     <SettingsItem 
                       icon={ScanFace} 

@@ -13,7 +13,7 @@
   "crons": [
     {
       "path": "/api/cron/backup",
-      "schedule": "30 0 * * *"
+      "schedule": "12 13 * * *"
     }
   ],
   "headers": [

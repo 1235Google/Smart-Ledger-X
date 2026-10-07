@@ -1,6 +1,36 @@
 {
   "backups": [
     {
+      "id": "backup_1791350749149_286e3082",
+      "user_id": "system_admin",
+      "status": "success",
+      "triggered_by": "manual",
+      "started_at": "2026-10-07T05:25:49.149Z",
+      "completed_at": "2026-10-07T05:25:50.270Z",
+      "size_bytes": 1033,
+      "checksum_sha256": "3fb93fe8a343f69e431063c9a553f8257c5d257c0f621a9379ccb6cc9e31fdb0",
+      "checksum_verified": true,
+      "storage_path": "/app/applet/backup_storage/system_admin/backup_1791350749149_286e3082.backup",
+      "error_message": null,
+      "created_at": "2026-10-07T05:25:49.149Z",
+      "file_name": "backup_1791350749149_286e3082.backup"
+    },
+    {
+      "id": "backup_1791350479191_44ef085b",
+      "user_id": "system_admin",
+      "status": "success",
+      "triggered_by": "manual",
+      "started_at": "2026-10-07T05:21:19.191Z",
+      "completed_at": "2026-10-07T05:21:20.299Z",
+      "size_bytes": 1031,
+      "checksum_sha256": "38fbb15aacd95ca3cdbd7fad431ea74a469e1314df526cf4de0f5c85f27496d7",
+      "checksum_verified": true,
+      "storage_path": "/app/applet/backup_storage/system_admin/backup_1791350479191_44ef085b.backup",
+      "error_message": null,
+      "created_at": "2026-10-07T05:21:19.191Z",
+      "file_name": "backup_1791350479191_44ef085b.backup"
+    },
+    {
       "id": "backup_1791262549220_35bd67f0",
       "user_id": "smartledger_demo_user",
       "status": "success",
@@ -38,8 +68,8 @@
       "preferred_time": "02:00",
       "timezone": "Asia/Kolkata",
       "enabled": true,
-      "last_run_at": null,
-      "next_run_at": "2026-10-07T04:55:44.449Z"
+      "last_run_at": "2026-10-07T05:25:50.270Z",
+      "next_run_at": "2026-10-08T05:25:50.993Z"
     },
     "smartledger_demo_user": {
       "user_id": "smartledger_demo_user",
@@ -49,6 +79,15 @@
       "enabled": true,
       "last_run_at": "2026-10-06T04:55:49.546Z",
       "next_run_at": "2026-10-07T04:55:50.020Z"
+    },
+    "A8ee5sAYx7WCSAJt8ruhFPyOBf63": {
+      "user_id": "A8ee5sAYx7WCSAJt8ruhFPyOBf63",
+      "frequency_hours": 24,
+      "preferred_time": "02:00",
+      "timezone": "Asia/Kolkata",
+      "enabled": true,
+      "last_run_at": null,
+      "next_run_at": "2026-10-08T05:25:38.993Z"
     }
   }
 }

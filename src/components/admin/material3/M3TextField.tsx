@@ -41,7 +41,7 @@ export const M3TextField = forwardRef<HTMLInputElement, M3TextFieldProps>(({
 
   const actualValue = value !== undefined ? value : internalValue;
   const hasValue = actualValue !== '' && actualValue !== undefined && actualValue !== null;
-  const isFloating = isFocused || hasValue;
+  const isFloating = isFocused || hasValue || Boolean(props.placeholder);
   const isPassword = type === 'password';
 
   const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
@@ -108,8 +108,10 @@ export const M3TextField = forwardRef<HTMLInputElement, M3TextFieldProps>(({
             onBlur={handleBlur}
             disabled={disabled}
             className={cn(
-              'w-full bg-transparent outline-none text-sm transition-all pt-3.5 font-normal',
-              isDark ? 'text-[#e3e3e3] placeholder-transparent' : 'text-[#1f1f1f] placeholder-transparent'
+              'w-full bg-transparent outline-none text-sm transition-all pt-5 pb-1 font-normal',
+              isDark 
+                ? 'text-[#e3e3e3] placeholder:text-transparent focus:placeholder:text-slate-500/50' 
+                : 'text-[#1f1f1f] placeholder:text-transparent focus:placeholder:text-slate-500/50'
             )}
             placeholder={label}
             {...props}
@@ -119,7 +121,7 @@ export const M3TextField = forwardRef<HTMLInputElement, M3TextFieldProps>(({
             className={cn(
               'absolute left-3.5 transition-all duration-200 pointer-events-none origin-top-left select-none font-medium',
               isFloating
-                ? 'top-2 text-[11px]'
+                ? 'top-1.5 text-[11px]'
                 : 'top-1/2 -translate-y-1/2 text-sm',
               isError
                 ? isDark ? 'text-[#f2b8b5]' : 'text-[#ba1a1a]'

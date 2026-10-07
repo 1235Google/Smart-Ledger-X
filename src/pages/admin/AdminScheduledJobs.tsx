@@ -68,6 +68,7 @@ import {
 } from '../../lib/scheduledJobsService';
 import { useToast } from '../../context/ToastContext';
 import { cn } from '../../lib/utils';
+import { CronExpressionParser } from 'cron-parser';
 
 // Helper for relative time countdown or delay formatting
 function formatRelativeTime(dateString?: string | null): string {
@@ -176,6 +177,70 @@ export default function AdminScheduledJobs() {
   });
   const [isJobSaving, setIsJobSaving] = useState(false);
   const [jobSaveError, setJobSaveError] = useState('');
+
+  // Real-time Cron Validation state
+  const [cronError, setCronError] = useState('');
+
+  // Validate Cron expression in real-time
+  const handleCronChange = (val: string) => {
+    setJobModalData(prev => ({ ...prev, scheduleCron: val }));
+    if (!val.trim()) {
+      setCronError('Run Schedule (Cron) is required.');
+      return;
+    }
+    try {
+      CronExpressionParser.parse(val);
+      setCronError('');
+    } catch (err: any) {
+      setCronError(err.message || 'Invalid cron expression pattern.');
+    }
+  };
+
+  // Preset schedules list
+  const PRESETS = [
+    { label: 'Every 5 min', cron: '*/5 * * * *', human: 'Every 5 minutes' },
+    { label: 'Every 15 min', cron: '*/15 * * * *', human: 'Every 15 minutes' },
+    { label: 'Hourly', cron: '0 * * * *', human: 'Every hour' },
+    { label: 'Daily at midnight', cron: '0 0 * * *', human: 'Every day at 12:00 AM' },
+    { label: 'Weekly', cron: '0 0 * * 0', human: 'Every Sunday at 12:00 AM' }
+  ];
+
+  const handleSelectPreset = (presetLabel: string) => {
+    const selected = PRESETS.find(p => p.label === presetLabel);
+    if (selected) {
+      setJobModalData(prev => ({
+        ...prev,
+        scheduleCron: selected.cron,
+        scheduleHuman: selected.human
+      }));
+      setCronError('');
+    }
+  };
+
+  // Auto-generate Job ID on Job Name Blur if empty or still custom default
+  const handleJobNameBlur = () => {
+    if (jobModalMode === 'CREATE' && (!jobFormData.jobId || jobFormData.jobId.startsWith('custom_'))) {
+      const sanitizedName = jobFormData.jobName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+      if (sanitizedName) {
+        setJobModalData(prev => ({
+          ...prev,
+          jobId: `${sanitizedName}_${Date.now()}`
+        }));
+      }
+    }
+  };
+
+  // Real-time Timeout vs Expected Run Time validation warning
+  const timeoutWarning = useMemo(() => {
+    const runTimeSec = jobFormData.estimatedDurationMs / 1000;
+    if (jobFormData.timeout <= runTimeSec) {
+      return `Warning: Max Time Before Timeout (${jobFormData.timeout}s) should be greater than Expected Run Time (${runTimeSec}s).`;
+    }
+    return '';
+  }, [jobFormData.timeout, jobFormData.estimatedDurationMs]);
 
   // Action loaders per job row
   const [togglingJobId, setTogglingJobId] = useState<string | null>(null);
@@ -335,14 +400,42 @@ export default function AdminScheduledJobs() {
   const handleJobSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setJobSaveError('');
+
+    // Require Job Description Summary
+    if (!jobFormData.description || !jobFormData.description.trim()) {
+      setJobSaveError('What does this job do? (Job Description Summary) is a required field.');
+      return;
+    }
+
+    // Require valid cron expression
+    if (cronError) {
+      setJobSaveError('Please resolve the invalid Cron Expression error first.');
+      return;
+    }
+
     setIsJobSaving(true);
 
     try {
+      // Auto-generate Job ID if empty
+      let finalJobId = jobFormData.jobId.trim();
+      if (!finalJobId) {
+        const sanitizedName = jobFormData.jobName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_+|_+$/g, '');
+        finalJobId = sanitizedName ? `${sanitizedName}_${Date.now()}` : `custom_${Date.now()}`;
+      }
+
+      const payload = {
+        ...jobFormData,
+        jobId: finalJobId
+      };
+
       if (jobModalMode === 'CREATE') {
-        await createScheduledJob(jobFormData);
+        await createScheduledJob(payload);
         showSuccess('Job Created', `Background worker '${jobFormData.jobName}' registered successfully.`);
       } else {
-        await updateScheduledJob(jobFormData.jobId, jobFormData);
+        await updateScheduledJob(jobFormData.jobId, payload);
         showSuccess('Job Configured', `Parameters updated successfully for '${jobFormData.jobName}'.`);
       }
       setShowJobModal(false);
@@ -409,6 +502,7 @@ export default function AdminScheduledJobs() {
       iconType: job.iconType
     });
     setJobSaveError('');
+    setCronError('');
     setShowJobModal(true);
   };
 
@@ -428,6 +522,7 @@ export default function AdminScheduledJobs() {
       iconType: 'broom'
     });
     setJobSaveError('');
+    setCronError('');
     setShowJobModal(true);
   };
 
@@ -1152,110 +1247,157 @@ export default function AdminScheduledJobs() {
         iconTone="primary"
         actions={
           <>
-            <M3Button variant="text" onClick={() => setShowJobModal(false)}>
+            <M3Button variant="text" onClick={() => setShowJobModal(false)} disabled={isJobSaving}>
               Cancel
             </M3Button>
-            <M3Button variant="filled" loading={isJobSaving} onClick={handleJobSubmit}>
+            <M3Button variant="filled" loading={isJobSaving} disabled={isJobSaving || Boolean(cronError)} onClick={handleJobSubmit}>
               {jobModalMode === 'CREATE' ? 'Create Job' : 'Save Parameters'}
             </M3Button>
           </>
         }
       >
-        <form onSubmit={handleJobSubmit} className="space-y-4 pt-2 text-xs">
-          <div className="grid grid-cols-2 gap-4">
-            <M3TextField
-              label="Unique Job Identifier"
-              value={jobFormData.jobId}
-              disabled={jobModalMode === 'EDIT'}
-              onChange={(e) => setJobModalData(prev => ({ ...prev, jobId: e.target.value }))}
-              placeholder="e.g. daily_snapshot_purge"
-              required
-            />
-            <M3TextField
-              label="Job Display Name"
-              value={jobFormData.jobName}
-              onChange={(e) => setJobModalData(prev => ({ ...prev, jobName: e.target.value }))}
-              placeholder="e.g. Daily Snapshots Purge"
-              required
-            />
+        <div className="max-h-[65vh] overflow-y-auto pr-2 space-y-4 pt-2 text-xs">
+          {/* Preset Dropdown Selection (Helpful helper) */}
+          <div className="space-y-1 bg-[#1e1f20]/30 border border-white/5 p-3.5 rounded-2xl">
+            <label className="text-[11px] font-bold text-indigo-400 block uppercase tracking-wider mb-1">Schedule Presets (Optional Autofill)</label>
+            <select
+              onChange={(e) => handleSelectPreset(e.target.value)}
+              value=""
+              className="w-full h-11 px-3.5 rounded-xl bg-slate-900 border border-white/10 text-white outline-none cursor-pointer focus:border-indigo-500"
+            >
+              <option value="" disabled>Select a Preset Schedule...</option>
+              {PRESETS.map((preset, idx) => (
+                <option key={idx} value={preset.label}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-[10px] text-slate-500 mt-1 font-normal">Select a predefined schedule to automatically fill the cron and descriptive fields below.</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <M3TextField
-              label="Cron Expression Pattern"
-              value={jobFormData.scheduleCron}
-              onChange={(e) => setJobModalData(prev => ({ ...prev, scheduleCron: e.target.value }))}
-              placeholder="e.g. 0 1 * * *"
-              required
-            />
-            <M3TextField
-              label="Human readable Interval Description"
-              value={jobFormData.scheduleHuman}
-              onChange={(e) => setJobModalData(prev => ({ ...prev, scheduleHuman: e.target.value }))}
-              placeholder="e.g. Every day at 1:00 AM"
-              required
-            />
-          </div>
-
-          <M3TextField
-            label="Job Description Summary"
-            value={jobFormData.description}
-            onChange={(e) => setJobModalData(prev => ({ ...prev, description: e.target.value }))}
-            placeholder="Describe what backend task this job executes automatically..."
-            required
-          />
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-[11px] font-bold text-slate-400">Estimated Duration (ms)</label>
-              <input
-                type="number"
-                value={jobFormData.estimatedDurationMs}
-                onChange={(e) => setJobModalData(prev => ({ ...prev, estimatedDurationMs: parseInt(e.target.value, 10) }))}
-                className="w-full h-12 px-3 rounded-2xl bg-[#1e1f20] border border-[#3c4043] text-white outline-none"
+          <form onSubmit={handleJobSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="relative">
+                <M3TextField
+                  label="Job ID"
+                  value={jobFormData.jobId}
+                  disabled={jobModalMode === 'EDIT'}
+                  onChange={(e) => setJobModalData(prev => ({ ...prev, jobId: e.target.value }))}
+                  placeholder="e.g. daily_snapshot_purge"
+                />
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white cursor-help select-none pr-1 mt-[2px]" title="Unique alphanumeric identifier used internally by node-cron scheduler.">
+                  ⓘ
+                </span>
+              </div>
+              <M3TextField
+                label="Job Name"
+                value={jobFormData.jobName}
+                onChange={(e) => setJobModalData(prev => ({ ...prev, jobName: e.target.value }))}
+                onBlur={handleJobNameBlur}
+                placeholder="e.g. Daily Snapshots Purge"
                 required
               />
             </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-bold text-slate-400">Job Timeout Limit (sec)</label>
-              <input
-                type="number"
-                value={jobFormData.timeout}
-                onChange={(e) => setJobModalData(prev => ({ ...prev, timeout: parseInt(e.target.value, 10) }))}
-                className="w-full h-12 px-3 rounded-2xl bg-[#1e1f20] border border-[#3c4043] text-white outline-none"
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="relative">
+                <M3TextField
+                  label="Run Schedule (Cron)"
+                  value={jobFormData.scheduleCron}
+                  onChange={(e) => handleCronChange(e.target.value)}
+                  placeholder="e.g. 0 1 * * *"
+                  error={cronError}
+                  required
+                />
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white cursor-help select-none pr-1 mt-[2px]" title="5-field UNIX standard cron notation (minute hour day-of-month month day-of-week).">
+                  ⓘ
+                </span>
+              </div>
+              <M3TextField
+                label="How Often"
+                value={jobFormData.scheduleHuman}
+                onChange={(e) => setJobModalData(prev => ({ ...prev, scheduleHuman: e.target.value }))}
+                placeholder="e.g. Every 15 minutes"
                 required
               />
             </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-white/5">
-            <label className="flex items-center gap-2 cursor-pointer text-slate-300">
-              <input
-                type="checkbox"
-                checked={jobFormData.safeToRetry}
-                onChange={(e) => setJobModalData(prev => ({ ...prev, safeToRetry: e.target.checked }))}
-                className="w-4 h-4 rounded border-slate-700 bg-slate-900"
-              />
-              <span>Allow Retry on Failure</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer text-slate-300">
-              <input
-                type="checkbox"
-                checked={jobFormData.safeToRunManually}
-                onChange={(e) => setJobModalData(prev => ({ ...prev, safeToRunManually: e.target.checked }))}
-                className="w-4 h-4 rounded border-slate-700 bg-slate-900"
-              />
-              <span>Allow Manual Immediate Run</span>
-            </label>
-          </div>
+            <M3TextField
+              label="What does this job do?"
+              value={jobFormData.description}
+              onChange={(e) => setJobModalData(prev => ({ ...prev, description: e.target.value }))}
+              placeholder="Describe what backend task this job executes automatically..."
+              required
+            />
 
-          {jobSaveError && (
-            <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center gap-2">
-              <AlertCircle size={14} />
-              <span>{jobSaveError}</span>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-400">Expected Run Time (ms)</label>
+                <input
+                  type="number"
+                  value={jobFormData.estimatedDurationMs}
+                  onChange={(e) => setJobModalData(prev => ({ ...prev, estimatedDurationMs: parseInt(e.target.value, 10) || 0 }))}
+                  className="w-full h-12 px-3.5 rounded-2xl bg-[#1e1f20] border border-[#3c4043] text-white outline-none focus:border-[#a8c7fa] focus:ring-2 focus:ring-[#a8c7fa]/20 transition-all font-mono"
+                  required
+                />
+              </div>
+              <div className="space-y-1 relative">
+                <label className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
+                  <span>Max Time Before Timeout (sec)</span>
+                  <span className="text-slate-500 hover:text-white cursor-help select-none" title="Hard limit threshold after which the active execution thread is automatically aborted.">
+                    ⓘ
+                  </span>
+                </label>
+                <input
+                  type="number"
+                  value={jobFormData.timeout}
+                  onChange={(e) => setJobModalData(prev => ({ ...prev, timeout: parseInt(e.target.value, 10) || 0 }))}
+                  className={cn(
+                    "w-full h-12 px-3.5 rounded-2xl bg-[#1e1f20] border text-white outline-none focus:ring-2 transition-all font-mono",
+                    timeoutWarning ? "border-amber-500 focus:border-amber-400 focus:ring-amber-500/20" : "border-[#3c4043] focus:border-[#a8c7fa] focus:ring-[#a8c7fa]/20"
+                  )}
+                  required
+                />
+              </div>
             </div>
-          )}
-        </form>
+
+            {/* Warning block for Job timeout threshold comparison */}
+            {timeoutWarning && (
+              <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center gap-2">
+                <AlertTriangle size={14} className="shrink-0" />
+                <span className="font-semibold leading-normal text-[11px]">{timeoutWarning}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4 pt-2 border-t border-white/5">
+              <label className="flex items-center gap-2.5 cursor-pointer text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={jobFormData.safeToRetry}
+                  onChange={(e) => setJobModalData(prev => ({ ...prev, safeToRetry: e.target.checked }))}
+                  className="w-4.5 h-4.5 rounded border-slate-700 bg-slate-900 cursor-pointer"
+                />
+                <span className="font-semibold">Allow Retry on Failure</span>
+              </label>
+              <label className="flex items-center gap-2.5 cursor-pointer text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={jobFormData.safeToRunManually}
+                  onChange={(e) => setJobModalData(prev => ({ ...prev, safeToRunManually: e.target.checked }))}
+                  className="w-4.5 h-4.5 rounded border-slate-700 bg-slate-900 cursor-pointer"
+                />
+                <span className="font-semibold">Allow Manual Immediate Run</span>
+              </label>
+            </div>
+
+            {jobSaveError && (
+              <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center gap-2">
+                <AlertCircle size={14} className="shrink-0" />
+                <span className="font-semibold leading-normal">{jobSaveError}</span>
+              </div>
+            )}
+          </form>
+        </div>
       </M3Dialog>
     </div>
   );

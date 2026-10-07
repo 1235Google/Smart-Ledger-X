@@ -32,86 +32,40 @@ function getGroqClient() {
   return groq;
 }
 
-// REST helper functions to fetch real data from Firestore
+import { db, isFirebaseAdminReady } from './db';
+
 async function fetchFirestoreCollection(collectionName: string): Promise<any[]> {
+  if (!isFirebaseAdminReady) return [];
   try {
-    const url = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/${collectionName}?key=${firebaseApiKey}&pageSize=100`;
-    const res = await fetch(url);
-    if (!res.ok) return [];
-    const data = await res.json();
-    const documents = data.documents || [];
-    return documents.map((docSnap: any) => {
-      const id = docSnap.name.split('/').pop();
-      const fields = docSnap.fields || {};
-      const obj: Record<string, any> = { id };
-      for (const [k, v] of Object.entries(fields)) {
-        const valObj = v as any;
-        if ('stringValue' in valObj) obj[k] = valObj.stringValue;
-        else if ('booleanValue' in valObj) obj[k] = valObj.booleanValue;
-        else if ('integerValue' in valObj) obj[k] = parseInt(valObj.integerValue, 10);
-        else if ('doubleValue' in valObj) obj[k] = Number(valObj.doubleValue);
-        else if ('nullValue' in valObj) obj[k] = null;
-        else obj[k] = valObj;
-      }
-      return obj;
-    });
+    const snap = await db.collection(collectionName).limit(100).get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch (err) {
-    console.error(`[Aurex REST] Error fetching collection ${collectionName}:`, err);
+    console.error(`[Aurex Admin] Error fetching collection ${collectionName}:`, err);
     return [];
   }
 }
 
 async function fetchUserSubcollection(userId: string, subcollection: string): Promise<any[]> {
+  if (!isFirebaseAdminReady) return [];
   try {
-    const url = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/users/${userId}/${subcollection}?key=${firebaseApiKey}&pageSize=100`;
-    const res = await fetch(url);
-    if (!res.ok) return [];
-    const data = await res.json();
-    const documents = data.documents || [];
-    return documents.map((docSnap: any) => {
-      const id = docSnap.name.split('/').pop();
-      const fields = docSnap.fields || {};
-      const obj: Record<string, any> = { id };
-      for (const [k, v] of Object.entries(fields)) {
-        const valObj = v as any;
-        if ('stringValue' in valObj) obj[k] = valObj.stringValue;
-        else if ('booleanValue' in valObj) obj[k] = valObj.booleanValue;
-        else if ('integerValue' in valObj) obj[k] = parseInt(valObj.integerValue, 10);
-        else if ('doubleValue' in valObj) obj[k] = Number(valObj.doubleValue);
-        else if ('nullValue' in valObj) obj[k] = null;
-        else obj[k] = valObj;
-      }
-      return obj;
-    });
+    const snap = await db.collection(`users/${userId}/${subcollection}`).limit(100).get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch (err) {
-    console.error(`[Aurex REST] Error fetching subcollection ${subcollection} for ${userId}:`, err);
+    console.error(`[Aurex Admin] Error fetching subcollection ${subcollection} for ${userId}:`, err);
     return [];
   }
 }
 
 async function fetchUserDocument(userId: string): Promise<any> {
+  if (!isFirebaseAdminReady) return null;
   try {
-    const url = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/users/${userId}?key=${firebaseApiKey}`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const data = await res.json();
-    const fields = data.fields || {};
-    const obj: Record<string, any> = { uid: userId };
-    for (const [k, v] of Object.entries(fields)) {
-      const valObj = v as any;
-      if ('stringValue' in valObj) obj[k] = valObj.stringValue;
-      else if ('booleanValue' in valObj) obj[k] = valObj.booleanValue;
-      else if ('integerValue' in valObj) obj[k] = parseInt(valObj.integerValue, 10);
-      else if ('doubleValue' in valObj) obj[k] = Number(valObj.doubleValue);
-      else if ('nullValue' in valObj) obj[k] = null;
-    }
-    return obj;
+    const doc = await db.doc(`users/${userId}`).get();
+    return doc.exists ? { uid: userId, ...doc.data() } : null;
   } catch (err) {
     return null;
   }
 }
 
-// Write Aurex Memory or Chats to Firestore
 export async function saveAurexLog(
   userId: string, 
   role: 'admin' | 'user', 
@@ -119,35 +73,10 @@ export async function saveAurexLog(
   docId: string, 
   data: any
 ) {
+  if (!isFirebaseAdminReady) return;
   try {
     const rootPath = role === 'admin' ? 'admins' : 'users';
-    const url = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/${rootPath}/${userId}/${collectionName}?documentId=${docId}&key=${firebaseApiKey}`;
-    
-    // Simple custom fields mapper
-    const fields: Record<string, any> = {};
-    for (const [k, v] of Object.entries(data)) {
-      if (v === null || v === undefined) fields[k] = { nullValue: null };
-      else if (typeof v === 'boolean') fields[k] = { booleanValue: v };
-      else if (typeof v === 'number') fields[k] = { doubleValue: v };
-      else if (typeof v === 'string') fields[k] = { stringValue: v };
-      else fields[k] = { stringValue: JSON.stringify(v) };
-    }
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields })
-    });
-
-    if (!res.ok) {
-      // Patch update fallback
-      const patchUrl = `https://firestore.googleapis.com/v1/projects/${firebaseProjectId}/databases/(default)/documents/${rootPath}/${userId}/${collectionName}/${docId}?key=${firebaseApiKey}`;
-      await fetch(patchUrl, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields })
-      });
-    }
+    await db.doc(`${rootPath}/${userId}/${collectionName}/${docId}`).set(data, { merge: true });
   } catch (e) {
     console.error(`[Aurex Log Error] Failed to write ${collectionName}:`, e);
   }

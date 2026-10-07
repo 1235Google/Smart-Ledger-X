@@ -529,9 +529,9 @@ export default function Settings() {
           onClose={() => setShowNotificationSettings(false)} 
         />
         {showBiometricModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md select-none">
-            <div className="relative w-full max-w-lg bg-[#14151b] border border-white/10 rounded-3xl p-6 sm:p-7 shadow-2xl overflow-y-auto max-h-[90vh]">
-              <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/10">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md select-none overflow-x-hidden">
+            <div className="relative w-full max-w-lg max-h-[90vh] bg-[#14151b] border border-white/10 rounded-3xl p-6 sm:p-7 shadow-2xl flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/10 shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
                     <ScanFace size={22} />
@@ -549,7 +549,9 @@ export default function Settings() {
                   <X size={16} />
                 </button>
               </div>
-              <BiometricSettings />
+              <div className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 pr-1">
+                <BiometricSettings />
+              </div>
             </div>
           </div>
         )}

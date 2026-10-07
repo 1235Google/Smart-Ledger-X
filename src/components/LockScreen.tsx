@@ -362,12 +362,10 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
                 </div>
 
                 <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#e2e2e9] text-center">
-                  Welcome Back
+                  Ledger Locked
                 </h1>
                 <p className="text-[#90909a] text-xs sm:text-sm mt-1 text-center font-medium max-w-[280px]">
-                  {securitySettings.pinEnabled 
-                    ? 'Enter your PIN to securely access your ledger' 
-                    : 'Security lock active. Tap below to proceed'}
+                  Your ledger is hidden. Unlock to continue.
                 </p>
 
                 {/* Last Login Info Pill */}

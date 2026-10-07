@@ -4,6 +4,7 @@ import { useStore } from '../context/StoreContext';
 import { ensureAuthPersistence } from '../lib/firebase';
 import LockScreen from './LockScreen';
 import { ShieldCheck } from 'lucide-react';
+import { useGlobalShortcuts } from '../hooks/useGlobalShortcuts';
 
 interface SecurityWrapperProps {
   children: React.ReactNode;
@@ -17,17 +18,22 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
     isAuthReady, 
     securitySettings,
     unlockApp: storeUnlockApp, 
-    lockApp: storeLockApp 
+    lockApp: storeLockApp,
+    securityLock,
+    unlockLedger
   } = useStore();
   
   const activeUser = user || currentUser;
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Mount global keyboard shortcuts for locking (Ctrl+L / Ctrl+Shift+L)
+  useGlobalShortcuts();
+
   // Determine if user has actively configured and enabled PIN protection
-  // Only apply lock screen if PIN is explicitly enabled AND a PIN is actually configured
+  // Only apply lock screen if PIN is explicitly enabled AND a PIN is actually configured, OR if securityLock.isLocked is true
   const isPinOrBiometricEnabled = Boolean(
-    securitySettings?.pinEnabled && Boolean(securitySettings?.pin)
+    securitySettings?.pinEnabled && Boolean(securitySettings?.pin) || securityLock?.isLocked
   );
 
   // Local unlock state backed by sessionStorage ('isUnlocked')
@@ -94,6 +100,7 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
     }
     setIsUnlocked(true);
     storeUnlockApp();
+    unlockLedger();
     lastActivityRef.current = Date.now();
 
     // If currently on /login, navigate to dashboard root

@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useStore } from '../context/StoreContext';
-import { authenticateWithBiometrics, checkBiometricSupport, getDeviceBiometricName } from '../lib/webauthnService';
+import { authenticateWithBiometrics, checkBiometricSupport, getDeviceBiometricName, checkUserHasFaceUnlockCredential } from '../lib/webauthnService';
 
 export interface FaceUnlockProps {
   onUnlock: () => void;
@@ -109,6 +109,18 @@ export default function FaceUnlock({
 
     try {
       const resolvedUserId = currentUser?.uid || localStorage.getItem('lastAuthUserId') || 'authenticated_user';
+      const hasCred = await checkUserHasFaceUnlockCredential(resolvedUserId);
+      if (!hasCred) {
+        if (isMountedRef.current) {
+          setIsAuthenticating(false);
+          setAuthError("Face Unlock isn't set up yet. Go to Settings to turn it on.");
+          setStatusText("Face Unlock isn't set up yet");
+          triggerFallback("Face Unlock isn't set up yet. Go to Settings to turn it on.");
+        }
+        isAuthenticatingRef.current = false;
+        return;
+      }
+
       const result = await authenticateWithBiometrics(
         resolvedUserId,
         securitySettings.registeredDevices || []

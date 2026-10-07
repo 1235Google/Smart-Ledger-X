@@ -74,17 +74,15 @@ export const AurexPanelContainer: React.FC<{ state: PanelState, setState: (s: Pa
         const assistantMsg: Message = { id: (Date.now() + 1).toString(), role: 'assistant', content: data.response, timestamp: Date.now() };
         setMessages(prev => [...prev, assistantMsg]);
     } catch (err: any) {
-        console.error(err);
-        const errorMessage = err.message.includes('503') || err.message.includes('UNAVAILABLE')
-            ? "I'm experiencing high demand right now. Please try your question again in a few seconds."
-            : `Error: ${err.message}`;
+        console.error("[Aurex Client Error]:", err);
+        const errorMessage = "The assistant is temporarily unavailable. Please try again in a moment.";
         
         setMessages(prev => [...prev, { 
             id: Date.now().toString(), 
             role: 'assistant', 
             content: errorMessage, 
             timestamp: Date.now(),
-            isError: true // We'll need to pass this to AurexConversation to render the retry button
+            isError: true 
         } as Message]);
     } finally {
         setIsThinking(false);

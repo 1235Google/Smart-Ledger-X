@@ -43,6 +43,13 @@ export function calculateNextDate(dateStr: string, frequency: string): string {
   return d.toISOString().split('T')[0];
 }
 
+export interface SecurityLockState {
+  isLocked: boolean;
+  lockedAt: string | null;
+  reason: "manual" | "keyboard_shortcut" | "idle_timeout" | "app_start" | null;
+  shortcut?: string;
+}
+
 interface StoreContextType extends AppState {
   setStartingBalance: (amount: number) => void;
   addCustomer: (customer: Omit<Customer, 'id' | 'createdAt'>) => void;
@@ -121,6 +128,9 @@ interface StoreContextType extends AppState {
   isUnlocked: boolean;
   unlockApp: (pin?: string) => boolean;
   lockApp: () => void;
+  securityLock: SecurityLockState;
+  lockLedger: (options?: { reason?: "manual" | "keyboard_shortcut" | "idle_timeout" | "app_start"; shortcut?: string }) => void;
+  unlockLedger: () => void;
   loginWithPin: (pin: string) => boolean;
   user: User | null;
   currentUser: User | null;
@@ -804,11 +814,41 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const lockApp = () => {
+  const [securityLock, setSecurityLock] = useState<SecurityLockState>({
+    isLocked: false,
+    lockedAt: null,
+    reason: null
+  });
+
+  const lockLedger = useCallback((options?: { reason?: "manual" | "keyboard_shortcut" | "idle_timeout" | "app_start"; shortcut?: string }) => {
+    const reason = options?.reason || 'keyboard_shortcut';
+    console.log(`[SecurityLock] Ledger locked by ${reason}`);
+    setSecurityLock({
+      isLocked: true,
+      lockedAt: new Date().toISOString(),
+      reason,
+      shortcut: options?.shortcut
+    });
     try {
       sessionStorage.removeItem('isUnlocked');
     } catch (e) {}
     setIsLocked(true);
+  }, []);
+
+  const unlockLedger = useCallback(() => {
+    setSecurityLock({
+      isLocked: false,
+      lockedAt: null,
+      reason: null
+    });
+    try {
+      sessionStorage.setItem('isUnlocked', 'true');
+    } catch (e) {}
+    setIsLocked(false);
+  }, []);
+
+  const lockApp = () => {
+    lockLedger({ reason: 'manual' });
   };
 
   useEffect(() => {
@@ -1685,6 +1725,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       isUnlocked: !isLocked,
       unlockApp,
       lockApp,
+      securityLock,
+      lockLedger,
+      unlockLedger,
       loginWithPin,
       user,
       currentUser,

@@ -509,9 +509,25 @@ export async function registerBiometricCredential(
 /**
  * Authenticates an already-registered biometric credential using navigator.credentials.get({ publicKey }).
  */
+export async function checkUserHasFaceUnlockCredential(userId: string): Promise<boolean> {
+  try {
+    const cleanId = userId || 'authenticated_user';
+    const enabled = localStorage.getItem('faceUnlockEnabled') === 'true' || localStorage.getItem('biometricCredentialId') || localStorage.getItem(`biometricCredentialId_${cleanId}`);
+    if (enabled) return true;
+    const devices = localStorage.getItem(`registeredDevices_${cleanId}`);
+    if (devices) {
+      const parsed = JSON.parse(devices);
+      if (Array.isArray(parsed) && parsed.length > 0) return true;
+    }
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
 export async function authenticateWithBiometrics(
   userId: string,
-  registeredDevices: RegisteredDevice[],
+  registeredDevices: RegisteredDevice[] = [],
   signal?: AbortSignal
 ): Promise<{
   success: boolean;
@@ -525,13 +541,23 @@ export async function authenticateWithBiometrics(
   if (!env.valid) {
     return {
       success: false,
-      error: env.error,
+      error: 'Face Unlock isn\'t available on this device.',
       errorType: env.errorType,
       isUserCancelled: false
     };
   }
 
   const cleanUserId = userId || localStorage.getItem('lastAuthUserId') || 'authenticated_user';
+  const hasCred = await checkUserHasFaceUnlockCredential(cleanUserId);
+  if (!hasCred) {
+    return {
+      success: false,
+      error: 'Face Unlock isn\'t set up yet. Go to Settings to turn it on.',
+      errorType: 'InvalidStateError',
+      isUserCancelled: false
+    };
+  }
+
   const storedCredId = localStorage.getItem(`biometricCredentialId_${cleanUserId}`) || localStorage.getItem('biometricCredentialId');
 
   // Build allowCredentials
@@ -547,7 +573,7 @@ export async function authenticateWithBiometrics(
   if (allowList.length === 0) {
     return {
       success: false,
-      error: 'No biometric device registered. Click Enable Face Unlock to register this device.',
+      error: 'Face Unlock isn\'t set up yet. Go to Settings to turn it on.',
       errorType: 'InvalidStateError',
       isUserCancelled: false
     };
@@ -599,11 +625,16 @@ export async function authenticateWithBiometrics(
       }
     };
 
-    // 4. Trigger native biometric prompt via navigator.credentials.get
-    const assertion = (await navigator.credentials.get({
-      ...getOptions,
-      signal
-    })) as PublicKeyCredential;
+    // 4. Trigger native biometric prompt via navigator.credentials.get with 30s timeout race
+    const assertion = (await Promise.race([
+      navigator.credentials.get({
+        ...getOptions,
+        signal
+      }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('TIMEOUT')), 30000)
+      )
+    ])) as PublicKeyCredential;
 
     if (!assertion) {
       throw new Error('Biometric verification returned no credential.');
@@ -671,10 +702,30 @@ export async function authenticateWithBiometrics(
       deviceId: assertion.id
     };
   } catch (err: any) {
+    const errMsg = (err?.message || '').toLowerCase();
+    if (errMsg === 'timeout' || err?.name === 'TimeoutError' || errMsg.includes('timed out')) {
+      return {
+        success: false,
+        error: 'This is taking longer than expected. Try again or use your PIN.',
+        errorType: 'TimeoutError',
+        isUserCancelled: false
+      };
+    }
+    if (err?.name === 'NotAllowedError' || err?.name === 'AbortError' || errMsg.includes('cancel') || errMsg.includes('denied')) {
+      return {
+        success: false,
+        error: 'Face Unlock was cancelled. You can try again or use your PIN.',
+        errorType: 'NotAllowedError',
+        isUserCancelled: true
+      };
+    }
     const parsed = parseWebAuthnError(err);
+    const finalMsg = parsed.isUserCancelled 
+      ? 'Face Unlock was cancelled. You can try again or use your PIN.' 
+      : (parsed.errorType === 'NotSupportedError' ? 'Face Unlock isn\'t available on this device.' : 'We couldn\'t verify your face. Try again or use your PIN.');
     return {
       success: false,
-      error: parsed.message,
+      error: finalMsg,
       errorType: parsed.errorType,
       isUserCancelled: parsed.isUserCancelled
     };

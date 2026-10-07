@@ -9,6 +9,7 @@ import {
   getDeviceBiometricName,
   verifyWebAuthnEnvironment
 } from '../lib/webauthnService';
+import { FaceUnlockSetupModal } from './FaceUnlockSetupModal';
 
 export default function BiometricSettings() {
   const { securitySettings, updateSecuritySettings, generalSettings, currentUser } = useStore();
@@ -31,9 +32,51 @@ export default function BiometricSettings() {
 
   const [faceUnlockEnabled, setFaceUnlockEnabled] = useState(Boolean(securitySettings.faceUnlockEnabled));
 
-  useEffect(() => {
-    setFaceUnlockEnabled(Boolean(securitySettings.faceUnlockEnabled));
-  }, [securitySettings.faceUnlockEnabled]);
+  // Setup Wizard States
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const [setupStep, setSetupStep] = useState<1 | 2 | 3 | 'success' | 'failure'>(1);
+  const [setupError, setSetupError] = useState<string | null>(null);
+
+  const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
+  const isUnavailable = isSupported === false || isInIframe;
+  const hasRegisteredDevices = (securitySettings.registeredDevices?.length ?? 0) > 0;
+  const isActive = faceUnlockEnabled || hasRegisteredDevices;
+
+  const handleStartSetup = () => {
+    setSetupStep(1);
+    setSetupError(null);
+    setShowSetupWizard(true);
+  };
+
+  const handleExecuteRegistration = async () => {
+    setSetupStep(3);
+    setSetupError(null);
+    const cleanUid = currentUser?.uid || localStorage.getItem('lastAuthUserId') || 'authenticated_user';
+    const cleanEmail = currentUser?.email || localStorage.getItem('lastAuthUserEmail') || 'user@smartledgerx.io';
+    
+    try {
+      const result = await registerBiometricCredential(cleanUid, cleanEmail, currentUser?.displayName || undefined);
+      if (result.success && result.serverVerified && result.device) {
+        const currentDevices = securitySettings.registeredDevices || [];
+        const filtered = currentDevices.filter(d => d.id !== result.device!.id);
+        const updatedDevices = [...filtered, result.device];
+
+        updateSecuritySettings({
+          registeredDevices: updatedDevices,
+          biometricEnabled: true,
+          faceUnlockEnabled: true
+        });
+        setFaceUnlockEnabled(true);
+        setSetupStep('success');
+      } else {
+        setSetupError(result.error || 'Registration was not completed.');
+        setSetupStep('failure');
+      }
+    } catch (err: any) {
+      setSetupError(err?.message || 'Registration failed. Please try again.');
+      setSetupStep('failure');
+    }
+  };
 
   // Clean up stale authentication messages and cancellation flags on mount
   useEffect(() => {
@@ -435,7 +478,7 @@ export default function BiometricSettings() {
   };
 
   return (
-    <div className="w-full space-y-4">
+    <div className="w-full max-w-full overflow-x-hidden space-y-4">
       {/* Running in Iframe Preview Notification with direct link to launch in dedicated tab */}
       {typeof window !== 'undefined' && window.self !== window.top && (
         <div className="p-4 rounded-2xl border border-indigo-500/30 bg-indigo-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-indigo-200 text-xs">
@@ -498,26 +541,36 @@ export default function BiometricSettings() {
           
           {isSupported !== false && (
             <div className="w-full sm:w-auto shrink-0 flex justify-end sm:justify-start">
-              <button
-                type="button"
-                onClick={() => handleToggleFaceUnlock(!faceUnlockEnabled)}
-                disabled={isPending}
-                className={cn(
-                  "w-full sm:w-auto px-4 py-2.5 min-h-[42px] rounded-xl text-xs font-semibold transition-all border shadow-sm flex items-center justify-center gap-2 whitespace-nowrap",
-                  faceUnlockEnabled 
-                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30"
-                    : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white border-transparent",
-                  isPending && "opacity-50 cursor-not-allowed"
-                )}
-              >
-                {isPending ? (
-                  <span className="animate-pulse">Configuring...</span>
-                ) : faceUnlockEnabled ? (
-                  <>Enabled ✅ (Turn Off)</>
-                ) : (
-                  <>Enable Face Unlock</>
-                )}
-              </button>
+              {isInIframe ? (
+                <span className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700 whitespace-nowrap">
+                  Unavailable In Iframe
+                </span>
+              ) : !isActive ? (
+                <button
+                  type="button"
+                  onClick={handleStartSetup}
+                  className="w-full sm:w-auto px-4 py-2.5 min-h-[42px] rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-sm border border-transparent flex items-center justify-center gap-2 whitespace-nowrap"
+                >
+                  Set Up Face Unlock
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleToggleFaceUnlock(!faceUnlockEnabled)}
+                  disabled={isPending}
+                  className={cn(
+                    "w-full sm:w-auto px-4 py-2.5 min-h-[42px] rounded-xl text-xs font-semibold transition-all border shadow-sm flex items-center justify-center gap-2 whitespace-nowrap",
+                    "bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30",
+                    isPending && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  {isPending ? (
+                    <span className="animate-pulse">Configuring...</span>
+                  ) : (
+                    <>Enabled ✅ (Turn Off)</>
+                  )}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -682,6 +735,19 @@ export default function BiometricSettings() {
           )}
         </div>
       )}
+
+      {/* Face Unlock Setup Wizard Modal */}
+      <FaceUnlockSetupModal
+        isOpen={showSetupWizard}
+        onClose={() => setShowSetupWizard(false)}
+        onSuccess={() => {
+          setFaceUnlockEnabled(true);
+          setSuccessMsg("✓ Face Unlock is turned on");
+        }}
+        userId={currentUser?.uid}
+        userEmail={currentUser?.email}
+        userDisplayName={currentUser?.displayName || undefined}
+      />
     </div>
   );
 }

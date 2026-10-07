@@ -145,20 +145,27 @@ Strict Security Guidelines:
 6. Data Isolation: Never attempt to call a tool not listed in your Allowed Tools list. Any attempt is a security violation. Never disclose details of other user accounts unless running in verified ADMIN MODE.
 `;
 
-  // Model selection hierarchy fallback
-  const modelsData = await client.models.list().catch(() => ({ data: [] }));
-  const availableModelIds = modelsData.data.map(m => m.id);
-  const preferredModels = [
-    'llama-3.3-70b-specdec',
-    'llama-3.3-70b-versatile',
-    'llama-3.1-70b-versatile',
-    'llama3-70b-8192',
-    'mixtral-8x7b-32768',
-    'llama-3.1-8b-instant',
-    'llama3-8b-8192'
-  ];
+  // Model selection hierarchy with environment variable configuration and confirmed working models
+  const MODEL_PRIMARY = process.env.AUREX_AI_MODEL || 'qwen/qwen3.8-27b';
+  const MODEL_FALLBACK = 'openai/gpt-oss-120b';
+
+  let modelsData: any = { data: [] };
+  try {
+    modelsData = await client.models.list();
+  } catch (e) {
+    console.warn("[Aurex AI] Failed to fetch models list, using defaults");
+  }
+  const availableModelIds = modelsData.data.map((m: any) => m.id);
   
-  const modelToUse = preferredModels.find(m => availableModelIds.includes(m)) || 'llama-3.1-8b-instant';
+  const preferredModels = [
+    process.env.AUREX_AI_MODEL,
+    'qwen/qwen3.8-27b',
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
+    'allam-2-7b'
+  ].filter(Boolean) as string[];
+  
+  let modelToUse = preferredModels.find(m => availableModelIds.includes(m)) || MODEL_PRIMARY;
   console.log(`[Aurex AI] Selecting optimal engine model: ${modelToUse} for ${role.toUpperCase()} mode`);
 
   const formattedHistory = history.map(h => ({
@@ -170,10 +177,10 @@ Strict Security Guidelines:
   let tokensUsed = 0;
   let toolsExecuted: string[] = [];
 
-  // Turn 1: Get Model Decision (Either toolCall or direct reply)
-  try {
-    const comp = await client.chat.completions.create({
-      model: modelToUse,
+  // Turn 1: Get Model Decision with 404 graceful fallback
+  async function callCompletion(targetModel: string) {
+    return await client.chat.completions.create({
+      model: targetModel,
       messages: [
         { role: 'system', content: systemInstructions },
         ...formattedHistory,
@@ -181,6 +188,22 @@ Strict Security Guidelines:
       ],
       response_format: { type: "json_object" }
     });
+  }
+
+  try {
+    let comp;
+    try {
+      comp = await callCompletion(modelToUse);
+    } catch (err: any) {
+      const is404 = err.status === 404 || err.statusCode === 404 || (err.message && err.message.includes('404'));
+      if (is404 && modelToUse !== MODEL_FALLBACK) {
+        console.warn(`[Aurex] Model ${modelToUse} unavailable (404), falling back to ${MODEL_FALLBACK}`);
+        modelToUse = MODEL_FALLBACK;
+        comp = await callCompletion(modelToUse);
+      } else {
+        throw err;
+      }
+    }
 
     chatResponseText = comp.choices[0].message.content || '{}';
     tokensUsed += comp.usage?.total_tokens || 0;
@@ -458,13 +481,13 @@ export async function callGroqWithRetry(prompt: string, history: any[], context?
 export async function listAvailableModels() {
   const client = getGroqClient();
   if (!client) {
-    return { data: [{ id: "llama-3.1-8b-instant" }] };
+    return { data: [{ id: "qwen/qwen3.8-27b" }] };
   }
   try {
     const list = await client.models.list();
     return list;
   } catch (err) {
-    return { data: [{ id: "llama-3.1-8b-instant" }] };
+    return { data: [{ id: "qwen/qwen3.8-27b" }] };
   }
 }
 

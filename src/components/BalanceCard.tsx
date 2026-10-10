@@ -185,7 +185,7 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({
             </motion.button>
             <div className="text-[10px] sm:text-[11px] font-semibold px-2 sm:px-3 py-1 rounded-full bg-white/[0.06] hover:bg-white/[0.1] text-[#a1a1a6] border border-white/[0.1] flex items-center gap-1 sm:gap-1.5 shadow-sm transition-colors backdrop-blur-md">
               <ShieldCheck size={13} className="text-[#30d158]" />
-              <span className="hidden xs:inline sm:inline">Apple Secure</span>
+              <span className="hidden xs:inline sm:inline">Secured & Verified</span>
             </div>
           </div>
         </div>

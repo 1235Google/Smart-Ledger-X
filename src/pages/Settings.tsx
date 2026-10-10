@@ -306,8 +306,8 @@ export default function Settings() {
                       description="Intelligent financial security system, deep vulnerability audits & logs" 
                       onClick={() => navigate('/smartguard')}
                       action={
-                        <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                          Protected 🛡
+                        <span className="px-2.5 py-1 text-xs font-semibold rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/25">
+                          Protected
                         </span>
                       }
                     />
@@ -319,11 +319,11 @@ export default function Settings() {
                       onClick={() => setShowBiometricModal(true)}
                       action={
                         securitySettings.faceUnlockEnabled ? (
-                          <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                            Active ✅
+                          <span className="px-2.5 py-1 text-xs font-semibold rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
+                            Active
                           </span>
                         ) : (
-                          <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                          <span className="px-2.5 py-1 text-xs font-semibold rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20">
                             Configure
                           </span>
                         )

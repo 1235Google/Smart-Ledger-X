@@ -43,6 +43,7 @@ import CryptoJS from 'crypto-js';
 import { recordLoginActivity } from '../lib/securityService';
 import FaceUnlock from './FaceUnlock';
 import FaceAuthErrorBoundary from './FaceAuthErrorBoundary';
+import { setDeviceUnlocked } from '../lib/deviceAuthSession';
 
 interface LockScreenProps {
   onUnlock: () => void;
@@ -129,6 +130,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
   // ---------------------------------------------------------------------------
   const handleFaceUnlockSuccess = () => {
     try {
+      setDeviceUnlocked(true);
       sessionStorage.setItem('isUnlocked', 'true');
     } catch (e) {}
     unlockApp(); // Unlocks app in store context & records login
@@ -162,6 +164,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
       const success = unlockApp(pinToVerify);
       if (success) {
         try {
+          setDeviceUnlocked(true);
           sessionStorage.setItem('isUnlocked', 'true');
         } catch (e) {}
         setFailedAttempts(0);
@@ -275,6 +278,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     setNewPin('');
     setConfirmNewPin('');
     try {
+      setDeviceUnlocked(true);
       sessionStorage.setItem('isUnlocked', 'true');
     } catch (e) {}
     onUnlock();

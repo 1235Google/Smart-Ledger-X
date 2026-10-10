@@ -96,11 +96,11 @@ export default function CurrentBalance() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full space-y-8 bg-[#05060a]"
+        className="w-full space-y-8"
       >
       <header className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white mb-1">Current Balance</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-white mb-1">Current Balance</h1>
           <p className="text-slate-400 text-sm font-medium">Real-time ledger audit, liquidity status, and activity tracking.</p>
         </div>
 

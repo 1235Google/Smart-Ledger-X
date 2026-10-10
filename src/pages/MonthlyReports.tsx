@@ -596,16 +596,10 @@ export default function MonthlyReports() {
           className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6 pt-2"
         >
           <div>
-            <div className="flex items-center gap-2.5 mb-2">
-              <span className="px-3 py-1 rounded-full text-xs font-semibold tracking-wide bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 backdrop-blur-md">
-                VISIONOS SUITE
-              </span>
-              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Live Dispatch Ready
-              </span>
+            <div className="text-xs font-medium text-indigo-400 uppercase tracking-wider mb-1">
+              Financial Reporting
             </div>
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white flex items-center gap-3">
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white flex items-center gap-3">
               Monthly Reports
             </h1>
             <p className="text-slate-400 text-sm sm:text-base mt-1.5 max-w-2xl leading-relaxed">

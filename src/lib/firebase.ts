@@ -29,6 +29,7 @@ import {
 } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
 import rawConfig from '../../firebase-applet-config.json';
+import { saveDeviceSession, clearDeviceSession } from './deviceAuthSession';
 
 // Validated Firebase Configuration object
 export const firebaseConfig = {
@@ -301,11 +302,9 @@ export async function loginWithGoogle(): Promise<{ user: User }> {
     console.log('[Auth Debug] Display Name:', user.displayName);
     console.log('[Auth Debug] Provider:', user.providerData?.[0]?.providerId || 'google.com');
 
-    // Persist session hint to survive browser restart/reopen
+    // Persist session to survive browser restart/reopen
     try {
-      localStorage.setItem('smartledger_authenticated', 'true');
-      localStorage.setItem('lastAuthUserId', user.uid);
-      if (user.email) localStorage.setItem('lastAuthUserEmail', user.email);
+      saveDeviceSession(user, true);
     } catch (e) {}
 
     // Create user profile in Firestore if needed (asynchronous & non-blocking)
@@ -364,9 +363,7 @@ export async function loginWithGoogleCredential(idToken: string): Promise<{ user
     console.log('[Auth Debug] Email:', user.email);
 
     try {
-      localStorage.setItem('smartledger_authenticated', 'true');
-      localStorage.setItem('lastAuthUserId', user.uid);
-      if (user.email) localStorage.setItem('lastAuthUserEmail', user.email);
+      saveDeviceSession(user, true);
     } catch (e) {}
 
     ensureUserProfileDoc(user).catch((err) => {
@@ -394,9 +391,7 @@ export async function checkRedirectResult(): Promise<User | null> {
       console.log('[Auth Debug] Redirect User Email:', result.user.email);
 
       try {
-        localStorage.setItem('smartledger_authenticated', 'true');
-        localStorage.setItem('lastAuthUserId', result.user.uid);
-        if (result.user.email) localStorage.setItem('lastAuthUserEmail', result.user.email);
+        saveDeviceSession(result.user, true);
       } catch (e) {}
 
       ensureUserProfileDoc(result.user).catch((err) => {
@@ -437,9 +432,7 @@ export async function loginWithEmail(email: string, pass: string) {
   const cred = await signInWithEmailAndPassword(auth, cleanEmail, cleanPass);
   if (cred.user) {
     try {
-      localStorage.setItem('smartledger_authenticated', 'true');
-      localStorage.setItem('lastAuthUserId', cred.user.uid);
-      if (cred.user.email) localStorage.setItem('lastAuthUserEmail', cred.user.email);
+      saveDeviceSession(cred.user, true);
     } catch (e) {}
     await ensureUserProfileDoc(cred.user);
   }
@@ -474,9 +467,7 @@ export async function registerWithEmail(email: string, pass: string, fullName?: 
   const cred = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPass);
   if (cred.user) {
     try {
-      localStorage.setItem('smartledger_authenticated', 'true');
-      localStorage.setItem('lastAuthUserId', cred.user.uid);
-      if (cred.user.email) localStorage.setItem('lastAuthUserEmail', cred.user.email);
+      saveDeviceSession(cred.user, true);
     } catch (e) {}
 
     if (cleanName) {
@@ -509,9 +500,7 @@ export async function requestPasswordReset(email: string) {
  */
 export async function logoutUser() {
   try {
-    localStorage.removeItem('smartledger_authenticated');
-    localStorage.removeItem('lastAuthUserId');
-    localStorage.removeItem('lastAuthUserEmail');
+    clearDeviceSession();
   } catch (e) {}
   return await signOut(auth);
 }

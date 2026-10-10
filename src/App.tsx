@@ -54,6 +54,8 @@ const AdminUserProfile = lazy(() => import('./pages/admin/AdminUserProfile'));
 
 const Login = lazy(() => import('./pages/Login'));
 
+import { getDeviceSession } from './lib/deviceAuthSession';
+
 /**
  * Loading & Splash screen displayed while Firebase Auth restores user session
  */
@@ -74,14 +76,15 @@ function AuthLoadingScreen({ message }: { message?: string }) {
 
 /**
  * ProtectedRoute:
- * - If authLoading === true -> show loading/splash screen (never redirect prematurely)
- * - If authLoading === false && user -> render protected content
- * - If authLoading === false && !user -> redirect to /login
+ * - If authLoading === true and no remembered device session -> show loading/splash screen (never redirect prematurely)
+ * - If has authenticated user or device session -> render protected content
+ * - Otherwise -> redirect to /login
  */
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated, authLoading, isAuthReady, systemConfig, isAdminAuthenticated } = useStore();
+  const hasDeviceSession = Boolean(getDeviceSession());
   
-  if (authLoading || !isAuthReady) {
+  if ((authLoading || !isAuthReady) && !hasDeviceSession) {
     return <AuthLoadingScreen message="Verifying authentication session..." />;
   }
 
@@ -90,7 +93,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <MaintenanceScreen />;
   }
 
-  const hasAuthenticatedUser = Boolean(user || isAuthenticated);
+  const hasAuthenticatedUser = Boolean(user || isAuthenticated || hasDeviceSession);
   if (!hasAuthenticatedUser) {
     return <Navigate to="/login" replace />;
   }
@@ -100,13 +103,19 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 /**
  * LoginRoute:
- * - While authLoading === true -> show loading/splash (NEVER show login screen while Firebase is restoring)
- * - If user exists (user !== null) -> automatically redirect to dashboard ("/")
- * - If Firebase finished initializing and user is null -> show login screen
+ * - If user exists or persistent device session exists -> automatically redirect to dashboard ("/")
+ * - While authLoading === true -> show loading/splash
+ * - If user is null and no device session -> show login screen
  */
 function LoginRoute({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated, authLoading, isAuthReady, systemConfig, isAdminAuthenticated } = useStore();
+  const hasDeviceSession = Boolean(getDeviceSession());
   
+  const hasAuthenticatedUser = Boolean(user || isAuthenticated || hasDeviceSession);
+  if (hasAuthenticatedUser) {
+    return <Navigate to="/" replace />;
+  }
+
   if (authLoading || !isAuthReady) {
     return <AuthLoadingScreen message="Loading Smart Ledger..." />;
   }
@@ -114,11 +123,6 @@ function LoginRoute({ children }: { children: React.ReactNode }) {
   // If system is in maintenance mode and user is not an administrator, show maintenance screen
   if (systemConfig?.mode === 'maintenance' && !isAdminAuthenticated) {
     return <MaintenanceScreen />;
-  }
-
-  const hasAuthenticatedUser = Boolean(user || isAuthenticated);
-  if (hasAuthenticatedUser) {
-    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;

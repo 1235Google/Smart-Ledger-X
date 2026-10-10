@@ -201,17 +201,17 @@ export default function Analytics() {
       >
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#0a84ff] uppercase tracking-wider mb-1">
-            <span className="w-2 h-2 rounded-full bg-[#0a84ff]" /> Intelligence & Trends
+          <div className="text-xs font-medium text-[#0a84ff] uppercase tracking-wider mb-1">
+            Intelligence & Trends
           </div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-3">
+          <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
             Financial Insights
           </h1>
-          <p className="text-[#86868b] mt-1 text-sm font-medium">Deep algorithmic cashflow breakdown, net worth tracking, and category velocity.</p>
+          <p className="text-[#86868b] mt-1 text-sm font-medium">Deep cashflow breakdown, net worth tracking, and category velocity.</p>
         </div>
         
-        {/* Apple Segmented Pill Filter */}
-        <div className="flex items-center p-1 bg-[#1c1c1e] border border-white/[0.08] rounded-full self-start md:self-auto overflow-x-auto max-w-full no-scrollbar shadow-sm">
+        {/* Segmented Filter */}
+        <div className="flex items-center p-1 bg-[#18181b] border border-white/[0.08] rounded-xl self-start md:self-auto overflow-x-auto max-w-full no-scrollbar shadow-sm">
           {[
             { id: 'today', label: 'Day' },
             { id: 'week', label: 'Week' },
@@ -224,10 +224,10 @@ export default function Analytics() {
               key={tab.id}
               onClick={() => setFilter(tab.id as DateFilter)}
               className={cn(
-                "px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 whitespace-nowrap min-h-[32px] flex items-center justify-center",
+                "px-3 sm:px-3.5 py-1.5 rounded-lg text-xs transition-all duration-150 whitespace-nowrap min-h-[32px] flex items-center justify-center",
                 filter === tab.id
-                  ? "bg-[#0a84ff] text-white shadow-[0_2px_8px_rgba(10,132,255,0.3)]"
-                  : "text-[#86868b] hover:text-white"
+                  ? "bg-[#0a84ff] text-white shadow-sm font-semibold"
+                  : "text-[#86868b] hover:text-white font-medium"
               )}
             >
               {tab.label}

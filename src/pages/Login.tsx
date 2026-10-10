@@ -16,12 +16,14 @@ import {
 } from '../lib/supabaseAuth';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { recordLoginActivity } from '../lib/securityService';
+import { saveDeviceSession, getDeviceSession } from '../lib/deviceAuthSession';
 
 export default function Login() {
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberDevice, setRememberDevice] = useState(true);
   
   const { updateUserProfile } = useStore();
 
@@ -32,6 +34,14 @@ export default function Login() {
   const [resetSent, setResetSent] = useState(false);
   const navigate = useNavigate();
 
+  // If already logged in on this device, automatically navigate to app
+  useEffect(() => {
+    const existing = getDeviceSession();
+    if (existing) {
+      navigate('/', { replace: true });
+    }
+  }, [navigate]);
+
   // Handle redirect sign-in results on initial mount
   useEffect(() => {
     let isMounted = true;
@@ -39,6 +49,7 @@ export default function Login() {
       try {
         const user = await checkRedirectResult();
         if (user && isMounted) {
+          saveDeviceSession(user, true);
           try {
             sessionStorage.setItem('isUnlocked', 'true');
           } catch (e) {}
@@ -62,6 +73,7 @@ export default function Login() {
     try {
       const result = await loginWithGoogle();
       if (result?.user) {
+        saveDeviceSession(result.user, rememberDevice);
         try { sessionStorage.setItem('isUnlocked', 'true'); } catch (e) {}
         
         // Asynchronous non-blocking login record
@@ -137,6 +149,7 @@ export default function Login() {
       }
 
       if (cred.user) {
+        saveDeviceSession(cred.user, rememberDevice);
         try { sessionStorage.setItem('isUnlocked', 'true'); } catch (e) {}
         await recordLoginActivity(cred.user.uid, {
           method: 'Email',
@@ -205,11 +218,8 @@ export default function Login() {
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
         className="w-full max-w-[420px] relative z-10"
       >
-        {/* Intense Glowing Border Envelope */}
-        <div className="relative rounded-[26px] p-[2.5px] bg-white shadow-[0_0_30px_rgba(255,255,255,0.7),inset_0_0_15px_rgba(255,255,255,0.5)]">
-          
-          {/* Inner Frosted Glass Body */}
-          <div className="relative bg-[#1a1c23]/80 backdrop-blur-2xl rounded-[23px] py-10 px-8 overflow-hidden">
+        {/* Polished Card Container */}
+        <div className="relative rounded-[24px] border border-white/10 bg-[#121319]/90 backdrop-blur-2xl shadow-[0_24px_64px_rgba(0,0,0,0.7)] p-8 sm:p-10 overflow-hidden">
             
             {/* Card Header */}
             <div className="mb-8 text-center relative z-10">
@@ -306,8 +316,28 @@ export default function Login() {
                   </div>
                 </div>
 
+                {/* Remember Device & Forgot Password */}
+                <div className="flex items-center justify-between text-xs pt-1 select-none">
+                  <label className="flex items-center gap-2 cursor-pointer text-white/80 hover:text-white transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={rememberDevice}
+                      onChange={(e) => setRememberDevice(e.target.checked)}
+                      className="w-4 h-4 rounded border-white/20 bg-[#1e2029] text-[#00f0ff] focus:ring-0 focus:ring-offset-0 cursor-pointer accent-[#00f0ff]"
+                    />
+                    <span className="text-[12px] font-medium">Keep me signed in on this device</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotModal(true)}
+                    className="text-[12px] font-medium text-[#00f0ff] hover:underline"
+                  >
+                    Forgot?
+                  </button>
+                </div>
+
                 {/* Primary Submit Button */}
-                <div className="pt-6">
+                <div className="pt-4">
                   <motion.button
                     whileHover={{ scale: 1.015, y: -1 }}
                     whileTap={{ scale: 0.985 }}
@@ -325,7 +355,6 @@ export default function Login() {
               </form>
             </div>
           </div>
-        </div>
 
         {/* Footer Trust Indicator */}
         <div className="mt-6 flex items-center justify-center gap-2 text-[10px] font-bold text-white/80 tracking-widest uppercase">

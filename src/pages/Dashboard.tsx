@@ -173,21 +173,20 @@ export default function Dashboard() {
         className="w-full relative text-[#f5f5f7] selection:bg-[#0a84ff]/30 selection:text-white"
       >
         
-        {/* Top Header - Apple VisionOS Style */}
+        {/* Top Header */}
         <motion.div 
           variants={itemVariants}
-          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 py-2 px-1 mb-4 sm:mb-6 border-b border-white/[0.08]"
+          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-2 px-1 mb-4 sm:mb-6 border-b border-white/[0.06]"
         >
-          <div className="flex items-center gap-2.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#30d158] shadow-[0_0_12px_#30d158] animate-pulse shrink-0" />
-            <span className="text-[10px] min-[380px]:text-xs font-bold uppercase tracking-wider text-[#86868b] truncate">
-              SMART LEDGER X • VISIONOS COCKPIT
-            </span>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xs font-semibold tracking-wider text-[#A1A1AA] uppercase">
+              Financial Overview
+            </h1>
           </div>
 
           <div className="flex items-center gap-2 text-xs text-[#86868b] self-start sm:self-auto">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full bg-white/[0.05] border border-white/[0.1] text-[10px] min-[380px]:text-xs backdrop-blur-md shadow-sm">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#30d158]" /> Real-Time Vault Sync Active
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-white/[0.03] border border-white/[0.06] text-xs text-[#A1A1AA]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#30d158]" /> Real-Time Vault Sync
             </span>
           </div>
         </motion.div>
@@ -214,18 +213,18 @@ export default function Dashboard() {
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <div className="text-[11px] font-bold text-[#0a84ff] uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#0a84ff]" /> 01 • Core Financial Position
+                  <div className="text-xs font-medium text-[#0a84ff] tracking-wide">
+                    Liquidity & Assets
                   </div>
-                  <h1 className="text-2xl sm:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-[#0a84ff] tracking-tight drop-shadow-[0_0_15px_rgba(10,132,255,0.3)]">
+                  <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight mt-0.5">
                     Current Balance & Liquidity
-                  </h1>
+                  </h2>
                 </div>
                 <motion.button 
-                  whileHover={{ scale: 1.05, boxShadow: "0 0 20px rgba(10, 132, 255, 0.4)" }}
-                  whileTap={{ scale: 0.95 }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={() => navigate('/balance')}
-                  className="text-xs font-semibold px-4 py-2 rounded-full bg-[#0a84ff]/10 hover:bg-[#0a84ff]/20 text-[#0a84ff] hover:text-white flex items-center gap-1.5 transition-all border border-[#0a84ff]/30 self-start sm:self-auto"
+                  className="text-xs font-semibold px-4 py-2 rounded-lg bg-[#0a84ff]/10 hover:bg-[#0a84ff]/20 text-[#0a84ff] hover:text-white flex items-center gap-1.5 transition-all border border-[#0a84ff]/30 self-start sm:self-auto"
                 >
                   Manage Vaults <ChevronRight size={14} />
                 </motion.button>
@@ -314,10 +313,10 @@ export default function Dashboard() {
               >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <div className="text-[11px] font-bold text-[#ffd60a] uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#ffd60a]" /> 02 • Due Money
+                  <div className="text-xs font-medium text-[#ffd60a] tracking-wide">
+                    Receivables & Dues
                   </div>
-                  <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                  <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
                     Pending Dues & Reminders
                   </h2>
                 </div>
@@ -453,10 +452,10 @@ export default function Dashboard() {
               >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <div className="text-[11px] font-bold text-[#30d158] uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#30d158]" /> 03 • Activity Feed
+                  <div className="text-xs font-medium text-[#30d158] tracking-wide">
+                    Activity Feed
                   </div>
-                  <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                  <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
                     Recent Transactions
                   </h2>
                 </div>
@@ -548,10 +547,10 @@ export default function Dashboard() {
               style={{ contain: 'layout style', willChange: 'transform', transform: 'translateZ(0)' }}
             >
               <div>
-                <div className="text-[11px] font-bold text-[#0a84ff] uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#0a84ff]" /> 04 • Fast Workflow
+                <div className="text-xs font-medium text-[#0a84ff] tracking-wide">
+                  Fast Operations
                 </div>
-                <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
                   Quick Actions
                 </h2>
               </div>
@@ -671,10 +670,10 @@ export default function Dashboard() {
               <motion.section variants={itemVariants} id="section-analytics" className="space-y-4" style={{ contain: 'layout style', willChange: 'transform', transform: 'translateZ(0)' }}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <div className="text-[11px] font-bold text-[#bf5af2] uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#bf5af2]" /> 05 • Visual Intelligence
+                  <div className="text-xs font-medium text-[#bf5af2] tracking-wide">
+                    Analytics & Trends
                   </div>
-                  <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                  <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
                     Financial Analytics & Trajectory
                   </h2>
                 </div>
@@ -700,10 +699,10 @@ export default function Dashboard() {
             <DeferredSection fallback={<SectionLoadingFallback />}>
               <motion.section variants={itemVariants} id="section-ai-insights" className="space-y-4" style={{ contain: 'layout style', willChange: 'transform', transform: 'translateZ(0)' }}>
               <div>
-                <div className="text-[11px] font-bold text-[#bf5af2] uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#bf5af2]" /> 06 • Smart Intelligence
+                <div className="text-xs font-medium text-[#bf5af2] tracking-wide">
+                  Risk & Security
                 </div>
-                <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
                   Smart Alerts & Warnings
                 </h2>
               </div>

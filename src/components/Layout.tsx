@@ -320,18 +320,9 @@ export default function Layout() {
                   <span className="text-sm font-bold tracking-tight text-white whitespace-nowrap">
                     Smart Ledger
                   </span>
-                  <motion.span 
-                    initial={{ backgroundPosition: '0% 50%' }}
-                    animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
-                    transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-                    className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full text-transparent bg-clip-text border border-white/20 shadow-[0_0_10px_rgba(255,255,255,0.2)]"
-                    style={{
-                      backgroundImage: 'linear-gradient(90deg, #ff453a, #ff9f0a, #ffd60a, #30d158, #64d2ff, #0a84ff, #bf5af2, #ff375f)',
-                      backgroundSize: '200% 200%'
-                    }}
-                  >
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md text-[#635BFF] bg-[#635BFF]/15 border border-[#635BFF]/25">
                     X
-                  </motion.span>
+                  </span>
                 </div>
                 <span className="text-[11px] text-slate-400 font-medium tracking-tight">Personal & Business</span>
               </div>
@@ -486,7 +477,7 @@ export default function Layout() {
               </div>
               <div className="flex items-center gap-1 min-w-0">
                 <span className="font-bold tracking-tight text-white text-[13px] min-[360px]:text-sm sm:text-base whitespace-nowrap truncate">Smart Ledger</span>
-                <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 border border-white/20 shrink-0">
+                <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-md text-[#635BFF] bg-[#635BFF]/15 border border-[#635BFF]/25 shrink-0">
                   X
                 </span>
               </div>
@@ -535,7 +526,7 @@ export default function Layout() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-base font-bold tracking-tight text-white block truncate">Smart Ledger</span>
-                      <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 border border-white/20">
+                      <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-md text-[#635BFF] bg-[#635BFF]/15 border border-[#635BFF]/25">
                         X
                       </span>
                     </div>
@@ -613,10 +604,10 @@ export default function Layout() {
           <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
 
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2.5 text-xs text-[#86868b] font-medium">
-              <span className="w-2 h-2 rounded-full bg-[#30d158] shadow-[0_0_10px_#30d158] animate-pulse" />
-              <span className="text-[#a1a1a6] font-semibold">Online</span>
-              <span className="text-white/20">•</span>
+            <div className="flex items-center gap-2 text-xs text-[#86868b] font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#30d158]" />
+              <span className="text-[#a1a1a6] font-medium">Online</span>
+              <span className="text-white/20">·</span>
               <span className="text-[#86868b]">Smart Ledger</span>
             </div>
 

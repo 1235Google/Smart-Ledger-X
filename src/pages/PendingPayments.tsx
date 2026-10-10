@@ -667,10 +667,10 @@ export default function PendingPayments() {
         className="w-full space-y-8"
       >
         <header className="mb-6">
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#ffd60a] uppercase tracking-wider mb-1">
-            <span className="w-2 h-2 rounded-full bg-[#ffd60a]" /> Due Money Ledger
+          <div className="text-xs font-medium text-[#ffd60a] uppercase tracking-wider mb-1">
+            Receivables Ledger
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
+          <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-3">
             Due Money
           </h1>
           <p className="text-[#86868b] mt-1 text-sm font-medium">Track who owes you money, send friendly reminders, and record payments easily.</p>

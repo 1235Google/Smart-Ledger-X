@@ -740,8 +740,22 @@ export default function BiometricSettings() {
       <FaceUnlockSetupModal
         isOpen={showSetupWizard}
         onClose={() => setShowSetupWizard(false)}
-        onSuccess={() => {
+        onSuccess={(device?: any) => {
           setFaceUnlockEnabled(true);
+          if (device) {
+            const currentDevices = securitySettings.registeredDevices || [];
+            const filtered = currentDevices.filter(d => d.id !== device.id);
+            updateSecuritySettings({
+              faceUnlockEnabled: true,
+              biometricEnabled: true,
+              registeredDevices: [...filtered, device]
+            });
+          } else {
+            updateSecuritySettings({
+              faceUnlockEnabled: true,
+              biometricEnabled: true
+            });
+          }
           setSuccessMsg("✓ Face Unlock is turned on");
         }}
         userId={currentUser?.uid}

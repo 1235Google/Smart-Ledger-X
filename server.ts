@@ -624,22 +624,25 @@ app.get("/api/admin/check", async (req, res) => {
   // Face Unlock & WebAuthn Shared Handler Functions
   async function handleGenerateRegistrationOptions(req: any, res: any) {
     try {
-      const { userId, userName } = req.body;
+      const { userId, userName, userDisplayName } = req.body;
       const { expectedRPID, expectedOrigin } = getRelyingPartyConfig(req);
       const cleanUserId = (userId || 'authenticated_user').trim();
+      const cleanUserName = (userName || 'user@smartledgerx.io').trim();
+      const cleanDisplayName = (userDisplayName || cleanUserName || cleanUserId || 'SmartLedger User').trim();
 
       const options = await generateRegistrationOptions({
         rpName,
         rpID: expectedRPID,
         userID: new Uint8Array(Buffer.from(cleanUserId)),
-        userName: userName || 'user@smartledgerx.io',
+        userName: cleanUserName,
+        userDisplayName: cleanDisplayName,
         timeout: 60000,
         attestationType: 'none',
         excludeCredentials: [],
         authenticatorSelection: {
           authenticatorAttachment: 'platform',
           residentKey: 'preferred',
-          userVerification: 'required',
+          userVerification: 'preferred',
         },
       });
       
@@ -675,7 +678,7 @@ app.get("/api/admin/check", async (req, res) => {
         expectedChallenge: challengeEntry.challenge,
         expectedOrigin,
         expectedRPID,
-        requireUserVerification: true,
+        requireUserVerification: false,
       });
       
       if (verification.verified && verification.registrationInfo) {

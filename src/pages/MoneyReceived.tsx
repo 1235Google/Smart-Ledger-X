@@ -72,10 +72,10 @@ export default function MoneyReceived() {
         className="w-full space-y-8"
       >
         <header className="mb-6">
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#30d158] uppercase tracking-wider mb-1">
-            <span className="w-2 h-2 rounded-full bg-[#30d158]" /> Inflow Ledger
+          <div className="text-xs font-medium text-[#30d158] uppercase tracking-wider mb-1">
+            Inflow Ledger
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
+          <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-3">
             Money Received
           </h1>
           <p className="text-[#86868b] mt-1 text-sm font-medium">Record incoming client credits, salary, freelance milestones, and deposits.</p>

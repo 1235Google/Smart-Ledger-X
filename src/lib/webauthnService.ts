@@ -104,9 +104,10 @@ export function verifyWebAuthnEnvironment(): {
 
   // 1. Secure context check
   if (!window.isSecureContext) {
+    console.error('[WebAuthn] Insecure context: WebAuthn requires HTTPS or http://localhost. Current location:', window.location.href);
     return {
       valid: false,
-      error: 'Face Unlock requires HTTPS or localhost.',
+      error: 'Face Unlock requires a secure context (HTTPS or http://localhost).',
       errorType: 'SecurityError'
     };
   }
@@ -117,6 +118,7 @@ export function verifyWebAuthnEnvironment(): {
   const isHttps = window.location.protocol === 'https:';
 
   if (!isHttps && !isLocalhost) {
+    console.error('[WebAuthn] Insecure origin: WebAuthn requires HTTPS or localhost. Current origin:', window.location.origin);
     return {
       valid: false,
       error: 'Face Unlock requires HTTPS or localhost.',
@@ -126,9 +128,10 @@ export function verifyWebAuthnEnvironment(): {
 
   // 3. PublicKeyCredential check
   if (!window.PublicKeyCredential) {
+    console.warn("[WebAuthn] Feature detection: window.PublicKeyCredential is not available");
     return {
       valid: false,
-      error: 'This device or browser does not support Face Unlock.',
+      error: "Your device doesn't support biometric unlock.",
       errorType: 'NotSupportedError'
     };
   }
@@ -196,16 +199,18 @@ export async function checkBiometricSupport(): Promise<BiometricSupportStatus> {
  */
 export function parseWebAuthnError(err: any): WebAuthnErrorResult {
   const errName = err?.name || '';
-  const errMsg = (err?.message || '').toLowerCase();
+  const errMsg = err?.message || '';
+  const errMsgLower = errMsg.toLowerCase();
 
+  console.error('[WebAuthn Error Caught]', { name: errName, message: errMsg });
   devWarn(errName || 'WebAuthnError');
 
   // Check specifically for Permissions Policy / iframe restrictions
   if (
-    errMsg.includes('publickey-credentials-create') ||
-    errMsg.includes('publickey-credentials-get') ||
-    errMsg.includes('permissions policy') ||
-    errMsg.includes('child frames')
+    errMsgLower.includes('publickey-credentials-create') ||
+    errMsgLower.includes('publickey-credentials-get') ||
+    errMsgLower.includes('permissions policy') ||
+    errMsgLower.includes('child frames')
   ) {
     return {
       errorType: 'NotAllowedError',
@@ -214,38 +219,45 @@ export function parseWebAuthnError(err: any): WebAuthnErrorResult {
     };
   }
 
-  // 1. NotAllowedError: cancellation, denial, timeout, or unavailable authenticator
+  // 1. NotAllowedError: cancellation, denial, timeout, or authenticator unavailability
   if (errName === 'NotAllowedError') {
+    if (errMsgLower.includes('timed out') || errMsgLower.includes('timeout')) {
+      return {
+        errorType: 'TimeoutError',
+        message: 'The biometric verification prompt timed out. Please try again.',
+        isUserCancelled: false
+      };
+    }
     return {
       errorType: 'NotAllowedError',
-      message: 'Face Unlock was cancelled. You can try again or use your password.',
+      message: 'Face Unlock was cancelled or timed out. Please try again.',
       isUserCancelled: true
     };
   }
 
   // 2. AbortError: request aborted
-  if (errName === 'AbortError' || errMsg.includes('abort')) {
+  if (errName === 'AbortError' || errMsgLower.includes('abort')) {
     return {
       errorType: 'AbortError',
-      message: 'Face Unlock was cancelled. You can try again or use your password.',
+      message: 'Face Unlock was cancelled.',
       isUserCancelled: true
     };
   }
 
   // 3. User cancel keywords
-  if (errMsg.includes('cancel') || errMsg.includes('dismiss') || errMsg.includes('denied')) {
+  if (errMsgLower.includes('cancel') || errMsgLower.includes('dismiss')) {
     return {
       errorType: 'NotAllowedError',
-      message: 'Face Unlock was cancelled. You can try again or use your password.',
+      message: 'Face Unlock was cancelled.',
       isUserCancelled: true
     };
   }
 
   // 4. TimeoutError
-  if (errName === 'TimeoutError' || errMsg.includes('timed out') || errMsg.includes('timeout')) {
+  if (errName === 'TimeoutError' || errMsgLower.includes('timed out') || errMsgLower.includes('timeout')) {
     return {
       errorType: 'TimeoutError',
-      message: 'We couldn\'t verify your face. Try again or use your password.',
+      message: 'The biometric verification prompt timed out. Please try again.',
       isUserCancelled: false
     };
   }
@@ -253,12 +265,12 @@ export function parseWebAuthnError(err: any): WebAuthnErrorResult {
   // 5. NotSupportedError
   if (
     errName === 'NotSupportedError' ||
-    errMsg.includes('not supported') ||
-    errMsg.includes('publickey-credentials')
+    errMsgLower.includes('not supported') ||
+    errMsgLower.includes('publickey-credentials')
   ) {
     return {
       errorType: 'NotSupportedError',
-      message: 'Face Unlock isn\'t available on this device.',
+      message: "Your device doesn't support biometric unlock.",
       isUserCancelled: false
     };
   }
@@ -266,12 +278,14 @@ export function parseWebAuthnError(err: any): WebAuthnErrorResult {
   // 6. SecurityError
   if (
     errName === 'SecurityError' ||
-    errMsg.includes('secure context') ||
-    errMsg.includes('https')
+    errMsgLower.includes('secure context') ||
+    errMsgLower.includes('https') ||
+    errMsgLower.includes('relying party') ||
+    errMsgLower.includes('origin')
   ) {
     return {
       errorType: 'SecurityError',
-      message: 'Face Unlock requires HTTPS or localhost.',
+      message: `Security error: Origin or RP ID mismatch (${errMsg || 'HTTPS or localhost required'}).`,
       isUserCancelled: false
     };
   }
@@ -279,19 +293,28 @@ export function parseWebAuthnError(err: any): WebAuthnErrorResult {
   // 7. InvalidStateError
   if (
     errName === 'InvalidStateError' ||
-    errMsg.includes('already registered') ||
-    errMsg.includes('excludecredentials')
+    errMsgLower.includes('already registered') ||
+    errMsgLower.includes('excludecredentials')
   ) {
     return {
       errorType: 'InvalidStateError',
-      message: 'Face Unlock needs to be set up again on this device.',
+      message: 'This biometric authenticator is already registered on this device.',
+      isUserCancelled: false
+    };
+  }
+
+  // 8. Surface actual server or system error message
+  if (errMsg && errMsg.trim().length > 0) {
+    return {
+      errorType: 'UnknownError',
+      message: errMsg,
       isUserCancelled: false
     };
   }
 
   return {
     errorType: 'UnknownError',
-    message: 'Something went wrong. Please try again, or use your password to continue.',
+    message: 'Biometric verification could not be completed. Please try again.',
     isUserCancelled: false
   };
 }
@@ -316,10 +339,52 @@ export async function registerBiometricCredential(
   // 1. Check support before opening prompt
   const env = verifyWebAuthnEnvironment();
   if (!env.valid) {
+    console.warn('[WebAuthn Debug] Environment check failed:', env.error);
     return {
       success: false,
       error: env.error,
       errorType: env.errorType,
+      isUserCancelled: false
+    };
+  }
+
+  // 2. Feature detection: Check platform authenticator availability
+  if (typeof window === 'undefined' || !window.PublicKeyCredential) {
+    console.warn('[WebAuthn] window.PublicKeyCredential is not available');
+    return {
+      success: false,
+      error: "Your device doesn't support biometric unlock.",
+      errorType: 'NotSupportedError',
+      isUserCancelled: false
+    };
+  }
+
+  if (typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function') {
+    try {
+      const isPlatformAvailable = await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+      console.log('[WebAuthn Debug] Feature detection: isUserVerifyingPlatformAuthenticatorAvailable =', isPlatformAvailable);
+      if (!isPlatformAvailable) {
+        return {
+          success: false,
+          error: "Your device doesn't support biometric unlock.",
+          errorType: 'NotSupportedError',
+          isUserCancelled: false
+        };
+      }
+    } catch (e: any) {
+      console.warn('[WebAuthn Debug] isUserVerifyingPlatformAuthenticatorAvailable error:', e);
+      return {
+        success: false,
+        error: "Your device doesn't support biometric unlock.",
+        errorType: 'NotSupportedError',
+        isUserCancelled: false
+      };
+    }
+  } else {
+    return {
+      success: false,
+      error: "Your device doesn't support biometric unlock.",
+      errorType: 'NotSupportedError',
       isUserCancelled: false
     };
   }
@@ -332,13 +397,22 @@ export async function registerBiometricCredential(
   devLog('Registration ceremony started');
 
   try {
-    // 2. Fetch fresh challenge from backend (never hardcoded)
+    // 3. Fetch fresh challenge from backend (never hardcoded)
+    console.log('[WebAuthn Debug] Fetching fresh challenge from /api/auth/face-unlock/register-options', {
+      userId: cleanUserId,
+      userName: cleanEmail,
+      userDisplayName: cleanName,
+      rpId,
+      origin: window.location.origin
+    });
+
     const optionsResp = await fetch('/api/auth/face-unlock/register-options', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         userId: cleanUserId,
         userName: cleanEmail,
+        userDisplayName: cleanName,
         rpId: rpId,
         origin: window.location.origin
       }),
@@ -347,29 +421,39 @@ export async function registerBiometricCredential(
 
     if (!optionsResp.ok) {
       const errData = await optionsResp.json().catch(() => ({}));
-      throw new Error(errData.error || 'Server error initializing registration options.');
+      const errMsg = errData.error || `Server error initializing registration options (status ${optionsResp.status}).`;
+      console.error('[WebAuthn Debug] register-options failed:', optionsResp.status, errMsg);
+      throw new Error(errMsg);
     }
 
     const optionsJSON = await optionsResp.json();
     if (!optionsJSON || !optionsJSON.challenge) {
-      throw new Error('Server returned an invalid challenge.');
+      throw new Error('Server returned an invalid or missing challenge.');
     }
 
-    // STEP 1 — INSTRUMENT
-    console.log("[FU] stage: options from server", JSON.stringify(optionsJSON));
+    console.log('[WebAuthn Debug] Options received from server:', optionsJSON);
 
-    // 3. Decode every Base64URL field into ArrayBuffer
+    // 4. Decode challenge into ArrayBuffer
     const challengeBuffer = base64UrlToArrayBuffer(optionsJSON.challenge);
+    if (!challengeBuffer || challengeBuffer.byteLength < 16) {
+      throw new Error('Challenge must be at least 16 bytes.');
+    }
 
+    // 5. Decode user.id into non-empty ArrayBuffer
+    const encoder = new TextEncoder();
+    const cleanUidString = cleanUserId || cleanEmail || 'smartledger_user';
     let userIdBuffer: ArrayBuffer;
-    if (typeof optionsJSON.user?.id === 'string') {
+    if (typeof optionsJSON.user?.id === 'string' && optionsJSON.user.id.trim()) {
       try {
-        userIdBuffer = base64UrlToArrayBuffer(optionsJSON.user.id);
+        const decoded = base64UrlToArrayBuffer(optionsJSON.user.id);
+        userIdBuffer = decoded.byteLength > 0 ? decoded : (encoder.encode(cleanUidString).buffer as ArrayBuffer);
       } catch {
-        userIdBuffer = new TextEncoder().encode(optionsJSON.user.id).buffer as ArrayBuffer;
+        const bytes = encoder.encode(cleanUidString);
+        userIdBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
       }
     } else {
-      userIdBuffer = new TextEncoder().encode(cleanUserId).buffer as ArrayBuffer;
+      const bytes = encoder.encode(cleanUidString);
+      userIdBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
     }
 
     const excludeCredentials = Array.isArray(optionsJSON.excludeCredentials)
@@ -380,6 +464,9 @@ export async function registerBiometricCredential(
         }))
       : [];
 
+    const userName = (cleanEmail || optionsJSON.user?.name || 'user@smartledgerx.io').trim();
+    const displayName = (cleanName || optionsJSON.user?.displayName || userName).trim() || 'SmartLedger User';
+
     const publicKeyOptions: PublicKeyCredentialCreationOptions = {
       challenge: challengeBuffer,
       rp: {
@@ -388,16 +475,17 @@ export async function registerBiometricCredential(
       },
       user: {
         id: userIdBuffer,
-        name: optionsJSON.user?.name || cleanEmail,
-        displayName: optionsJSON.user?.displayName || cleanName
+        name: userName,
+        displayName: displayName
       },
-      pubKeyCredParams: optionsJSON.pubKeyCredParams || [
+      pubKeyCredParams: [
         { alg: -7, type: 'public-key' },  // ES256
-        { alg: -257, type: 'public-key' } // RS256
+        { alg: -257, type: 'public-key' }, // RS256
+        { alg: -8, type: 'public-key' }   // Ed25519
       ],
       authenticatorSelection: {
         authenticatorAttachment: 'platform',
-        userVerification: 'required',
+        userVerification: 'preferred',
         residentKey: 'preferred'
       },
       timeout: 60000,
@@ -405,10 +493,10 @@ export async function registerBiometricCredential(
       excludeCredentials
     };
 
-    // STEP 1 — INSTRUMENT
-    console.log("[FU] stage: calling navigator.credentials.create");
+    console.log('[WebAuthn Debug] Calling navigator.credentials.create with options:', publicKeyOptions);
+    console.log('[WebAuthn Debug] RP ID:', rpId, 'Origin:', window.location.origin);
 
-    // 4. Trigger native biometric prompt via navigator.credentials.create
+    // 6. Trigger native biometric prompt via navigator.credentials.create
     const credential = (await navigator.credentials.create({
       publicKey: publicKeyOptions,
       signal
@@ -418,7 +506,9 @@ export async function registerBiometricCredential(
       throw new Error('Biometric credential was not created.');
     }
 
-    // 5. Serialize returned credential correctly using Base64URL
+    console.log('[WebAuthn Debug] navigator.credentials.create succeeded! Credential ID:', credential.id);
+
+    // 7. Serialize returned credential correctly using Base64URL
     const attResp = credential.response as AuthenticatorAttestationResponse;
     const clientDataJSON = arrayBufferToBase64Url(attResp.clientDataJSON);
     const attestationObject = arrayBufferToBase64Url(attResp.attestationObject || new ArrayBuffer(0));
@@ -436,7 +526,9 @@ export async function registerBiometricCredential(
       clientExtensionResults: credential.getClientExtensionResults ? credential.getClientExtensionResults() : {}
     };
 
-    // 6. Backend verification - do not report success until server verifies
+    console.log('[WebAuthn Debug] Sending credential to /api/auth/face-unlock/register-verify...');
+
+    // 8. Backend verification - do not report success until server verifies
     const verifyResp = await fetch('/api/auth/face-unlock/register-verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -449,15 +541,12 @@ export async function registerBiometricCredential(
       signal
     });
 
+    const verifyData = await verifyResp.json().catch(() => ({}));
+    console.log('[WebAuthn Debug] Server verification response status:', verifyResp.status, verifyData);
+
     if (!verifyResp.ok) {
-      const vErr = await verifyResp.json().catch(() => ({}));
-      throw new Error(vErr.error || 'Server registration verification failed.');
+      throw new Error(verifyData.error || `Server registration verification failed (status ${verifyResp.status}).`);
     }
-
-    const verifyData = await verifyResp.json();
-
-    // STEP 1 — INSTRUMENT
-    console.log("[FU] stage: verify response", verifyResp.status, verifyData);
 
     if (!verifyData.verified) {
       throw new Error('Server could not verify the authenticator registration.');
@@ -492,8 +581,12 @@ export async function registerBiometricCredential(
       device
     };
   } catch (err: any) {
-    // STEP 1 — INSTRUMENT RAW ERROR
-    console.error("[FU] RAW ERROR", err?.name, err?.message, err);
+    console.error("[WebAuthn] Registration error details:", {
+      name: err?.name,
+      message: err?.message,
+      rpId,
+      origin: typeof window !== 'undefined' ? window.location.origin : ''
+    }, err);
 
     const parsed = parseWebAuthnError(err);
     return {

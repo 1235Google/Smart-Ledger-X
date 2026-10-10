@@ -5,6 +5,7 @@ import { ensureAuthPersistence } from '../lib/firebase';
 import LockScreen from './LockScreen';
 import { ShieldCheck } from 'lucide-react';
 import { useGlobalShortcuts } from '../hooks/useGlobalShortcuts';
+import { isDeviceUnlocked, setDeviceUnlocked } from '../lib/deviceAuthSession';
 
 interface SecurityWrapperProps {
   children: React.ReactNode;
@@ -36,13 +37,9 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
     securitySettings?.pinEnabled && Boolean(securitySettings?.pin) || securityLock?.isLocked
   );
 
-  // Local unlock state backed by sessionStorage ('isUnlocked')
+  // Local unlock state backed by persistent device unlock
   const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
-    try {
-      return sessionStorage.getItem('isUnlocked') === 'true';
-    } catch {
-      return false;
-    }
+    return isDeviceUnlocked();
   });
 
   // 1. Ensure Firebase Auth uses browser local persistence so Google login survives page refresh & closure
@@ -58,15 +55,10 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
     }
   }, []);
 
-  // 2. Synchronize isUnlocked with sessionStorage changes (e.g. window focus, storage events)
+  // 2. Synchronize isUnlocked with storage changes (e.g. window focus, storage events)
   useEffect(() => {
     const syncLocalUnlockState = () => {
-      try {
-        const unlocked = sessionStorage.getItem('isUnlocked') === 'true';
-        setIsUnlocked(unlocked);
-      } catch {
-        setIsUnlocked(false);
-      }
+      setIsUnlocked(isDeviceUnlocked());
     };
 
     window.addEventListener('focus', syncLocalUnlockState);
@@ -81,11 +73,7 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
   const lockAppLocally = useCallback(() => {
     if (!isPinOrBiometricEnabled) return;
     console.log('[Auto-Lock] Inactivity threshold reached. Locking local UI with PIN protection.');
-    try {
-      sessionStorage.removeItem('isUnlocked');
-    } catch (e) {
-      console.warn('Failed to remove isUnlocked from sessionStorage', e);
-    }
+    setDeviceUnlocked(false);
     setIsUnlocked(false);
     storeLockApp();
   }, [storeLockApp, isPinOrBiometricEnabled]);
@@ -93,11 +81,7 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
   // 4. Unlock Handler - unlocks local UI upon successful Face or PIN verification
   const handleUnlock = useCallback(() => {
     console.log('[Security] App unlocked successfully.');
-    try {
-      sessionStorage.setItem('isUnlocked', 'true');
-    } catch (e) {
-      console.warn('Failed to set isUnlocked in sessionStorage', e);
-    }
+    setDeviceUnlocked(true);
     setIsUnlocked(true);
     storeUnlockApp();
     unlockLedger();
@@ -107,7 +91,7 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
     if (location.pathname === '/login') {
       navigate('/', { replace: true });
     }
-  }, [storeUnlockApp, location.pathname, navigate]);
+  }, [storeUnlockApp, unlockLedger, location.pathname, navigate]);
 
   // 5. Inactivity Timer
   // Only applies when user is authenticated, has enabled PIN/biometrics, and autoLogout is active
@@ -188,7 +172,7 @@ export default function SecurityWrapper({ children }: SecurityWrapperProps) {
   // Priority C: Authenticated Firebase user with active PIN protection
   // Only present LockScreen if PIN is actually configured and session is not yet unlocked
   if (isPinOrBiometricEnabled) {
-    const isLocallyUnlocked = isUnlocked && sessionStorage.getItem('isUnlocked') === 'true';
+    const isLocallyUnlocked = isUnlocked || isDeviceUnlocked();
     if (!isLocallyUnlocked) {
       return <LockScreen onUnlock={handleUnlock} />;
     }

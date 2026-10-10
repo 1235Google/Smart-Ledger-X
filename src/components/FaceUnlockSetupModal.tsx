@@ -5,7 +5,7 @@ import { registerBiometricCredential } from '../lib/webauthnService';
 interface FaceUnlockSetupModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (device?: any) => void;
   userId?: string;
   userEmail?: string;
   userDisplayName?: string;
@@ -34,8 +34,8 @@ export const FaceUnlockSetupModal: React.FC<FaceUnlockSetupModalProps> = ({
     try {
       const result = await registerBiometricCredential(cleanUid, cleanEmail, userDisplayName);
       
-      if (result.isUserCancelled || result.errorType === 'NotAllowedError' || result.errorType === 'AbortError') {
-        setErrorMessage('Face Unlock setup was cancelled. You can try again anytime.');
+      if (result.isUserCancelled) {
+        setErrorMessage(result.error || 'Face Unlock setup was cancelled. You can try again anytime.');
         setStep('failure');
         return;
       }
@@ -43,7 +43,7 @@ export const FaceUnlockSetupModal: React.FC<FaceUnlockSetupModalProps> = ({
       if (result.success && result.serverVerified) {
         setStep('success');
         setTimeout(() => {
-          onSuccess();
+          onSuccess(result.device);
           onClose();
         }, 1500);
       } else {
@@ -51,6 +51,7 @@ export const FaceUnlockSetupModal: React.FC<FaceUnlockSetupModalProps> = ({
         setStep('failure');
       }
     } catch (err: any) {
+      console.error('[FaceUnlockSetupModal] Biometric registration error:', err?.name, err?.message, err);
       setErrorMessage(err?.message || 'An unexpected error occurred during biometric setup.');
       setStep('failure');
     }
@@ -158,7 +159,7 @@ export const FaceUnlockSetupModal: React.FC<FaceUnlockSetupModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => setStep(1)}
+                onClick={handleStartRegistration}
                 className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-500 transition-colors flex items-center gap-2"
               >
                 <RefreshCw size={14} /> Try Again

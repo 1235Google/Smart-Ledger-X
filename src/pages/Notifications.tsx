@@ -236,15 +236,15 @@ export default function Notifications() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-inner flex-shrink-0">
-              <Bell size={24} className={unreadCount > 0 ? 'animate-bounce' : ''} />
+              <Bell size={24} />
             </div>
             <div>
               <div className="flex items-center gap-3 flex-wrap">
-                <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-white">
+                <h1 className="text-xl sm:text-3xl font-bold tracking-tight text-white">
                   Notification Center
                 </h1>
                 {unreadCount > 0 && (
-                  <span className="px-2.5 py-0.5 bg-rose-500 text-white text-xs font-bold rounded-full shadow-lg animate-pulse">
+                  <span className="px-2.5 py-0.5 bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-semibold rounded-full shadow-sm">
                     {unreadCount} Unread
                   </span>
                 )}

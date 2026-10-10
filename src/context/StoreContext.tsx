@@ -30,6 +30,15 @@ import {
   verifyPin, 
   hashPin 
 } from '../lib/securityService';
+import {
+  getDeviceSession,
+  saveDeviceSession,
+  clearDeviceSession,
+  touchDeviceSession,
+  createSyntheticUser,
+  isDeviceUnlocked,
+  setDeviceUnlocked
+} from '../lib/deviceAuthSession';
 
 const SECRET_KEY = 'smart-ledger-secure-key-2026';
 
@@ -272,14 +281,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed?.securitySettings?.pinEnabled && parsed?.securitySettings?.pin) {
-          return sessionStorage.getItem('isUnlocked') !== 'true';
+          return !isDeviceUnlocked();
         }
       }
     } catch {}
     return false;
   });
 
-  // Ensure Firebase Auth browserLocalPersistence so session survives refresh & auto-lock
+  // Ensure Firebase Auth persistence so session survives refresh & browser closures
   useEffect(() => {
     if (typeof window !== 'undefined') {
       ensureAuthPersistence().catch((err) => {
@@ -287,9 +296,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       });
     }
   }, []);
-  const [user, setUser] = useState<User | null>(() => auth.currentUser);
-  const [currentUser, setCurrentUser] = useState<User | null>(() => auth.currentUser);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => Boolean(auth.currentUser));
+
+  const [user, setUser] = useState<User | null>(() => {
+    if (auth.currentUser) return auth.currentUser;
+    const session = getDeviceSession();
+    return session ? createSyntheticUser(session) : null;
+  });
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    if (auth.currentUser) return auth.currentUser;
+    const session = getDeviceSession();
+    return session ? createSyntheticUser(session) : null;
+  });
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return Boolean(auth.currentUser || getDeviceSession());
+  });
 
   // Enterprise System Availability & Mode State
   const [systemConfig, setSystemConfig] = useState<SystemConfig>(() => systemModeService.getCurrentConfig());
@@ -411,6 +431,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       
       if (user) {
+        saveDeviceSession(user);
         setUser(user);
         setCurrentUser(user);
         setIsAuthenticated(true);
@@ -419,19 +440,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         try {
           const pinEnabled = state.securitySettings?.pinEnabled && Boolean(state.securitySettings?.pin);
           if (pinEnabled) {
-            const unlocked = sessionStorage.getItem('isUnlocked') === 'true';
-            setIsLocked(!unlocked);
+            setIsLocked(!isDeviceUnlocked());
           } else {
             setIsLocked(false);
           }
         } catch (e) {
           setIsLocked(false);
         }
-        try {
-          localStorage.setItem('smartledger_authenticated', 'true');
-          localStorage.setItem('lastAuthUserId', user.uid);
-          if (user.email) localStorage.setItem('lastAuthUserEmail', user.email);
-        } catch (e) {}
 
         setDataStatus('loading');
         setIsLoading(true);
@@ -524,42 +539,107 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } else {
-        setUser(null);
-        setCurrentUser(null);
-        setIsAuthenticated(false);
-        setAuthLoading(false);
-        setIsAuthReady(true);
-        setIsLocked(false);
-        try {
-          localStorage.removeItem('smartledger_authenticated');
-          sessionStorage.removeItem('isUnlocked');
-        } catch (e) {}
-        
-        // Load from local if not authenticated
-        try {
-          const saved = localStorage.getItem('smart-ledger-data');
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            setState(parsed);
-            prevStateRef.current = parsed;
-          }
-        } catch (e) {}
+        // Firebase returned null (e.g. initial launch, refresh token wait, or offline).
+        // Check if this device has a trusted remembered session.
+        const remembered = getDeviceSession();
+        if (remembered) {
+          console.log('[Auth] Firebase reported null, but device session is active. Maintaining logged-in state for:', remembered.email);
+          const syntheticUser = createSyntheticUser(remembered);
+          setUser(syntheticUser);
+          setCurrentUser(syntheticUser);
+          setIsAuthenticated(true);
+          setAuthLoading(false);
+          setIsAuthReady(true);
+          touchDeviceSession();
 
-        setDataStatus('success');
-        setIsDataLoaded(true);
-        setIsLoading(false);
+          try {
+            const pinEnabled = state.securitySettings?.pinEnabled && Boolean(state.securitySettings?.pin);
+            if (pinEnabled) {
+              setIsLocked(!isDeviceUnlocked());
+            } else {
+              setIsLocked(false);
+            }
+          } catch (e) {
+            setIsLocked(false);
+          }
+
+          // Restore local cached user ledger data
+          try {
+            const userCache = localStorage.getItem(`smart-ledger-cache-${remembered.userId}`);
+            if (userCache) {
+              const parsedCache = JSON.parse(userCache);
+              if (parsedCache) {
+                setState((prev) => ({
+                  ...defaultState,
+                  ...prev,
+                  ...(parsedCache.state || {}),
+                  transactions: parsedCache.transactions || prev.transactions || [],
+                }));
+              }
+            } else {
+              const saved = localStorage.getItem('smart-ledger-data');
+              if (saved) {
+                const parsed = JSON.parse(saved);
+                setState((prev) => ({ ...defaultState, ...prev, ...parsed }));
+              }
+            }
+          } catch (e) {}
+
+          setDataStatus('success');
+          setIsDataLoaded(true);
+          setIsLoading(false);
+        } else {
+          // Truly unauthenticated (user never logged in or explicitly logged out)
+          setUser(null);
+          setCurrentUser(null);
+          setIsAuthenticated(false);
+          setAuthLoading(false);
+          setIsAuthReady(true);
+          setIsLocked(false);
+          try {
+            localStorage.removeItem('smartledger_authenticated');
+            sessionStorage.removeItem('isUnlocked');
+          } catch (e) {}
+          
+          // Load default local data
+          try {
+            const saved = localStorage.getItem('smart-ledger-data');
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              setState(parsed);
+              prevStateRef.current = parsed;
+            }
+          } catch (e) {}
+
+          setDataStatus('success');
+          setIsDataLoaded(true);
+          setIsLoading(false);
+        }
       }
     }, (authError) => {
       console.error('[Auth State Error]', authError);
       if (isSubscribed) {
-        setUser(null);
-        setCurrentUser(null);
-        setIsAuthenticated(false);
-        setAuthLoading(false);
-        setIsAuthReady(true);
-        setDataError(authError?.message || 'Authentication error');
-        setDataStatus('error');
-        setIsLoading(false);
+        const remembered = getDeviceSession();
+        if (remembered) {
+          console.warn('[Auth State Notice] Firebase auth error, maintaining local device session:', authError?.message);
+          const syntheticUser = createSyntheticUser(remembered);
+          setUser(syntheticUser);
+          setCurrentUser(syntheticUser);
+          setIsAuthenticated(true);
+          setAuthLoading(false);
+          setIsAuthReady(true);
+          setDataStatus('success');
+          setIsLoading(false);
+        } else {
+          setUser(null);
+          setCurrentUser(null);
+          setIsAuthenticated(false);
+          setAuthLoading(false);
+          setIsAuthReady(true);
+          setDataError(authError?.message || 'Authentication error');
+          setDataStatus('error');
+          setIsLoading(false);
+        }
       }
     });
 
@@ -645,9 +725,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       type: 'auth_google_logout'
     });
     try {
-      localStorage.removeItem('smartledger_authenticated');
+      clearDeviceSession();
       localStorage.removeItem('smart-ledger-data');
-      sessionStorage.removeItem('isUnlocked');
     } catch (e) {}
     setState(defaultState);
     prevStateRef.current = defaultState;
@@ -752,8 +831,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     try {
       const pinEnabled = state.securitySettings?.pinEnabled && Boolean(state.securitySettings?.pin);
       if (pinEnabled) {
-        const unlocked = sessionStorage.getItem('isUnlocked') === 'true';
-        setIsLocked(!unlocked);
+        setIsLocked(!isDeviceUnlocked());
       } else {
         setIsLocked(false);
       }
@@ -766,9 +844,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (!pin) {
       // Face / Biometric direct unlock
       setIsLocked(false);
-      try {
-        sessionStorage.setItem('isUnlocked', 'true');
-      } catch (e) {}
+      setDeviceUnlocked(true);
       recordLoginActivity(currentUser?.uid || 'local_user', {
         method: 'Biometric',
         status: 'Success',
@@ -785,9 +861,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (configuredPin) {
       if (verifyPin(pin, configuredPin)) {
         setIsLocked(false);
-        try {
-          sessionStorage.setItem('isUnlocked', 'true');
-        } catch (e) {}
+        setDeviceUnlocked(true);
         recordLoginActivity(currentUser?.uid || 'local_user', {
           method: 'PIN',
           status: 'Success',
@@ -807,9 +881,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return false;
     } else {
       setIsLocked(false);
-      try {
-        sessionStorage.setItem('isUnlocked', 'true');
-      } catch (e) {}
+      setDeviceUnlocked(true);
       return true;
     }
   };
@@ -829,9 +901,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       reason,
       shortcut: options?.shortcut
     });
-    try {
-      sessionStorage.removeItem('isUnlocked');
-    } catch (e) {}
+    setDeviceUnlocked(false);
     setIsLocked(true);
   }, []);
 
@@ -841,9 +911,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       lockedAt: null,
       reason: null
     });
-    try {
-      sessionStorage.setItem('isUnlocked', 'true');
-    } catch (e) {}
+    setDeviceUnlocked(true);
     setIsLocked(false);
   }, []);
 

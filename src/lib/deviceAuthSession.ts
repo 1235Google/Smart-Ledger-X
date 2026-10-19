@@ -138,6 +138,7 @@ export function clearDeviceSession(): void {
     localStorage.removeItem(STORAGE_KEY_USER_ID);
     localStorage.removeItem(STORAGE_KEY_USER_EMAIL);
     localStorage.removeItem(STORAGE_KEY_DEVICE_UNLOCKED);
+    localStorage.removeItem('smartledger_cached_id_token');
     sessionStorage.removeItem('isUnlocked');
     console.log('[DeviceAuthSession] Cleared device session.');
   } catch (err) {
@@ -181,6 +182,14 @@ export function setDeviceUnlocked(unlocked: boolean): void {
  * so the app can function immediately without waiting for network or if offline.
  */
 export function createSyntheticUser(session: DeviceSession): User {
+  const getCachedOrFallbackToken = () => {
+    try {
+      return localStorage.getItem('smartledger_cached_id_token') || '';
+    } catch {
+      return '';
+    }
+  };
+
   const synthetic: any = {
     uid: session.userId,
     email: session.email || null,
@@ -206,16 +215,15 @@ export function createSyntheticUser(session: DeviceSession): User {
     ],
     providerId: 'firebase',
     getIdToken: async (_forceRefresh?: boolean) => {
-      // Return cached token if exists or a simulated valid session token
-      return 'device-session-token-' + session.userId;
+      return getCachedOrFallbackToken();
     },
     getIdTokenResult: async () => ({
-      token: 'device-session-token-' + session.userId,
+      token: getCachedOrFallbackToken(),
       signInProvider: session.providerId || 'password',
       claims: {},
       authTime: new Date(session.rememberedAt).toISOString(),
       issuedAtTime: new Date(session.lastActiveAt).toISOString(),
-      expirationTime: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      expirationTime: new Date(Date.now() + 55 * 60 * 1000).toISOString(),
     }),
     reload: async () => {},
     toJSON: () => ({

@@ -623,9 +623,29 @@ app.get("/api/admin/check", async (req, res) => {
 
   // Face Unlock & WebAuthn Shared Handler Functions
   async function handleGenerateRegistrationOptions(req: any, res: any) {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, HEAD');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Vary', 'Origin, Access-Control-Request-Headers');
+
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+
     try {
-      const { userId, userName, userDisplayName } = req.body;
-      const { expectedRPID, expectedOrigin } = getRelyingPartyConfig(req);
+      let payload: any = {};
+      if (req.method === 'POST') {
+        if (typeof req.body === 'string') {
+          try { payload = JSON.parse(req.body); } catch { payload = {}; }
+        } else {
+          payload = req.body || {};
+        }
+      } else {
+        payload = req.query || {};
+      }
+      const { userId, userName, userDisplayName } = payload;
+      const { expectedRPID } = getRelyingPartyConfig(req);
       const cleanUserId = (userId || 'authenticated_user').trim();
       const cleanUserName = (userName || 'user@smartledgerx.io').trim();
       const cleanDisplayName = (userDisplayName || cleanUserName || cleanUserId || 'SmartLedger User').trim();
@@ -642,7 +662,7 @@ app.get("/api/admin/check", async (req, res) => {
         authenticatorSelection: {
           authenticatorAttachment: 'platform',
           residentKey: 'preferred',
-          userVerification: 'preferred',
+          userVerification: 'required',
         },
       });
       
@@ -653,23 +673,38 @@ app.get("/api/admin/check", async (req, res) => {
       return res.json(options);
     } catch (error: any) {
       console.error('[FU Backend] generate-registration-options error:', error?.name || error?.message);
-      return res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: error.message || 'Server error generating registration options' });
     }
   }
 
   async function handleVerifyRegistration(req: any, res: any) {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+
     try {
-      const { userId, response } = req.body;
+      let payload: any = {};
+      if (typeof req.body === 'string') {
+        try { payload = JSON.parse(req.body); } catch { payload = {}; }
+      } else {
+        payload = req.body || {};
+      }
+      const { userId, response } = payload;
       const key = (userId || 'authenticated_user').trim();
       const challengeEntry = userChallenges[key];
       
       if (!challengeEntry) {
-        return res.status(400).json({ error: "Challenge not found or expired" });
+        return res.status(400).json({ error: "Challenge not found or expired. Please click Try Again." });
       }
 
       if (Date.now() - challengeEntry.timestamp > 300000) {
         delete userChallenges[key];
-        return res.status(400).json({ error: "Challenge expired" });
+        return res.status(400).json({ error: "Challenge expired. Please click Try Again." });
       }
 
       const { expectedRPID, expectedOrigin } = getRelyingPartyConfig(req);
@@ -694,17 +729,36 @@ app.get("/api/admin/check", async (req, res) => {
           }
         });
       } else {
-        return res.json({ verified: false });
+        return res.status(400).json({ verified: false, error: 'Registration could not be cryptographically verified' });
       }
     } catch (error: any) {
       console.error(`[FU Backend] Registration verification error:`, error?.name, error?.message);
-      return res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: error.message || 'Server error verifying registration' });
     }
   }
 
   async function handleGenerateAuthenticationOptions(req: any, res: any) {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, HEAD');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+
     try {
-      const { userId, allowCredentials } = req.body;
+      let payload: any = {};
+      if (req.method === 'POST') {
+        if (typeof req.body === 'string') {
+          try { payload = JSON.parse(req.body); } catch { payload = {}; }
+        } else {
+          payload = req.body || {};
+        }
+      } else {
+        payload = req.query || {};
+      }
+      const { userId, allowCredentials } = payload;
       const { expectedRPID } = getRelyingPartyConfig(req);
       const cleanUserId = (userId || 'authenticated_user').trim();
 
@@ -727,23 +781,38 @@ app.get("/api/admin/check", async (req, res) => {
       return res.json(options);
     } catch (error: any) {
       console.error(`[WebAuthn] Authentication options error:`, error?.name || error?.message);
-      return res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: error.message || 'Server error generating authentication options' });
     }
   }
 
   async function handleVerifyAuthentication(req: any, res: any) {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+
     try {
-      const { userId, response, authenticator } = req.body;
+      let payload: any = {};
+      if (typeof req.body === 'string') {
+        try { payload = JSON.parse(req.body); } catch { payload = {}; }
+      } else {
+        payload = req.body || {};
+      }
+      const { userId, response, authenticator } = payload;
       const key = (userId || 'authenticated_user').trim();
       const challengeEntry = userChallenges[key];
       
       if (!challengeEntry) {
-        return res.status(400).json({ error: "Challenge not found or expired" });
+        return res.status(400).json({ error: "Challenge not found or expired. Please try again." });
       }
 
       if (Date.now() - challengeEntry.timestamp > 300000) {
         delete userChallenges[key];
-        return res.status(400).json({ error: "Challenge expired" });
+        return res.status(400).json({ error: "Challenge expired. Please try again." });
       }
 
       const { expectedRPID, expectedOrigin } = getRelyingPartyConfig(req);
@@ -764,25 +833,94 @@ app.get("/api/admin/check", async (req, res) => {
         delete userChallenges[key];
         return res.json({ verified: true });
       } else {
-        return res.json({ verified: false });
+        return res.status(400).json({ verified: false, error: 'Authentication assertion failed verification' });
       }
     } catch (error: any) {
       console.error(`[WebAuthn] Authentication verification error:`, error?.name || error?.message);
-      return res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: error.message || 'Server error verifying authentication' });
     }
   }
 
-  // Face Unlock API Routes (Step 1 requirement)
-  app.post("/api/auth/face-unlock/register-options", handleGenerateRegistrationOptions);
-  app.post("/api/auth/face-unlock/register-verify", handleVerifyRegistration);
-  app.post("/api/auth/face-unlock/auth-options", handleGenerateAuthenticationOptions);
-  app.post("/api/auth/face-unlock/auth-verify", handleVerifyAuthentication);
+  // Face Unlock & WebAuthn API Routes (Supporting both POST and GET, plus OPTIONS preflight)
+  const webauthnRegistrationOptionPaths = [
+    "/api/auth/face-unlock/register-options",
+    "/api/webauthn/generate-registration-options",
+    "/api/webauthn/register/options",
+    "/api/webauthn/register-options",
+    "/api/auth/webauthn/register/options",
+    "/api/auth/webauthn/register-options"
+  ];
 
-  // WebAuthn API Routes (Aliases)
-  app.post("/api/webauthn/generate-registration-options", handleGenerateRegistrationOptions);
-  app.post("/api/webauthn/verify-registration", handleVerifyRegistration);
-  app.post("/api/webauthn/generate-authentication-options", handleGenerateAuthenticationOptions);
-  app.post("/api/webauthn/verify-authentication", handleVerifyAuthentication);
+  const webauthnRegistrationVerifyPaths = [
+    "/api/auth/face-unlock/register-verify",
+    "/api/webauthn/verify-registration",
+    "/api/webauthn/register/verify",
+    "/api/webauthn/register-verify",
+    "/api/auth/webauthn/register/verify",
+    "/api/auth/webauthn/register-verify"
+  ];
+
+  const webauthnAuthOptionPaths = [
+    "/api/auth/face-unlock/auth-options",
+    "/api/webauthn/generate-authentication-options",
+    "/api/webauthn/authenticate/options",
+    "/api/webauthn/auth-options",
+    "/api/auth/webauthn/auth-options"
+  ];
+
+  const webauthnAuthVerifyPaths = [
+    "/api/auth/face-unlock/auth-verify",
+    "/api/webauthn/verify-authentication",
+    "/api/webauthn/authenticate/verify",
+    "/api/webauthn/auth-verify",
+    "/api/auth/webauthn/auth-verify"
+  ];
+
+  for (const p of webauthnRegistrationOptionPaths) {
+    app.post(p, handleGenerateRegistrationOptions);
+    app.get(p, handleGenerateRegistrationOptions);
+    app.options(p, (req, res) => {
+      res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, HEAD');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.status(204).end();
+    });
+  }
+
+  for (const p of webauthnRegistrationVerifyPaths) {
+    app.post(p, handleVerifyRegistration);
+    app.options(p, (req, res) => {
+      res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.status(204).end();
+    });
+  }
+
+  for (const p of webauthnAuthOptionPaths) {
+    app.post(p, handleGenerateAuthenticationOptions);
+    app.get(p, handleGenerateAuthenticationOptions);
+    app.options(p, (req, res) => {
+      res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, HEAD');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.status(204).end();
+    });
+  }
+
+  for (const p of webauthnAuthVerifyPaths) {
+    app.post(p, handleVerifyAuthentication);
+    app.options(p, (req, res) => {
+      res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.status(204).end();
+    });
+  }
 
 
   // =========================================================================

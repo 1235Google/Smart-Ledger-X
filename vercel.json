@@ -2,10 +2,6 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api"
-    },
-    {
       "source": "/((?!api/|assets/|favicon|site\\.webmanifest|robots\\.txt|sitemap\\.xml|sw\\.js|apple-touch-icon|web-app-manifest).*)",
       "destination": "/index.html"
     }

@@ -21,6 +21,7 @@ import {
   signOut,
   updateProfile,
   onAuthStateChanged,
+  onIdTokenChanged,
   setPersistence,
   browserLocalPersistence,
   indexedDBLocalPersistence,
@@ -526,5 +527,288 @@ export async function initAppCheck(siteKey?: string) {
   }
   return null;
 }
+
+// ============================================================================
+// PROACTIVE TOKEN REFRESH, AUTH READINESS BARRIER & 401 RETRY INTERCEPTOR
+// ============================================================================
+
+/**
+ * 5-minute buffer before token expiration to account for clock skew and network latency.
+ */
+const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
+
+/**
+ * Singleton promise to deduplicate concurrent token refresh requests.
+ */
+let inFlightTokenRefresh: Promise<string | null> | null = null;
+let authReadyPromise: Promise<User | null> | null = null;
+let proactiveRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
+let proactiveHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
+
+type TokenRefreshSubscriber = (token: string | null, user: User | null) => void;
+const tokenRefreshSubscribers = new Set<TokenRefreshSubscriber>();
+
+export function subscribeToTokenRefresh(cb: TokenRefreshSubscriber): () => void {
+  tokenRefreshSubscribers.add(cb);
+  return () => {
+    tokenRefreshSubscribers.delete(cb);
+  };
+}
+
+/**
+ * Waits for Firebase Auth to finish restoring session state from IndexedDB/localStorage
+ * before any Firestore or API calls inspect `auth.currentUser`.
+ */
+export async function waitForAuthReady(timeoutMs = 6000): Promise<User | null> {
+  if (typeof window === 'undefined') return null;
+
+  await ensureAuthPersistence();
+
+  if (auth.currentUser) {
+    return auth.currentUser;
+  }
+
+  if (!authReadyPromise) {
+    authReadyPromise = (async () => {
+      try {
+        if (typeof (auth as any).authStateReady === 'function') {
+          await Promise.race([
+            (auth as any).authStateReady(),
+            new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+          ]);
+          return auth.currentUser;
+        }
+      } catch (err) {
+        console.warn('[Firebase Auth] authStateReady notice:', err);
+      }
+
+      return new Promise<User | null>((resolve) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            unsub();
+            resolve(auth.currentUser);
+          }
+        }, timeoutMs);
+
+        const unsub = onAuthStateChanged(
+          auth,
+          (u) => {
+            if (!settled) {
+              settled = true;
+              clearTimeout(timer);
+              unsub();
+              resolve(u);
+            }
+          },
+          () => {
+            if (!settled) {
+              settled = true;
+              clearTimeout(timer);
+              unsub();
+              resolve(auth.currentUser);
+            }
+          }
+        );
+      });
+    })().finally(() => {
+      authReadyPromise = null;
+    });
+  }
+
+  return authReadyPromise;
+}
+
+/**
+ * Returns a guaranteed valid, non-expired Firebase ID token.
+ * Proactively forces a token refresh if the token is expired or within 5 minutes of expiry.
+ */
+export async function getValidIdToken(forceRefresh = false): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
+
+  const user = auth.currentUser || (await waitForAuthReady());
+  if (!user) {
+    return null;
+  }
+
+  if (inFlightTokenRefresh) {
+    return inFlightTokenRefresh;
+  }
+
+  inFlightTokenRefresh = (async () => {
+    try {
+      let shouldForce = forceRefresh;
+
+      if (!shouldForce) {
+        try {
+          const tokenResult = await user.getIdTokenResult(false);
+          const expTimeMs = new Date(tokenResult.expirationTime).getTime();
+          const nowMs = Date.now();
+          if (isNaN(expTimeMs) || expTimeMs - nowMs <= TOKEN_EXPIRY_BUFFER_MS) {
+            console.log('[Firebase Auth] Token nearing expiry or clock skew threshold. Proactively refreshing...');
+            shouldForce = true;
+          }
+        } catch {
+          shouldForce = true;
+        }
+      }
+
+      const token = await user.getIdToken(shouldForce);
+      if (token) {
+        try {
+          localStorage.setItem('smartledger_cached_id_token', token);
+          saveDeviceSession(user, true);
+        } catch {}
+        scheduleNextProactiveRefresh(user);
+        tokenRefreshSubscribers.forEach((cb) => {
+          try { cb(token, user); } catch {}
+        });
+      }
+      return token;
+    } catch (err: any) {
+      console.warn('[Firebase Auth] Silent token refresh attempt failed:', err?.code || err?.message);
+      // Fallback: if offline or transient network error, try returning non-forced cached token
+      if (forceRefresh) {
+        try {
+          const fallbackToken = await user.getIdToken(false);
+          if (fallbackToken) return fallbackToken;
+        } catch {}
+      }
+      try {
+        return localStorage.getItem('smartledger_cached_id_token');
+      } catch {
+        return null;
+      }
+    } finally {
+      inFlightTokenRefresh = null;
+    }
+  })();
+
+  return inFlightTokenRefresh;
+}
+
+/**
+ * Schedules a proactive silent token refresh 5 minutes before the current token expires.
+ */
+function scheduleNextProactiveRefresh(user: User | null) {
+  if (typeof window === 'undefined') return;
+  if (proactiveRefreshTimeout) {
+    clearTimeout(proactiveRefreshTimeout);
+    proactiveRefreshTimeout = null;
+  }
+  if (!user) return;
+
+  user
+    .getIdTokenResult(false)
+    .then((result) => {
+      const expTimeMs = new Date(result.expirationTime).getTime();
+      const nowMs = Date.now();
+      // Refresh 5 minutes before expiry (minimum 60s delay, default 50m if invalid)
+      const delayMs = isNaN(expTimeMs)
+        ? 50 * 60 * 1000
+        : Math.max(60 * 1000, expTimeMs - nowMs - TOKEN_EXPIRY_BUFFER_MS);
+
+      proactiveRefreshTimeout = setTimeout(() => {
+        if (auth.currentUser && navigator.onLine) {
+          console.log('[Firebase Auth] Executing scheduled proactive token refresh...');
+          getValidIdToken(true).catch(() => {});
+        }
+      }, delayMs);
+    })
+    .catch(() => {});
+}
+
+/**
+ * Fetch wrapper with automatic Bearer token injection and silent 401/403 token refresh + single retry.
+ */
+export async function authenticatedFetch(
+  input: RequestInfo | URL,
+  init: RequestInit = {}
+): Promise<Response> {
+  const token = await getValidIdToken(false);
+  const headers = new Headers(init.headers || {});
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  let response = await fetch(input, {
+    ...init,
+    headers,
+  });
+
+  // If 401 Unauthorized or 403 Forbidden, silently force-refresh the token and retry ONCE
+  if ((response.status === 401 || response.status === 403) && auth.currentUser) {
+    console.log(`[Auth Interceptor] Received ${response.status} on ${String(input)}. Silently refreshing token and retrying once...`);
+    const freshToken = await getValidIdToken(true);
+    if (freshToken) {
+      const retryHeaders = new Headers(init.headers || {});
+      retryHeaders.set('Authorization', `Bearer ${freshToken}`);
+      response = await fetch(input, {
+        ...init,
+        headers: retryHeaders,
+      });
+    }
+  }
+
+  return response;
+}
+
+/**
+ * Initializes listeners for token rotation, tab visibility wakeup, window focus, and network recovery.
+ */
+function setupProactiveAuthLifecycle() {
+  if (typeof window === 'undefined') return;
+
+  // 1. Listen for ID token changes (login, logout, and automatic token refreshes)
+  onIdTokenChanged(auth, async (user) => {
+    if (user) {
+      try {
+        saveDeviceSession(user, true);
+        const token = await user.getIdToken(false);
+        if (token) {
+          localStorage.setItem('smartledger_cached_id_token', token);
+        }
+        scheduleNextProactiveRefresh(user);
+        tokenRefreshSubscribers.forEach((cb) => {
+          try { cb(token, user); } catch {}
+        });
+      } catch (err) {
+        console.warn('[Firebase Auth] onIdTokenChanged token read notice:', err);
+      }
+    } else {
+      if (proactiveRefreshTimeout) {
+        clearTimeout(proactiveRefreshTimeout);
+        proactiveRefreshTimeout = null;
+      }
+    }
+  });
+
+  // 2. Refresh token immediately when user returns to an idle tab or focuses window
+  const handleWakeOrFocus = () => {
+    if (document.visibilityState === 'visible' && navigator.onLine && auth.currentUser) {
+      getValidIdToken(false).catch(() => {});
+    }
+  };
+
+  document.addEventListener('visibilitychange', handleWakeOrFocus);
+  window.addEventListener('focus', handleWakeOrFocus);
+  window.addEventListener('online', () => {
+    if (auth.currentUser) {
+      console.log('[Firebase Auth] Network back online — refreshing ID token...');
+      getValidIdToken(true).catch(() => {});
+    }
+  });
+
+  // 3. Background heartbeat every 10 minutes to catch sleep/wake clock jumps
+  if (proactiveHeartbeatInterval) clearInterval(proactiveHeartbeatInterval);
+  proactiveHeartbeatInterval = setInterval(() => {
+    if (navigator.onLine && auth.currentUser) {
+      getValidIdToken(false).catch(() => {});
+    }
+  }, 10 * 60 * 1000);
+}
+
+setupProactiveAuthLifecycle();
 
 export { app, db, auth, storage };

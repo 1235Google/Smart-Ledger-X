@@ -3,9 +3,9 @@ import { AppState, PendingMoney, ReceivedMoney, SentMoney, Transaction, Security
 import CryptoJS from 'crypto-js';
 import { calculateProgress, ACHIEVEMENTS } from '../lib/achievements';
 import { DEFAULT_REMINDER_TEMPLATE } from '../lib/utils';
-import { auth, ensureAuthPersistence } from '../lib/firebase';
+import { auth, ensureAuthPersistence, waitForAuthReady, getValidIdToken, subscribeToTokenRefresh } from '../lib/firebase';
 import { onAuthStateChanged, User, signOut, setPersistence, browserLocalPersistence } from 'firebase/auth';
-import { subscribeToState, queueStateSync, migrateLocalDataToCloud, syncUserProfile, fetchUserState } from "../lib/cloudSync";
+import { subscribeToState, queueStateSync, migrateLocalDataToCloud, syncUserProfile, fetchUserState, setSyncStatus } from "../lib/cloudSync";
 import { createNotification } from '../lib/notificationService';
 import { systemModeService } from '../lib/systemModeService';
 import { 
@@ -416,6 +416,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     console.log('[Auth] Attaching onAuthStateChanged listener');
     let isSubscribed = true;
 
+    const unsubTokenRefresh = subscribeToTokenRefresh((_token, refreshedUser) => {
+      if (!isSubscribed || !refreshedUser) return;
+      setUser(refreshedUser);
+      setCurrentUser(refreshedUser);
+      setIsAuthenticated(true);
+    });
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       console.log('[Auth Debug] onAuthStateChanged resolution triggered');
       console.log('[Auth Debug] Firebase currentUser:', auth.currentUser ? `${auth.currentUser.email} (${auth.currentUser.uid})` : 'null');
@@ -458,6 +465,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           if (userCache) {
             const parsedCache = JSON.parse(userCache);
             if (parsedCache) {
+              isRemoteUpdateRef.current = true;
               setState((prev) => ({
                 ...defaultState,
                 ...prev,
@@ -467,6 +475,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             }
           }
         } catch (e) {}
+
+        // Ensure ID token is valid and refreshed BEFORE firing any Firestore queries or listeners
+        await getValidIdToken(false);
+        if (!isSubscribed) return;
 
         try {
           // Non-blocking background migration, profile sync, and security audit
@@ -539,7 +551,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } else {
-        // Firebase returned null (e.g. initial launch, refresh token wait, or offline).
+        // Wait briefly for Firebase Auth persistence hydration to complete before concluding null
+        const lateHydratedUser = await waitForAuthReady(1500);
+        if (!isSubscribed) return;
+        if (lateHydratedUser) {
+          return;
+        }
+
         // Check if this device has a trusted remembered session.
         const remembered = getDeviceSession();
         if (remembered) {
@@ -551,6 +569,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           setAuthLoading(false);
           setIsAuthReady(true);
           touchDeviceSession();
+          setSyncStatus(navigator.onLine ? 'synced' : 'offline');
 
           try {
             const pinEnabled = state.securitySettings?.pinEnabled && Boolean(state.securitySettings?.pin);
@@ -563,12 +582,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             setIsLocked(false);
           }
 
-          // Restore local cached user ledger data
+          // Restore local cached user ledger data without triggering a remote sync echo
           try {
             const userCache = localStorage.getItem(`smart-ledger-cache-${remembered.userId}`);
             if (userCache) {
               const parsedCache = JSON.parse(userCache);
               if (parsedCache) {
+                isRemoteUpdateRef.current = true;
                 setState((prev) => ({
                   ...defaultState,
                   ...prev,
@@ -580,6 +600,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               const saved = localStorage.getItem('smart-ledger-data');
               if (saved) {
                 const parsed = JSON.parse(saved);
+                isRemoteUpdateRef.current = true;
                 setState((prev) => ({ ...defaultState, ...prev, ...parsed }));
               }
             }
@@ -596,6 +617,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           setAuthLoading(false);
           setIsAuthReady(true);
           setIsLocked(false);
+          setSyncStatus(navigator.onLine ? 'synced' : 'offline');
           try {
             localStorage.removeItem('smartledger_authenticated');
             sessionStorage.removeItem('isUnlocked');
@@ -606,6 +628,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             const saved = localStorage.getItem('smart-ledger-data');
             if (saved) {
               const parsed = JSON.parse(saved);
+              isRemoteUpdateRef.current = true;
               setState(parsed);
               prevStateRef.current = parsed;
             }
@@ -630,6 +653,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           setIsAuthReady(true);
           setDataStatus('success');
           setIsLoading(false);
+          setSyncStatus(navigator.onLine ? 'synced' : 'offline');
         } else {
           setUser(null);
           setCurrentUser(null);
@@ -646,6 +670,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return () => {
       console.log('[Auth] Cleaning up onAuthStateChanged and Firestore subscriptions');
       isSubscribed = false;
+      unsubTokenRefresh();
       unsubscribe();
       if (activeUnsubscribeRef.current) {
         activeUnsubscribeRef.current();
@@ -656,7 +681,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   // Safe background synchronization guard
   useEffect(() => {
-    // Only queue sync if data has successfully loaded and this was a user-initiated change
+    // Only queue sync if auth & data have initialized and this was a user-initiated change
     if (isDataLoaded && dataStatus === 'success') {
       try {
         localStorage.setItem('smart-ledger-data', JSON.stringify(state));
@@ -666,15 +691,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       } catch (e) {}
 
       if (isRemoteUpdateRef.current) {
-        // Prevent echo cycle from remote Firestore update
+        // Prevent echo cycle from remote Firestore update or local cache hydration
         isRemoteUpdateRef.current = false;
-      } else if (isAuthenticated && currentUser) {
-        // Double check we are not overwriting with completely blank state
+      } else if (isAuthReady && isAuthenticated && currentUser && auth.currentUser) {
+        // Only enqueue remote Firestore sync when Firebase Auth user is ready
         queueStateSync(currentUser.uid, state);
       }
       prevStateRef.current = state;
     }
-  }, [state, isAuthenticated, currentUser, isDataLoaded, dataStatus]);
+  }, [state, isAuthReady, isAuthenticated, currentUser, isDataLoaded, dataStatus]);
 
   const loginWithPin = (pin: string): boolean => {
     if (!pin || (pin.length !== 4 && pin.length !== 6)) return false;

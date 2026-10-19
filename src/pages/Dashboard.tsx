@@ -170,23 +170,23 @@ export default function Dashboard() {
         variants={shouldReduceMotion ? undefined : containerVariants}
         initial="hidden"
         animate="show"
-        className="w-full relative text-[#f5f5f7] selection:bg-[#0a84ff]/30 selection:text-white"
+        className="w-full relative text-[var(--md-sys-color-on-surface)]"
       >
         
         {/* Top Header */}
         <motion.div 
           variants={itemVariants}
-          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-2 px-1 mb-4 sm:mb-6 border-b border-white/[0.06]"
+          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-2 px-1 mb-4 sm:mb-6 border-b border-[var(--md-sys-color-outline-variant)]/30"
         >
           <div className="flex items-center gap-2">
-            <h1 className="text-xs font-semibold tracking-wider text-[#A1A1AA] uppercase">
+            <h1 className="text-xs font-bold tracking-wider text-[var(--md-sys-color-primary)] uppercase">
               Financial Overview
             </h1>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-[#86868b] self-start sm:self-auto">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-white/[0.03] border border-white/[0.06] text-xs text-[#A1A1AA]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#30d158]" /> Real-Time Vault Sync
+          <div className="flex items-center gap-2 text-xs text-[var(--md-sys-color-on-surface-variant)] self-start sm:self-auto">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)]/40 text-xs text-[var(--md-sys-color-on-surface)] font-medium">
+              <span className="w-2 h-2 rounded-full bg-[var(--md-sys-color-success)]" /> Real-Time Vault Sync
             </span>
           </div>
         </motion.div>
@@ -200,7 +200,7 @@ export default function Dashboard() {
         {/* 5. Analytics                                                              */}
         {/* 6. AI Insights                                                            */}
         {/* ========================================================================= */}
-        <div className="space-y-12">
+        <div className="space-y-10 sm:space-y-12">
 
             {/* --------------------------------------------------------------------- */}
             {/* 1. CURRENT BALANCE & LIQUIDITY VAULT                                  */}
@@ -213,33 +213,31 @@ export default function Dashboard() {
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs font-medium text-[#0a84ff] tracking-wide">
+                  <div className="text-xs font-bold text-[var(--md-sys-color-primary)] uppercase tracking-wider">
                     Liquidity & Assets
                   </div>
-                  <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight mt-0.5">
+                  <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--md-sys-color-on-surface)] tracking-tight mt-0.5">
                     Current Balance & Liquidity
                   </h2>
                 </div>
-                <motion.button 
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                <button 
                   onClick={() => navigate('/balance')}
-                  className="text-xs font-semibold px-4 py-2 rounded-lg bg-[#0a84ff]/10 hover:bg-[#0a84ff]/20 text-[#0a84ff] hover:text-white flex items-center gap-1.5 transition-all border border-[#0a84ff]/30 self-start sm:self-auto"
+                  className="m3-btn-tonal text-xs py-2 px-4 self-start sm:self-auto cursor-pointer"
                 >
                   Manage Vaults <ChevronRight size={14} />
-                </motion.button>
+                </button>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Primary Enterprise Card & Smart Financial Profile Card stacked */}
                 <div className="lg:col-span-2 space-y-6 flex flex-col">
-                  <motion.div whileHover={{ scale: 1.01 }} onClick={() => navigate('/balance')} className="cursor-pointer transition-all duration-300">
+                  <div onClick={() => navigate('/balance')} className="cursor-pointer transition-transform duration-200 hover:scale-[1.005]">
                     <BalanceCard
                       currentBalance={currentBalance}
                       startingBalance={startingBalance}
                       totalReceived={totalReceived}
                     />
-                  </motion.div>
+                  </div>
                   
                   <SmartFinancialProfileCard />
                 </div>
@@ -247,56 +245,54 @@ export default function Dashboard() {
                 {/* Secondary Liquidity Caps in Enterprise Style */}
                 <div className="lg:col-span-1 flex flex-col sm:flex-row lg:flex-col gap-3 sm:gap-4 justify-between">
                   {/* Total Received Capsule */}
-                  <motion.div 
-                    whileHover={{ scale: 1.01 }}
+                  <div 
                     onClick={() => navigate('/received')}
-                    className="flex-1 enterprise-card p-6 cursor-pointer transition-all duration-300 flex flex-col justify-between"
+                    className="flex-1 enterprise-card p-6 cursor-pointer flex flex-col justify-between"
                   >
                     <div className="flex items-center justify-between mb-2.5">
-                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#22C55E] uppercase tracking-wider">
-                        <ArrowDownLeft size={15} /> Total Received
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-[var(--md-sys-color-success)] uppercase tracking-wider">
+                        <ArrowDownLeft size={16} /> Total Received
                       </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#22C55E]/10 text-[#22C55E]">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--md-sys-color-success-container)] text-[var(--md-sys-color-on-success-container)]">
                         {receivedCount} clients
                       </span>
                     </div>
 
-                    <div className="text-4xl font-semibold text-[#FAFAFA] font-tabular tracking-tight">
+                    <div className="text-3xl sm:text-4xl font-extrabold text-[var(--md-sys-color-on-surface)] font-mono tabular-nums tracking-tight">
                       <CountUp value={totalReceived} formatter={(v) => formatCurrency(v)} />
                     </div>
 
-                    <div className="text-xs text-[#8B8FA3] mt-3 pt-3 border-t border-white/[0.06] flex items-center justify-between">
+                    <div className="text-xs text-[var(--md-sys-color-on-surface-variant)] mt-3 pt-3 border-t border-[var(--md-sys-color-outline-variant)]/30 flex items-center justify-between font-medium">
                       <span>Inflow Velocity</span>
-                      <span className="text-[#22C55E] font-medium">100% Settled</span>
+                      <span className="text-[var(--md-sys-color-success)] font-semibold">100% Settled</span>
                     </div>
-                  </motion.div>
+                  </div>
 
                   {/* Total Pending Capsule */}
-                  <motion.div 
-                    whileHover={{ scale: 1.01 }}
+                  <div 
                     onClick={() => navigate('/pending')}
-                    className="flex-1 enterprise-card p-6 cursor-pointer transition-all duration-300 flex flex-col justify-between"
+                    className="flex-1 enterprise-card p-6 cursor-pointer flex flex-col justify-between"
                   >
                     <div className="flex items-center justify-between mb-2.5">
-                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#F59E0B] uppercase tracking-wider">
-                        <Clock size={15} /> Total Pending
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-[var(--md-sys-color-tertiary)] uppercase tracking-wider">
+                        <Clock size={16} /> Total Pending
                       </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#F59E0B]/10 text-[#F59E0B]">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--md-sys-color-tertiary-container)] text-[var(--md-sys-color-on-tertiary-container)]">
                         {pendingCount} parties
                       </span>
                     </div>
 
-                    <div className="text-4xl font-semibold text-[#FAFAFA] font-tabular tracking-tight">
+                    <div className="text-3xl sm:text-4xl font-extrabold text-[var(--md-sys-color-on-surface)] font-mono tabular-nums tracking-tight">
                       <CountUp value={totalPending} formatter={(v) => formatCurrency(v)} />
                     </div>
 
-                    <div className="text-xs text-[#8B8FA3] mt-3 pt-3 border-t border-white/[0.06] flex items-center justify-between">
+                    <div className="text-xs text-[var(--md-sys-color-on-surface-variant)] mt-3 pt-3 border-t border-[var(--md-sys-color-outline-variant)]/30 flex items-center justify-between font-medium">
                       <span>Outstanding Receivables</span>
-                      <span className="text-xs text-[#F59E0B] font-medium flex items-center gap-1">
+                      <span className="text-xs text-[var(--md-sys-color-primary)] font-semibold flex items-center gap-1">
                         View List <ChevronRight size={12} />
                       </span>
                     </div>
-                  </motion.div>
+                  </div>
                 </div>
               </div>
             </motion.section>
@@ -316,123 +312,122 @@ export default function Dashboard() {
                   <div className="text-xs font-medium text-[#ffd60a] tracking-wide">
                     Receivables & Dues
                   </div>
-                  <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
+                  <div className="text-xs font-bold text-[var(--md-sys-color-tertiary)] uppercase tracking-wider">
+                    Receivables & Dues
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-extrabold text-[var(--md-sys-color-on-surface)] tracking-tight mt-0.5">
                     Pending Dues & Reminders
                   </h2>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}>
-                    <Link
-                      to="/pending?new=true"
-                      className="px-3.5 py-1.5 rounded-full bg-[#ffd60a]/15 hover:bg-[#ffd60a]/25 text-[#ffd60a] border border-[#ffd60a]/30 font-semibold text-xs transition-all flex items-center gap-1.5 shadow-sm"
-                    >
-                      <Plus size={14} /> Add Due Money
-                    </Link>
-                  </motion.div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <Link
+                    to="/pending?new=true"
+                    className="m3-btn-tonal text-xs py-2 px-3.5 flex items-center gap-1.5"
+                  >
+                    <Plus size={14} /> Add Due Money
+                  </Link>
                   <Link
                     to="/pending"
-                    className="text-xs font-semibold text-[#0a84ff] hover:text-white flex items-center gap-1 transition-colors"
+                    className="text-xs font-bold text-[var(--md-sys-color-primary)] hover:underline flex items-center gap-1 transition-colors px-2"
                   >
                     All Dues ({pendingTransactions.length}) <ChevronRight size={14} />
                   </Link>
                 </div>
               </div>
 
-              {/* Overdue Alert Bar in Glowing Liquid Glass */}
+              {/* Overdue Alert Bar in Material 3 Alert Banner */}
               {overduePending.length > 0 && (
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.98 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="p-5 rounded-[24px] bg-[#ff453a]/10 border border-[#ff453a]/30 backdrop-blur-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-[0_8px_32px_rgba(255,69,58,0.15)] relative overflow-hidden"
+                <div 
+                  className="p-4 sm:p-5 rounded-[24px] bg-[var(--md-sys-color-error-container)] border border-[var(--md-sys-color-error)]/30 text-[var(--md-sys-color-on-error-container)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm"
                 >
-                  <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#ff453a]/40 to-transparent pointer-events-none" />
                   <div className="flex items-center gap-3.5">
-                    <div className="w-10 h-10 rounded-2xl bg-[#ff453a]/25 text-[#ff453a] flex items-center justify-center shrink-0 border border-[#ff453a]/40 shadow-sm">
-                      <AlertTriangle size={20} className="animate-pulse" />
+                    <div className="w-10 h-10 rounded-2xl bg-[var(--md-sys-color-error)] text-[var(--md-sys-color-on-error)] flex items-center justify-center shrink-0 shadow-xs">
+                      <AlertTriangle size={20} />
                     </div>
                     <div>
-                      <div className="text-sm font-bold text-white flex items-center gap-2">
+                      <div className="text-sm font-bold flex items-center gap-2">
                         <span>{overduePending.length} Overdue Dues</span>
-                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-[#ff453a]/20 text-[#ff453a] border border-[#ff453a]/30 font-tabular font-bold">
+                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-[var(--md-sys-color-error)] text-[var(--md-sys-color-on-error)] font-mono font-bold">
                           {formatCurrency(overduePending.reduce((acc, t) => acc + t.amount, 0))}
                         </span>
                       </div>
-                      <p className="text-xs text-[#a1a1a6] mt-0.5">
+                      <p className="text-xs opacity-90 mt-0.5">
                         Send automated reminders and payment links to get your money quickly.
                       </p>
                     </div>
                   </div>
-                  <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}>
-                    <Link
-                      to="/pending"
-                      className="px-4 py-2 rounded-full bg-gradient-to-r from-[#ff453a] to-[#d92d20] hover:brightness-110 text-white font-semibold text-xs whitespace-nowrap self-start sm:self-auto transition-all shadow-md shadow-[#ff453a]/30 inline-flex items-center gap-1.5"
-                    >
-                      Resolve Overdue →
-                    </Link>
-                  </motion.div>
-                </motion.div>
+                  <Link
+                    to="/pending"
+                    className="m3-btn-filled text-xs py-2 px-4 whitespace-nowrap self-start sm:self-auto"
+                    style={{ backgroundColor: 'var(--md-sys-color-error)', color: 'var(--md-sys-color-on-error)' }}
+                  >
+                    Resolve Overdue →
+                  </Link>
+                </div>
               )}
 
-              {/* Pending Dues Cards Grid in Liquid Glass */}
+              {/* Pending Dues Cards Grid in M3 Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {pendingTransactions.length === 0 ? (
-                  <div className="col-span-full py-12 px-6 rounded-[24px] vision-glass text-center space-y-2">
-                    <CheckCircle2 size={36} className="text-[#30d158] mx-auto opacity-80" />
-                    <p className="text-sm font-bold text-white">All Dues Cleared</p>
-                    <p className="text-xs text-[#86868b]">No pending payments outstanding across your records.</p>
+                  <div className="col-span-full py-10 px-6 rounded-[28px] m3-card text-center space-y-2">
+                    <CheckCircle2 size={36} className="text-[var(--md-sys-color-success)] mx-auto opacity-90" />
+                    <p className="text-sm font-bold text-[var(--md-sys-color-on-surface)]">All Dues Cleared</p>
+                    <p className="text-xs text-[var(--md-sys-color-on-surface-variant)]">No pending payments outstanding across your records.</p>
                   </div>
                 ) : (
                   pendingTransactions.slice(0, 6).map((tx) => {
                     const isOverdue = tx.dueDate < today;
                     return (
-                      <motion.div
+                      <div
                         key={tx.id}
-                        whileHover={{ y: -3, scale: 1.01 }}
                         className={cn(
-                          "vision-glass rounded-[24px] p-5 transition-all duration-300 flex flex-col justify-between relative overflow-hidden group",
-                          isOverdue ? "border-[#ff453a]/40 shadow-[0_8px_24px_rgba(255,69,58,0.12)]" : "border-white/[0.1]"
+                          "m3-card p-5 flex flex-col justify-between group",
+                          isOverdue && "border-[var(--md-sys-color-error)]/40 bg-[var(--md-sys-color-error-container)]/10"
                         )}
                       >
-                        <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
                         <div>
                           <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
                               <div className={cn(
-                                "w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold border",
-                                isOverdue ? "bg-[#ff453a]/20 text-[#ff453a] border-[#ff453a]/30" : "bg-[#ffd60a]/20 text-[#ffd60a] border-[#ffd60a]/30"
+                                "w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold border shrink-0",
+                                isOverdue 
+                                  ? "bg-[var(--md-sys-color-error-container)] text-[var(--md-sys-color-on-error-container)] border-[var(--md-sys-color-error)]/30" 
+                                  : "bg-[var(--md-sys-color-tertiary-container)] text-[var(--md-sys-color-on-tertiary-container)] border-[var(--md-sys-color-tertiary)]/30"
                               )}>
                                 {isOverdue ? '!' : '⏳'}
                               </div>
-                              <span className="text-sm font-bold text-white truncate max-w-[140px]">{tx.personName}</span>
+                              <span className="text-sm font-bold text-[var(--md-sys-color-on-surface)] truncate max-w-[140px]">{tx.personName}</span>
                             </div>
                             <span className={cn(
-                              "text-[10px] font-bold px-2.5 py-0.5 rounded-full border shadow-sm",
-                              isOverdue ? "text-[#ff453a] bg-[#ff453a]/15 border-[#ff453a]/30" : "text-[#ffd60a] bg-[#ffd60a]/15 border-[#ffd60a]/30"
+                              "text-[10px] font-bold px-2.5 py-0.5 rounded-full border shadow-xs shrink-0",
+                              isOverdue 
+                                ? "text-[var(--md-sys-color-error)] bg-[var(--md-sys-color-error-container)] border-[var(--md-sys-color-error)]/30" 
+                                : "text-[var(--md-sys-color-tertiary)] bg-[var(--md-sys-color-tertiary-container)] border-[var(--md-sys-color-tertiary)]/30"
                             )}>
                               {isOverdue ? 'Overdue' : 'Due ' + formatDate(tx.dueDate)}
                             </span>
                           </div>
 
-                          <div className="text-2xl font-extrabold text-white font-tabular mb-1 tracking-tight">
+                          <div className="text-2xl font-extrabold text-[var(--md-sys-color-on-surface)] font-mono tabular-nums mb-1 tracking-tight">
                             {formatCurrency(tx.amount)}
                           </div>
-                          <p className="text-xs text-[#86868b] truncate mb-3">
+                          <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] truncate mb-3">
                             {tx.reason || 'General receivable'}
                           </p>
                         </div>
 
-                        <div className="pt-3 border-t border-white/[0.08] flex items-center justify-between">
-                          <span className="text-[11px] text-[#86868b]">
+                        <div className="pt-3 border-t border-[var(--md-sys-color-outline-variant)]/30 flex items-center justify-between">
+                          <span className="text-[11px] text-[var(--md-sys-color-outline)] font-medium">
                             {tx.phoneNumber ? tx.phoneNumber : 'No phone logged'}
                           </span>
                           <Link
                             to="/pending"
-                            className="text-xs font-bold text-[#0a84ff] hover:text-white flex items-center gap-1 transition-colors group-hover:translate-x-0.5 transition-transform"
+                            className="text-xs font-bold text-[var(--md-sys-color-primary)] hover:underline flex items-center gap-1 transition-colors"
                           >
                             Remind <ChevronRight size={12} />
                           </Link>
                         </div>
-                      </motion.div>
+                      </div>
                     );
                   })
                 )}
@@ -452,31 +447,28 @@ export default function Dashboard() {
               >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs font-medium text-[#30d158] tracking-wide">
+                  <div className="text-xs font-bold text-[var(--md-sys-color-primary)] uppercase tracking-wider">
                     Activity Feed
                   </div>
-                  <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
+                  <h2 className="text-xl sm:text-2xl font-extrabold text-[var(--md-sys-color-on-surface)] tracking-tight mt-0.5">
                     Recent Transactions
                   </h2>
                 </div>
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
+                <button
                   onClick={() => navigate('/search')}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.1] text-[#0a84ff] hover:text-white flex items-center gap-1 transition-all border border-white/[0.08] self-start sm:self-auto"
+                  className="m3-btn-tonal text-xs py-2 px-3.5 flex items-center gap-1.5 self-start sm:self-auto"
                 >
                   Search Full Ledger <ChevronRight size={14} />
-                </motion.button>
+                </button>
               </div>
 
-              <div className="enterprise-card p-6 relative overflow-hidden">
-                <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
+              <div className="m3-card p-4 sm:p-6 overflow-hidden">
                 {recentTransactions.length === 0 ? (
-                  <div className="text-center py-12 text-[#86868b]">
+                  <div className="text-center py-12 text-[var(--md-sys-color-on-surface-variant)] text-sm">
                     No transactions recorded yet. Use Quick Actions below to record received money or receivables.
                   </div>
                 ) : (
-                  <div className="divide-y divide-white/[0.06]">
+                  <div className="divide-y divide-[var(--md-sys-color-outline-variant)]/20">
                     {recentTransactions.map((tx) => {
                       const isReceived = tx.type === 'received';
                       const isSent = tx.type === 'sent';
@@ -484,35 +476,34 @@ export default function Dashboard() {
                       const dateStr = formatDate((tx as any).date || (tx as any).dueDate || (tx as any).createdAt || new Date().toISOString());
 
                       return (
-                        <motion.div
+                        <div
                           key={tx.id}
-                          whileHover={{ x: 2 }}
-                          className="py-3.5 sm:py-4 flex items-center justify-between gap-4 hover:bg-white/[0.035] px-3 rounded-2xl transition-colors select-none"
+                          className="py-3 sm:py-3.5 flex items-center justify-between gap-4 hover:bg-[var(--md-sys-color-surface-container-high)]/50 px-3 rounded-2xl transition-colors select-none"
                         >
                           <div className="flex items-center gap-3.5 min-w-0">
                             <div className={cn(
-                              "w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border shadow-sm",
-                              isReceived ? "bg-[#30d158]/15 text-[#30d158] border-[#30d158]/30 shadow-[#30d158]/10" :
-                              isSent ? "bg-[#ff453a]/15 text-[#ff453a] border-[#ff453a]/30 shadow-[#ff453a]/10" :
-                              "bg-[#ffd60a]/15 text-[#ffd60a] border-[#ffd60a]/30 shadow-[#ffd60a]/10"
+                              "w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border shadow-xs",
+                              isReceived ? "bg-[var(--md-sys-color-success-container)] text-[var(--md-sys-color-on-success-container)] border-[var(--md-sys-color-success)]/30" :
+                              isSent ? "bg-[var(--md-sys-color-error-container)] text-[var(--md-sys-color-on-error-container)] border-[var(--md-sys-color-error)]/30" :
+                              "bg-[var(--md-sys-color-tertiary-container)] text-[var(--md-sys-color-on-tertiary-container)] border-[var(--md-sys-color-tertiary)]/30"
                             )}>
                               {isReceived ? <ArrowDownLeft size={18} /> :
                                isSent ? <ArrowUpRight size={18} /> :
                                <Clock size={18} />}
                             </div>
                             <div className="min-w-0">
-                              <div className="text-sm font-bold text-white truncate flex items-center gap-2">
+                              <div className="text-sm font-bold text-[var(--md-sys-color-on-surface)] truncate flex items-center gap-2">
                                 <span>{tx.personName}</span>
                                 <span className={cn(
                                   "text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border",
-                                  isReceived ? "bg-[#30d158]/10 text-[#30d158] border-[#30d158]/20" :
-                                  isSent ? "bg-[#ff453a]/10 text-[#ff453a] border-[#ff453a]/20" :
-                                  "bg-[#ffd60a]/10 text-[#ffd60a] border-[#ffd60a]/20"
+                                  isReceived ? "bg-[var(--md-sys-color-success-container)] text-[var(--md-sys-color-on-success-container)] border-[var(--md-sys-color-success)]/20" :
+                                  isSent ? "bg-[var(--md-sys-color-error-container)] text-[var(--md-sys-color-on-error-container)] border-[var(--md-sys-color-error)]/20" :
+                                  "bg-[var(--md-sys-color-tertiary-container)] text-[var(--md-sys-color-on-tertiary-container)] border-[var(--md-sys-color-tertiary)]/20"
                                 )}>
                                   {isReceived ? 'Received' : isSent ? 'Sent' : 'Pending'}
                                 </span>
                               </div>
-                              <p className="text-xs text-[#86868b] truncate mt-0.5">
+                              <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] truncate mt-0.5">
                                 {reason || 'General transaction'} • {dateStr}
                               </p>
                             </div>
@@ -520,15 +511,15 @@ export default function Dashboard() {
 
                           <div className="text-right shrink-0">
                             <div className={cn(
-                              "text-sm sm:text-base font-extrabold font-tabular tracking-tight",
-                              isReceived ? "text-[#30d158]" :
-                              isSent ? "text-[#ff453a]" :
-                              "text-[#ffd60a]"
+                              "text-sm sm:text-base font-extrabold font-mono tabular-nums tracking-tight",
+                              isReceived ? "text-[var(--md-sys-color-success)]" :
+                              isSent ? "text-[var(--md-sys-color-error)]" :
+                              "text-[var(--md-sys-color-tertiary)]"
                             )}>
                               {isReceived ? '+' : isSent ? '-' : '⏳'} {formatCurrency(tx.amount)}
                             </div>
                           </div>
-                        </motion.div>
+                        </div>
                       );
                     })}
                   </div>
@@ -538,7 +529,7 @@ export default function Dashboard() {
             </DeferredSection>
 
             {/* --------------------------------------------------------------------- */}
-            {/* 4. QUICK ACTIONS (High-Utility Action Grid in VisionOS Liquid Glass)  */}
+            {/* 4. QUICK ACTIONS (High-Utility Action Grid in M3 Action Cards)        */}
             {/* --------------------------------------------------------------------- */}
             <motion.section 
               variants={itemVariants} 
@@ -547,119 +538,103 @@ export default function Dashboard() {
               style={{ contain: 'layout style', willChange: 'transform', transform: 'translateZ(0)' }}
             >
               <div>
-                <div className="text-xs font-medium text-[#0a84ff] tracking-wide">
+                <div className="text-xs font-bold text-[var(--md-sys-color-primary)] uppercase tracking-wider">
                   Fast Operations
                 </div>
-                <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
+                <h2 className="text-xl sm:text-2xl font-extrabold text-[var(--md-sys-color-on-surface)] tracking-tight mt-0.5">
                   Quick Actions
                 </h2>
               </div>
 
               <div className="grid grid-cols-4 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3">
                 {/* 1. Add Inflow */}
-                <motion.div whileHover={{ y: -4, scale: 1.03 }} whileTap={{ scale: 0.94 }}>
-                  <Link
-                    to="/received?new=true"
-                    className="vision-glass hover:border-[#30d158]/50 p-2 sm:p-4 rounded-[18px] sm:rounded-[22px] flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
-                  >
-                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#30d158]/15 text-[#30d158] border border-[#30d158]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(48,209,88,0.2)]">
-                      <ArrowDownLeft size={18} />
-                    </div>
-                    <span className="text-[10px] min-[380px]:text-xs font-bold text-white tracking-tight truncate max-w-full">+ Inflow</span>
-                  </Link>
-                </motion.div>
+                <Link
+                  to="/received?new=true"
+                  className="m3-card hover:border-[var(--md-sys-color-primary)] p-2 sm:p-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 sm:gap-2 transition-all duration-150 text-center h-full active:scale-95"
+                >
+                  <div className="w-10 h-10 rounded-2xl bg-[var(--md-sys-color-success-container)] text-[var(--md-sys-color-on-success-container)] flex items-center justify-center shadow-xs">
+                    <ArrowDownLeft size={18} />
+                  </div>
+                  <span className="text-[11px] font-bold text-[var(--md-sys-color-on-surface)] tracking-tight truncate max-w-full">+ Inflow</span>
+                </Link>
 
                 {/* 2. New Pending */}
-                <motion.div whileHover={{ y: -4, scale: 1.03 }} whileTap={{ scale: 0.94 }}>
-                  <Link
-                    to="/pending?new=true"
-                    className="vision-glass hover:border-[#ffd60a]/50 p-2 sm:p-4 rounded-[18px] sm:rounded-[22px] flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
-                  >
-                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#ffd60a]/15 text-[#ffd60a] border border-[#ffd60a]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(255,214,10,0.2)]">
-                      <Clock size={18} />
-                    </div>
-                    <span className="text-[10px] min-[380px]:text-xs font-bold text-white tracking-tight truncate max-w-full">Pending</span>
-                  </Link>
-                </motion.div>
+                <Link
+                  to="/pending?new=true"
+                  className="m3-card hover:border-[var(--md-sys-color-primary)] p-2 sm:p-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 sm:gap-2 transition-all duration-150 text-center h-full active:scale-95"
+                >
+                  <div className="w-10 h-10 rounded-2xl bg-[var(--md-sys-color-tertiary-container)] text-[var(--md-sys-color-on-tertiary-container)] flex items-center justify-center shadow-xs">
+                    <Clock size={18} />
+                  </div>
+                  <span className="text-[11px] font-bold text-[var(--md-sys-color-on-surface)] tracking-tight truncate max-w-full">Pending</span>
+                </Link>
 
                 {/* 3. Gullak Bank */}
-                <motion.div whileHover={{ y: -4, scale: 1.03 }} whileTap={{ scale: 0.94 }}>
-                  <Link
-                    to="/gullak"
-                    className="vision-glass hover:border-[#bf5af2]/50 p-2 sm:p-4 rounded-[18px] sm:rounded-[22px] flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
-                  >
-                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#bf5af2]/15 text-[#bf5af2] border border-[#bf5af2]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(191,90,242,0.2)]">
-                      <PiggyBank size={18} />
-                    </div>
-                    <span className="text-[10px] min-[380px]:text-xs font-bold text-white tracking-tight truncate max-w-full">Gullak</span>
-                  </Link>
-                </motion.div>
+                <Link
+                  to="/gullak"
+                  className="m3-card hover:border-[var(--md-sys-color-primary)] p-2 sm:p-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 sm:gap-2 transition-all duration-150 text-center h-full active:scale-95"
+                >
+                  <div className="w-10 h-10 rounded-2xl bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)] flex items-center justify-center shadow-xs">
+                    <PiggyBank size={18} />
+                  </div>
+                  <span className="text-[11px] font-bold text-[var(--md-sys-color-on-surface)] tracking-tight truncate max-w-full">Gullak</span>
+                </Link>
 
                 {/* 4. New Goal */}
-                <motion.div whileHover={{ y: -4, scale: 1.03 }} whileTap={{ scale: 0.94 }}>
-                  <Link
-                    to="/goals?new=true"
-                    className="vision-glass hover:border-[#64d2ff]/50 p-2 sm:p-4 rounded-[18px] sm:rounded-[22px] flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
-                  >
-                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#64d2ff]/15 text-[#64d2ff] border border-[#64d2ff]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(100,210,255,0.2)]">
-                      <Target size={18} />
-                    </div>
-                    <span className="text-[10px] min-[380px]:text-xs font-bold text-white tracking-tight truncate max-w-full">Goal</span>
-                  </Link>
-                </motion.div>
+                <Link
+                  to="/goals?new=true"
+                  className="m3-card hover:border-[var(--md-sys-color-primary)] p-2 sm:p-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 sm:gap-2 transition-all duration-150 text-center h-full active:scale-95"
+                >
+                  <div className="w-10 h-10 rounded-2xl bg-[var(--md-sys-color-secondary-container)] text-[var(--md-sys-color-on-secondary-container)] flex items-center justify-center shadow-xs">
+                    <Target size={18} />
+                  </div>
+                  <span className="text-[11px] font-bold text-[var(--md-sys-color-on-surface)] tracking-tight truncate max-w-full">Goal</span>
+                </Link>
 
                 {/* 5. Spotlight Search */}
-                <motion.div whileHover={{ y: -4, scale: 1.03 }} whileTap={{ scale: 0.94 }}>
-                  <button
-                    type="button"
-                    onClick={triggerSearch}
-                    className="vision-glass hover:border-[#0a84ff]/50 p-2 sm:p-4 rounded-[18px] sm:rounded-[22px] flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 transition-all duration-200 group text-center w-full h-full shadow-sm"
-                  >
-                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#0a84ff]/15 text-[#0a84ff] border border-[#0a84ff]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(10,132,255,0.2)]">
-                      <Search size={18} />
-                    </div>
-                    <span className="text-[10px] min-[380px]:text-xs font-bold text-white tracking-tight truncate max-w-full">Search</span>
-                  </button>
-                </motion.div>
+                <button
+                  type="button"
+                  onClick={triggerSearch}
+                  className="m3-card hover:border-[var(--md-sys-color-primary)] p-2 sm:p-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 sm:gap-2 transition-all duration-150 text-center w-full h-full active:scale-95"
+                >
+                  <div className="w-10 h-10 rounded-2xl bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] flex items-center justify-center shadow-xs">
+                    <Search size={18} />
+                  </div>
+                  <span className="text-[11px] font-bold text-[var(--md-sys-color-on-surface)] tracking-tight truncate max-w-full">Search</span>
+                </button>
 
                 {/* 6. PDF Export */}
-                <motion.div whileHover={{ y: -4, scale: 1.03 }} whileTap={{ scale: 0.94 }}>
-                  <Link
-                    to="/reports"
-                    className="vision-glass hover:border-white/30 p-2 sm:p-4 rounded-[18px] sm:rounded-[22px] flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
-                  >
-                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-white/[0.08] text-white border border-white/20 flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm">
-                      <FileSpreadsheet size={18} />
-                    </div>
-                    <span className="text-[10px] min-[380px]:text-xs font-bold text-white tracking-tight truncate max-w-full">Export</span>
-                  </Link>
-                </motion.div>
+                <Link
+                  to="/reports"
+                  className="m3-card hover:border-[var(--md-sys-color-primary)] p-2 sm:p-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 sm:gap-2 transition-all duration-150 text-center h-full active:scale-95"
+                >
+                  <div className="w-10 h-10 rounded-2xl bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] flex items-center justify-center shadow-xs">
+                    <FileSpreadsheet size={18} />
+                  </div>
+                  <span className="text-[11px] font-bold text-[var(--md-sys-color-on-surface)] tracking-tight truncate max-w-full">Export</span>
+                </Link>
 
                 {/* 7. Calculator */}
-                <motion.div whileHover={{ y: -4, scale: 1.03 }} whileTap={{ scale: 0.94 }}>
-                  <Link
-                    to="/calculator"
-                    className="vision-glass hover:border-[#ff9f0a]/50 p-2 sm:p-4 rounded-[18px] sm:rounded-[22px] flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
-                  >
-                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#ff9f0a]/15 text-[#ff9f0a] border border-[#ff9f0a]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(255,159,10,0.2)]">
-                      <CalculatorIcon size={18} />
-                    </div>
-                    <span className="text-[10px] min-[380px]:text-xs font-bold text-white tracking-tight truncate max-w-full">Calc</span>
-                  </Link>
-                </motion.div>
+                <Link
+                  to="/calculator"
+                  className="m3-card hover:border-[var(--md-sys-color-primary)] p-2 sm:p-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 sm:gap-2 transition-all duration-150 text-center h-full active:scale-95"
+                >
+                  <div className="w-10 h-10 rounded-2xl bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] flex items-center justify-center shadow-xs">
+                    <CalculatorIcon size={18} />
+                  </div>
+                  <span className="text-[11px] font-bold text-[var(--md-sys-color-on-surface)] tracking-tight truncate max-w-full">Calc</span>
+                </Link>
 
                 {/* 8. Audit Timeline */}
-                <motion.div whileHover={{ y: -4, scale: 1.03 }} whileTap={{ scale: 0.94 }}>
-                  <Link
-                    to="/timeline"
-                    className="vision-glass hover:border-[#30d158]/50 p-2 sm:p-4 rounded-[18px] sm:rounded-[22px] flex flex-col items-center justify-center gap-1.5 sm:gap-2.5 transition-all duration-200 group text-center h-full shadow-sm"
-                  >
-                    <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#30d158]/15 text-[#30d158] border border-[#30d158]/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-[0_0_16px_rgba(48,209,88,0.2)]">
-                      <History size={18} />
-                    </div>
-                    <span className="text-[10px] min-[380px]:text-xs font-bold text-white tracking-tight truncate max-w-full">Timeline</span>
-                  </Link>
-                </motion.div>
+                <Link
+                  to="/timeline"
+                  className="m3-card hover:border-[var(--md-sys-color-primary)] p-2 sm:p-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 sm:gap-2 transition-all duration-150 text-center h-full active:scale-95"
+                >
+                  <div className="w-10 h-10 rounded-2xl bg-[var(--md-sys-color-surface-container-high)] text-[var(--md-sys-color-on-surface)] flex items-center justify-center shadow-xs">
+                    <History size={18} />
+                  </div>
+                  <span className="text-[11px] font-bold text-[var(--md-sys-color-on-surface)] tracking-tight truncate max-w-full">History</span>
+                </Link>
               </div>
             </motion.section>
 
@@ -670,21 +645,21 @@ export default function Dashboard() {
               <motion.section variants={itemVariants} id="section-analytics" className="space-y-4" style={{ contain: 'layout style', willChange: 'transform', transform: 'translateZ(0)' }}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs font-medium text-[#bf5af2] tracking-wide">
+                  <div className="text-xs font-bold text-[var(--md-sys-color-primary)] uppercase tracking-wider">
                     Analytics & Trends
                   </div>
-                  <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
+                  <h2 className="text-xl sm:text-2xl font-extrabold text-[var(--md-sys-color-on-surface)] tracking-tight mt-0.5">
                     Financial Analytics & Trajectory
                   </h2>
                 </div>
-                <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} className="self-start sm:self-auto">
+                <div className="self-start sm:self-auto">
                   <Link
                     to="/analytics"
-                    className="text-xs font-semibold px-3 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.1] text-[#0a84ff] hover:text-white flex items-center gap-1 transition-all border border-white/[0.08]"
+                    className="m3-btn-tonal text-xs py-2 px-3.5 flex items-center gap-1.5"
                   >
                     Open Full Analytics <ChevronRight size={14} />
                   </Link>
-                </motion.div>
+                </div>
               </div>
 
               <Suspense fallback={<SectionLoadingFallback />}>
@@ -699,58 +674,56 @@ export default function Dashboard() {
             <DeferredSection fallback={<SectionLoadingFallback />}>
               <motion.section variants={itemVariants} id="section-ai-insights" className="space-y-4" style={{ contain: 'layout style', willChange: 'transform', transform: 'translateZ(0)' }}>
               <div>
-                <div className="text-xs font-medium text-[#bf5af2] tracking-wide">
+                <div className="text-xs font-bold text-[var(--md-sys-color-primary)] uppercase tracking-wider">
                   Risk & Security
                 </div>
-                <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-0.5">
+                <h2 className="text-xl sm:text-2xl font-extrabold text-[var(--md-sys-color-on-surface)] tracking-tight mt-0.5">
                   Smart Alerts & Warnings
                 </h2>
               </div>
 
-              {/* Anomaly Detection Alerts in Liquid Glass */}
+              {/* Anomaly Detection Alerts in M3 Cards */}
               {(highInflowAnomalies.length > 0 || duplicateInvoices.length > 0) && (
                 <div className="space-y-3">
                   {highInflowAnomalies.slice(0, 2).map(tx => (
-                    <motion.div
+                    <div
                       key={`anomaly-inflow-${tx.id}`}
-                      whileHover={{ scale: 1.008 }}
-                      className="p-4 rounded-[22px] border bg-[#30d158]/10 border-[#30d158]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 backdrop-blur-2xl shadow-[0_8px_24px_rgba(48,209,88,0.1)]"
+                      className="p-4 rounded-2xl border border-[var(--md-sys-color-success)]/30 bg-[var(--md-sys-color-surface-container)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs"
                     >
                       <div className="flex gap-3.5 items-center">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-[#30d158]/20 text-[#30d158] border border-[#30d158]/30">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-[var(--md-sys-color-success-container)] text-[var(--md-sys-color-on-success-container)]">
                           <ShieldAlert size={18} />
                         </div>
                         <div>
-                          <h3 className="font-bold text-xs sm:text-sm text-[#30d158]">
+                          <h3 className="font-bold text-xs sm:text-sm text-[var(--md-sys-color-on-surface)]">
                             High Volume Inflow: {formatCurrency(tx.amount)} received from {tx.personName}
                           </h3>
-                          <p className="text-[#a1a1a6] text-xs mt-0.5">
+                          <p className="text-[var(--md-sys-color-on-surface-variant)] text-xs mt-0.5">
                             Transaction exceeds 2.5x your average revenue settlement of {formatCurrency(avgInflow)}.
                           </p>
                         </div>
                       </div>
-                    </motion.div>
+                    </div>
                   ))}
                   {duplicateInvoices.map((group, idx) => (
-                    <motion.div
+                    <div
                       key={`anomaly-inv-${idx}`}
-                      whileHover={{ scale: 1.008 }}
-                      className="p-4 rounded-[22px] border bg-[#ff453a]/10 border-[#ff453a]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 backdrop-blur-2xl shadow-[0_8px_24px_rgba(255,69,58,0.1)]"
+                      className="p-4 rounded-2xl border border-[var(--md-sys-color-error)]/30 bg-[var(--md-sys-color-surface-container)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs"
                     >
                       <div className="flex gap-3.5 items-center">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-[#ff453a]/20 text-[#ff453a] border border-[#ff453a]/30">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-[var(--md-sys-color-error-container)] text-[var(--md-sys-color-on-error-container)]">
                           <AlertTriangle size={18} />
                         </div>
                         <div>
-                          <h3 className="font-bold text-xs sm:text-sm text-[#ff453a]">
+                          <h3 className="font-bold text-xs sm:text-sm text-[var(--md-sys-color-on-surface)]">
                             Duplicate Invoice Flag: #{group[0].invoiceNumber}
                           </h3>
-                          <p className="text-[#a1a1a6] text-xs mt-0.5">
+                          <p className="text-[var(--md-sys-color-on-surface-variant)] text-xs mt-0.5">
                             Logged across {group.length} separate transactions. Check for double billing.
                           </p>
                         </div>
                       </div>
-                    </motion.div>
+                    </div>
                   ))}
                 </div>
               )}

@@ -7,7 +7,7 @@ import {
   getDocs,
   Unsubscribe
 } from 'firebase/firestore';
-import { db, auth, OperationType, handleFirestoreError } from './firebase';
+import { db, auth, OperationType, handleFirestoreError, waitForAuthReady, getValidIdToken, subscribeToTokenRefresh } from './firebase';
 import { AppState, Transaction, UserProfile } from '../types';
 import { User } from 'firebase/auth';
 import { 
@@ -17,6 +17,7 @@ import {
   upsertUserProfileToSupabase 
 } from './supabaseDb';
 import { isSupabaseConfigured } from './supabase';
+import { getDeviceSession } from './deviceAuthSession';
 
 export type SyncStatus = 
   | 'synced'
@@ -28,7 +29,11 @@ export type SyncStatus =
 
 type SyncListener = (status: SyncStatus) => void;
 const syncListeners = new Set<SyncListener>();
-let currentSyncStatus: SyncStatus = navigator.onLine ? 'synced' : 'offline';
+let currentSyncStatus: SyncStatus = typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'synced';
+
+export function getSyncStatus(): SyncStatus {
+  return currentSyncStatus;
+}
 
 export function subscribeToSyncStatus(listener: SyncListener) {
   syncListeners.add(listener);
@@ -39,6 +44,15 @@ export function subscribeToSyncStatus(listener: SyncListener) {
 }
 
 export function setSyncStatus(status: SyncStatus) {
+  // Never surface 'auth_error' if the user still has an active Firebase user or trusted device session
+  // while a silent token refresh can recover it
+  if (status === 'auth_error' && typeof window !== 'undefined') {
+    const hasSession = Boolean(auth.currentUser || getDeviceSession());
+    if (hasSession && !navigator.onLine) {
+      status = 'offline';
+    }
+  }
+
   if (currentSyncStatus !== status) {
     currentSyncStatus = status;
     console.log(`[Firebase Sync Status] -> ${status}`);
@@ -48,16 +62,68 @@ export function setSyncStatus(status: SyncStatus) {
   }
 }
 
-// Window online/offline event handlers
+/**
+ * Forces a silent token refresh and flushes pending sync operations.
+ */
+export async function recoverAuthAndSync(): Promise<boolean> {
+  if (typeof window !== 'undefined' && !navigator.onLine) {
+    setSyncStatus('offline');
+    return false;
+  }
+  setSyncStatus('syncing');
+  try {
+    const user = auth.currentUser || (await waitForAuthReady(4000));
+    if (user) {
+      const token = await getValidIdToken(true);
+      if (token) {
+        setSyncStatus('synced');
+        queueManager.triggerFlush();
+        return true;
+      }
+    }
+    if (getDeviceSession()) {
+      setSyncStatus('synced');
+      return true;
+    }
+    setSyncStatus('auth_error');
+    return false;
+  } catch (err) {
+    console.warn('[Firebase Sync] recoverAuthAndSync warning:', err);
+    setSyncStatus(navigator.onLine ? 'synced' : 'offline');
+    return false;
+  }
+}
+
+// Window online/offline & token refresh event handlers
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {
-    console.log('[Firebase Sync] Network online detected. Triggering immediate queue flush.');
+    console.log('[Firebase Sync] Network online detected. Refreshing token & triggering queue flush.');
     setSyncStatus('syncing');
-    queueManager.triggerFlush();
+    getValidIdToken(true)
+      .catch(() => {})
+      .finally(() => {
+        queueManager.triggerFlush();
+      });
   });
+
   window.addEventListener('offline', () => {
     console.log('[Firebase Sync] Network offline detected.');
     setSyncStatus('offline');
+  });
+
+  // Automatically clear any transient error status whenever a token refresh succeeds
+  subscribeToTokenRefresh((token, user) => {
+    if (token && user) {
+      if (
+        currentSyncStatus === 'auth_error' ||
+        currentSyncStatus === 'permission_error' ||
+        currentSyncStatus === 'network_error'
+      ) {
+        console.log('[Firebase Sync] Token refreshed — auto-clearing error state and flushing queue.');
+        setSyncStatus(navigator.onLine ? 'synced' : 'offline');
+        queueManager.triggerFlush();
+      }
+    }
   });
 }
 
@@ -82,17 +148,26 @@ export async function syncUserProfile(user: User, profileData?: Partial<UserProf
     return;
   }
 
+  const readyUser = auth.currentUser || (await waitForAuthReady(4000));
+  if (!readyUser || readyUser.uid !== user.uid) {
+    // User is in local/remembered device session mode; skip remote Firestore profile write cleanly
+    return;
+  }
+
+  await getValidIdToken(false);
+
   const profileRef = doc(db, 'users', user.uid, 'profile', 'info');
+  const payload = sanitizeForFirestore({
+    uid: user.uid,
+    fullName: profileData?.fullName || user.displayName || '',
+    email: user.email || '',
+    photoURL: profileData?.profilePhoto || user.photoURL || '',
+    businessName: profileData?.businessName || '',
+    mobile: profileData?.mobile || user.phoneNumber || '',
+    updatedAt: new Date().toISOString(),
+  });
+
   try {
-    const payload = sanitizeForFirestore({
-      uid: user.uid,
-      fullName: profileData?.fullName || user.displayName || '',
-      email: user.email || '',
-      photoURL: profileData?.profilePhoto || user.photoURL || '',
-      businessName: profileData?.businessName || '',
-      mobile: profileData?.mobile || user.phoneNumber || '',
-      updatedAt: new Date().toISOString(),
-    });
     console.log('[Firestore Write] Updating user profile for:', user.uid);
     await setDoc(profileRef, payload, { merge: true });
     console.log('[Firestore Write] User profile updated successfully.');
@@ -111,13 +186,27 @@ export async function syncUserProfile(user: User, profileData?: Partial<UserProf
       );
     }
   } catch (err: any) {
+    // Silent 1x retry with forced token refresh on auth/permission error
+    const code = err?.code || '';
+    if (code === 'unauthenticated' || code === 'permission-denied') {
+      try {
+        const refreshed = await getValidIdToken(true);
+        if (refreshed) {
+          await setDoc(profileRef, payload, { merge: true });
+          setSyncStatus('synced');
+          return;
+        }
+      } catch (retryErr) {
+        console.warn('[Firestore Write] Profile retry after token refresh failed:', retryErr);
+      }
+    }
     console.error('[Firestore Write Error] Failed to sync user profile:', err);
     classifyAndSetError(err, OperationType.UPDATE, `users/${user.uid}/profile/info`);
   }
 }
 
 /**
- * Classify Firestore error into specific sync status
+ * Classify Firestore error into specific sync status with silent auto-recovery
  */
 function classifyAndSetError(
   err: any, 
@@ -127,7 +216,7 @@ function classifyAndSetError(
   const currentUid = auth.currentUser?.uid || null;
   const authStatus = auth.currentUser ? 'authenticated' : 'unauthenticated';
   const code = err?.code || 'unknown';
-  const message = err?.message || String(err);
+  const message = (err?.message || String(err)).toLowerCase();
 
   console.error('[Firestore Error Diagnostic]', {
     currentUserId: currentUid,
@@ -135,7 +224,7 @@ function classifyAndSetError(
     authStatus,
     operationType,
     errorCode: code,
-    errorMessage: message,
+    errorMessage: err?.message || String(err),
     timestamp: new Date().toISOString(),
   });
 
@@ -144,9 +233,38 @@ function classifyAndSetError(
     return;
   }
 
-  if (code === 'permission-denied' || message.includes('permission')) {
-    setSyncStatus('permission_error');
-  } else if (code === 'unauthenticated' || message.includes('auth')) {
+  if (
+    code === 'unauthenticated' ||
+    code === 'permission-denied' ||
+    message.includes('auth') ||
+    message.includes('permission') ||
+    message.includes('token')
+  ) {
+    // Attempt silent token refresh recovery instead of permanently bricking status to auth_error
+    if (auth.currentUser) {
+      getValidIdToken(true)
+        .then((token) => {
+          if (token) {
+            setSyncStatus('synced');
+            queueManager.triggerFlush();
+          } else if (!getDeviceSession()) {
+            setSyncStatus('auth_error');
+          }
+        })
+        .catch(() => {
+          if (!getDeviceSession()) {
+            setSyncStatus('auth_error');
+          }
+        });
+      return;
+    }
+
+    // If running in local remembered device session, keep status synced (local-first) instead of auth_error
+    if (getDeviceSession()) {
+      setSyncStatus('synced');
+      return;
+    }
+
     setSyncStatus('auth_error');
   } else if (code === 'unavailable' || message.includes('network') || message.includes('offline')) {
     setSyncStatus('network_error');
@@ -175,6 +293,7 @@ class SyncQueueManager {
     // 1. Save locally immediately (Zero data loss guarantee)
     try {
       localStorage.setItem('smart-ledger-data', JSON.stringify(state));
+      localStorage.setItem(`smart-ledger-cache-${userId}`, JSON.stringify({ state, transactions: state.transactions }));
     } catch (e) {
       console.warn('[Sync Queue] Local storage cache warning:', e);
     }
@@ -223,14 +342,23 @@ class SyncQueueManager {
     if (this.isProcessing) return;
     if (!this.pendingState) return;
 
-    if (!auth.currentUser || auth.currentUser.uid !== this.pendingState.userId) {
-      console.warn('[Sync Queue] Current auth user does not match pending queue user.');
-      setSyncStatus('auth_error');
+    if (!navigator.onLine) {
+      setSyncStatus('offline');
       return;
     }
 
-    if (!navigator.onLine) {
-      setSyncStatus('offline');
+    // Wait for Firebase Auth to finish hydrating before checking currentUser
+    const readyUser = auth.currentUser || (await waitForAuthReady(4000));
+
+    if (!readyUser || readyUser.uid !== this.pendingState.userId) {
+      // If user has a valid local device session, data is already persisted in localStorage;
+      // do not set false 'auth_error'!
+      if (getDeviceSession()) {
+        setSyncStatus(navigator.onLine ? 'synced' : 'offline');
+        return;
+      }
+      console.warn('[Sync Queue] No authenticated Firebase user after auth ready check.');
+      setSyncStatus('auth_error');
       return;
     }
 
@@ -241,6 +369,9 @@ class SyncQueueManager {
     console.log(`[Sync Queue] Processing batch for user ${userId}. Tx count: ${state.transactions?.length || 0}`);
 
     try {
+      // Ensure token is valid & refreshed prior to Firestore batch write
+      await getValidIdToken(false);
+
       // 1. Prepare transactions & ledger batch
       const txs = state.transactions || [];
       const txCollectionRef = collection(db, 'users', userId, 'transactions');
@@ -318,6 +449,13 @@ class SyncQueueManager {
       setSyncStatus('synced');
     } catch (err: any) {
       console.error(`[Sync Queue Error] Sync failed for user ${userId}:`, err);
+
+      // Force token refresh on auth/permission error before scheduling retry
+      const code = err?.code || '';
+      if (code === 'unauthenticated' || code === 'permission-denied') {
+        await getValidIdToken(true).catch(() => {});
+      }
+
       classifyAndSetError(err, OperationType.WRITE, `users/${userId}`);
 
       // Schedule exponential backoff retry
@@ -342,8 +480,25 @@ export const queueManager = new SyncQueueManager();
  */
 export async function fetchUserState(userId: string): Promise<{ state: Partial<AppState>; transactions: Transaction[] } | null> {
   if (!userId) return null;
-  try {
-    console.log('[Firestore Direct Fetch] Fetching complete state for user:', userId);
+
+  const readyUser = auth.currentUser || (await waitForAuthReady(4000));
+  if (!readyUser || readyUser.uid !== userId) {
+    // Fall back to local cache if Firebase user isn't active
+    try {
+      const cached = localStorage.getItem(`smart-ledger-cache-${userId}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setSyncStatus(navigator.onLine ? 'synced' : 'offline');
+        return {
+          state: parsed.state || {},
+          transactions: parsed.transactions || [],
+        };
+      }
+    } catch {}
+    return null;
+  }
+
+  const executeFetch = async () => {
     const stateDocRef = doc(db, 'users', userId, 'app', 'state');
     const txCollectionRef = collection(db, 'users', userId, 'transactions');
 
@@ -362,8 +517,28 @@ export async function fetchUserState(userId: string): Promise<{ state: Partial<A
     });
 
     console.log('[Firestore Direct Fetch] Success. State loaded:', stateSnap.exists(), 'Tx count:', transactions.length);
+    setSyncStatus(navigator.onLine ? 'synced' : 'offline');
     return { state: stateData, transactions };
-  } catch (err) {
+  };
+
+  try {
+    console.log('[Firestore Direct Fetch] Fetching complete state for user:', userId);
+    await getValidIdToken(false);
+    return await executeFetch();
+  } catch (err: any) {
+    const code = err?.code || '';
+    if (code === 'unauthenticated' || code === 'permission-denied') {
+      console.log('[Firestore Direct Fetch] Token expired — refreshing token and retrying once...');
+      const refreshed = await getValidIdToken(true);
+      if (refreshed) {
+        try {
+          return await executeFetch();
+        } catch (retryErr) {
+          classifyAndSetError(retryErr, OperationType.GET, `users/${userId}`);
+          throw retryErr;
+        }
+      }
+    }
     console.error('[Firestore Direct Fetch Error]', err);
     classifyAndSetError(err, OperationType.GET, `users/${userId}`);
     throw err;
@@ -378,7 +553,7 @@ export function queueStateSync(userId: string, state: AppState) {
 }
 
 /**
- * Real-time state subscription for the authenticated user
+ * Real-time state subscription for the authenticated user with automatic token refresh & listener self-healing
  */
 export const subscribeToState = (
   userId: string, 
@@ -399,10 +574,16 @@ export const subscribeToState = (
   let currentTransactions: Transaction[] = [];
   let isInitialTxLoaded = false;
   let isInitialStateLoaded = false;
+  let unsubState: Unsubscribe | null = null;
+  let unsubTx: Unsubscribe | null = null;
+  let isDisposed = false;
+  let reconnectAttempts = 0;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   setSyncStatus('syncing');
 
   const notifyUpdate = () => {
+    if (isDisposed) return;
     console.log('[Firestore Read] Dispatching remote state update. State doc loaded:', isInitialStateLoaded, 'Tx count:', currentTransactions.length);
     const mergedState: Partial<AppState> = {
       ...(currentState || {}),
@@ -422,66 +603,133 @@ export const subscribeToState = (
     }
   };
 
-  const unsubState = onSnapshot(
-    stateDocRef,
-    { includeMetadataChanges: true },
-    (docSnap) => {
-      console.log('[Firestore Read] App state snapshot received. Exists:', docSnap.exists(), 'fromCache:', docSnap.metadata.fromCache);
-      if (docSnap.exists()) {
-        currentState = docSnap.data() as Partial<AppState>;
-      }
-      isInitialStateLoaded = true;
-      if (isInitialTxLoaded) {
-        notifyUpdate();
-      }
-    },
-    (error) => {
-      console.warn('[Firestore Read Error] State subscription error:', error);
-      classifyAndSetError(error, OperationType.GET, `users/${userId}/app/state`);
-      isInitialStateLoaded = true;
-      if (onError) {
-        try { onError(error); } catch (e) { console.error(e); }
-      }
-      if (isInitialTxLoaded) {
-        notifyUpdate();
-      }
+  const cleanupCurrentSnapshots = () => {
+    if (unsubState) {
+      try { unsubState(); } catch {}
+      unsubState = null;
     }
-  );
+    if (unsubTx) {
+      try { unsubTx(); } catch {}
+      unsubTx = null;
+    }
+  };
 
-  const unsubTx = onSnapshot(
-    txCollectionRef,
-    { includeMetadataChanges: true },
-    (snapshot) => {
-      console.log('[Firestore Read] Transactions snapshot received. Count:', snapshot.docs.length, 'fromCache:', snapshot.metadata.fromCache);
-      currentTransactions = snapshot.docs.map((d) => d.data() as Transaction);
-      // Sort newest first
-      currentTransactions.sort((a, b) => {
-        const dateA = (a as any).date || (a as any).dueDate || '';
-        const dateB = (b as any).date || (b as any).dueDate || '';
-        return new Date(dateB || 0).getTime() - new Date(dateA || 0).getTime();
-      });
-      isInitialTxLoaded = true;
-      if (isInitialStateLoaded) {
-        notifyUpdate();
-      }
-    },
-    (error) => {
-      console.warn('[Firestore Read Error] Transactions subscription error:', error);
-      classifyAndSetError(error, OperationType.LIST, `users/${userId}/transactions`);
-      isInitialTxLoaded = true;
-      if (onError) {
-        try { onError(error); } catch (e) { console.error(e); }
-      }
-      if (isInitialStateLoaded) {
-        notifyUpdate();
-      }
+  const handleListenerError = async (error: any, opType: OperationType, path: string) => {
+    if (isDisposed) return;
+    console.warn(`[Firestore Read Error] Subscription error on ${path}:`, error?.code || error?.message);
+
+    const code = error?.code || '';
+    const msg = (error?.message || '').toLowerCase();
+    const isAuthOrPermError =
+      code === 'unauthenticated' ||
+      code === 'permission-denied' ||
+      msg.includes('auth') ||
+      msg.includes('token') ||
+      msg.includes('permission');
+
+    if (isAuthOrPermError && reconnectAttempts < 5) {
+      reconnectAttempts++;
+      const delayMs = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 10000);
+      console.log(`[Firestore Read] Refreshing token and re-attaching snapshot listeners (attempt ${reconnectAttempts}/5) in ${Math.round(delayMs)}ms...`);
+
+      cleanupCurrentSnapshots();
+
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(async () => {
+        if (isDisposed) return;
+        const freshToken = await getValidIdToken(true);
+        if (freshToken && !isDisposed) {
+          attachSnapshots();
+        } else {
+          classifyAndSetError(error, opType, path);
+        }
+      }, delayMs);
+      return;
     }
-  );
+
+    classifyAndSetError(error, opType, path);
+    if (onError) {
+      try { onError(error); } catch (e) { console.error(e); }
+    }
+  };
+
+  const attachSnapshots = () => {
+    if (isDisposed) return;
+    cleanupCurrentSnapshots();
+
+    unsubState = onSnapshot(
+      stateDocRef,
+      { includeMetadataChanges: true },
+      (docSnap) => {
+        if (isDisposed) return;
+        reconnectAttempts = 0;
+        console.log('[Firestore Read] App state snapshot received. Exists:', docSnap.exists(), 'fromCache:', docSnap.metadata.fromCache);
+        if (docSnap.exists()) {
+          currentState = docSnap.data() as Partial<AppState>;
+        }
+        isInitialStateLoaded = true;
+        if (isInitialTxLoaded) {
+          notifyUpdate();
+        }
+      },
+      (error) => {
+        isInitialStateLoaded = true;
+        handleListenerError(error, OperationType.GET, `users/${userId}/app/state`);
+        if (isInitialTxLoaded) {
+          notifyUpdate();
+        }
+      }
+    );
+
+    unsubTx = onSnapshot(
+      txCollectionRef,
+      { includeMetadataChanges: true },
+      (snapshot) => {
+        if (isDisposed) return;
+        reconnectAttempts = 0;
+        console.log('[Firestore Read] Transactions snapshot received. Count:', snapshot.docs.length, 'fromCache:', snapshot.metadata.fromCache);
+        currentTransactions = snapshot.docs.map((d) => d.data() as Transaction);
+        // Sort newest first
+        currentTransactions.sort((a, b) => {
+          const dateA = (a as any).date || (a as any).dueDate || '';
+          const dateB = (b as any).date || (b as any).dueDate || '';
+          return new Date(dateB || 0).getTime() - new Date(dateA || 0).getTime();
+        });
+        isInitialTxLoaded = true;
+        if (isInitialStateLoaded) {
+          notifyUpdate();
+        }
+      },
+      (error) => {
+        isInitialTxLoaded = true;
+        handleListenerError(error, OperationType.LIST, `users/${userId}/transactions`);
+        if (isInitialStateLoaded) {
+          notifyUpdate();
+        }
+      }
+    );
+  };
+
+  // Ensure auth is ready and token is valid BEFORE attaching Firestore listeners
+  (async () => {
+    const readyUser = auth.currentUser || (await waitForAuthReady(4000));
+    if (isDisposed) return;
+    if (readyUser && readyUser.uid === userId) {
+      await getValidIdToken(false);
+    }
+    if (!isDisposed) {
+      attachSnapshots();
+    }
+  })();
 
   return () => {
     console.log('[Firestore Read] Cleaning up snapshot listeners for user:', userId);
-    unsubState();
-    unsubTx();
+    isDisposed = true;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    cleanupCurrentSnapshots();
   };
 };
 

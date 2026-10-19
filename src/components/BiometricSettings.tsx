@@ -38,7 +38,7 @@ export default function BiometricSettings() {
   const [setupError, setSetupError] = useState<string | null>(null);
 
   const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
-  const isUnavailable = isSupported === false || isInIframe;
+  const isUnavailable = isSupported === false;
   const hasRegisteredDevices = (securitySettings.registeredDevices?.length ?? 0) > 0;
   const isActive = faceUnlockEnabled || hasRegisteredDevices;
 

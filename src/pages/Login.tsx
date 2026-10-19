@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
-import { Loader2, Mail, Lock, ArrowRight, CheckCircle2, AlertCircle, ShieldCheck, Wallet, Eye, EyeOff, Sparkles, ScanFace } from 'lucide-react';
+import { Loader2, Mail, Lock, ArrowRight, CheckCircle2, AlertCircle, ShieldCheck, Wallet, Eye, EyeOff, Sparkles } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { 
   loginWithGoogle, 
@@ -17,7 +17,6 @@ import {
 import { isSupabaseConfigured } from '../lib/supabase';
 import { recordLoginActivity } from '../lib/securityService';
 import { saveDeviceSession, getDeviceSession } from '../lib/deviceAuthSession';
-import { authenticateWithBiometrics } from '../lib/webauthnService';
 
 export default function Login() {
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -30,63 +29,10 @@ export default function Login() {
 
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [biometricLoading, setBiometricLoading] = useState(false);
-  const [hasFaceUnlock, setHasFaceUnlock] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [resetSent, setResetSent] = useState(false);
   const navigate = useNavigate();
-
-  // Detect whether Face Unlock is registered on this device
-  useEffect(() => {
-    try {
-      const enabled = localStorage.getItem('faceUnlockEnabled') === 'true';
-      const credId = localStorage.getItem('biometricCredentialId');
-      setHasFaceUnlock(Boolean(enabled || credId));
-    } catch {}
-  }, []);
-
-  const handleFaceUnlockLogin = async () => {
-    if (loading || googleLoading || biometricLoading) return;
-    setBiometricLoading(true);
-    setError('');
-    try {
-      const cleanUid = localStorage.getItem('lastAuthUserId') || 'authenticated_user';
-      const result = await authenticateWithBiometrics(cleanUid);
-
-      if (result.isUserCancelled) {
-        setBiometricLoading(false);
-        return;
-      }
-
-      if (result.success) {
-        const storedEmail = localStorage.getItem('lastAuthUserEmail') || 'user@smartledgerx.io';
-        const userObj = {
-          uid: cleanUid,
-          email: storedEmail,
-          displayName: storedEmail.split('@')[0] || 'SmartLedger User'
-        };
-        saveDeviceSession(userObj as any, true);
-        try { sessionStorage.setItem('isUnlocked', 'true'); } catch (e) {}
-
-        // Non-blocking security audit log
-        recordLoginActivity(cleanUid, {
-          method: 'Biometric',
-          status: 'Success',
-          email: storedEmail,
-          userName: userObj.displayName
-        }).catch(() => {});
-
-        navigate('/', { replace: true });
-      } else {
-        setError(result.error || 'Biometric verification failed. Please sign in with your email & password.');
-      }
-    } catch (err: any) {
-      setError(err?.message || 'Biometric authentication could not be completed.');
-    } finally {
-      setBiometricLoading(false);
-    }
-  };
 
   // If already logged in on this device, automatically navigate to app
   useEffect(() => {
@@ -301,25 +247,6 @@ export default function Login() {
             </AnimatePresence>
 
             <div className="relative z-10 space-y-5">
-              {/* Face Unlock Biometric Button */}
-              {hasFaceUnlock && (
-                <motion.button
-                  whileHover={{ scale: 1.015, y: -1 }}
-                  whileTap={{ scale: 0.985 }}
-                  type="button"
-                  onClick={handleFaceUnlockLogin}
-                  disabled={biometricLoading || googleLoading || loading}
-                  className="w-full flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 border border-blue-400/30 shadow-[0_4px_20px_rgba(59,130,246,0.3)] transition-all duration-300 disabled:opacity-50"
-                >
-                  {biometricLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-white" />
-                  ) : (
-                    <ScanFace className="w-4 h-4 text-blue-100" />
-                  )}
-                  <span>Sign in with Face Unlock</span>
-                </motion.button>
-              )}
-
               {/* Google OAuth Button */}
               <motion.button
                 whileHover={{ scale: 1.015, y: -1 }}

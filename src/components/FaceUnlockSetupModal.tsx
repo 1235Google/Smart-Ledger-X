@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { ScanFace, CheckCircle2, XCircle, ShieldCheck, ArrowRight, RefreshCw, X, ExternalLink, Info } from 'lucide-react';
-import { registerBiometricCredential, isEmbeddedPreview } from '../lib/webauthnService';
+import { ScanFace, CheckCircle2, XCircle, ShieldCheck, ArrowRight, RefreshCw, X } from 'lucide-react';
+import { registerBiometricCredential } from '../lib/webauthnService';
 
 interface FaceUnlockSetupModalProps {
   isOpen: boolean;
@@ -24,14 +24,7 @@ export const FaceUnlockSetupModal: React.FC<FaceUnlockSetupModalProps> = ({
 
   if (!isOpen) return null;
 
-  const isEmbedded = isEmbeddedPreview();
-
   const handleStartRegistration = async () => {
-    if (isEmbedded) {
-      window.open(window.location.href, '_blank');
-      return;
-    }
-
     setStep(2);
     setErrorMessage(null);
 
@@ -84,37 +77,7 @@ export const FaceUnlockSetupModal: React.FC<FaceUnlockSetupModalProps> = ({
           </div>
         </div>
 
-        {/* Embedded Preview Detected: Show Friendly Guidance without Crashing */}
-        {isEmbedded ? (
-          <div className="space-y-4">
-            <div className="p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/20 space-y-2.5">
-              <div className="flex items-center gap-2 text-indigo-300 font-semibold text-xs">
-                <Info size={16} className="shrink-0" />
-                <span>Embedded Preview Environment</span>
-              </div>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Face Unlock isn't available in this embedded preview. Browser security prevents passkey registration inside iframes. Please open SmartLedgerX in a normal browser tab using its full URL, then try again.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-300 hover:bg-white/5 transition-colors cursor-pointer"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={() => window.open(window.location.href, '_blank')}
-                className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 shadow-md transition-all flex items-center gap-2 cursor-pointer"
-              >
-                Open SmartLedgerX <ExternalLink size={14} />
-              </button>
-            </div>
-          </div>
-        ) : step === 1 ? (
+        {step === 1 && (
           <div className="space-y-4">
             <div className="p-4 rounded-xl bg-white/[0.03] border border-white/5 space-y-3">
               <div className="flex items-start gap-3">
@@ -148,7 +111,9 @@ export const FaceUnlockSetupModal: React.FC<FaceUnlockSetupModalProps> = ({
               </button>
             </div>
           </div>
-        ) : step === 2 ? (
+        )}
+
+        {step === 2 && (
           <div className="py-8 text-center space-y-4">
             <div className="w-12 h-12 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 mx-auto animate-pulse">
               <ScanFace size={24} />
@@ -160,7 +125,9 @@ export const FaceUnlockSetupModal: React.FC<FaceUnlockSetupModalProps> = ({
               </p>
             </div>
           </div>
-        ) : step === 'success' ? (
+        )}
+
+        {step === 'success' && (
           <div className="py-8 text-center space-y-4">
             <div className="w-12 h-12 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto">
               <CheckCircle2 size={24} />
@@ -170,7 +137,9 @@ export const FaceUnlockSetupModal: React.FC<FaceUnlockSetupModalProps> = ({
               <p className="text-xs text-slate-400">Your device authenticator has been successfully registered.</p>
             </div>
           </div>
-        ) : (
+        )}
+
+        {step === 'failure' && (
           <div className="space-y-4 py-2">
             <div className="p-3.5 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2.5 text-red-400 text-xs">
               <XCircle size={16} className="shrink-0 mt-0.5" />

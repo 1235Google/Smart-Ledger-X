@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { useStore } from '../context/StoreContext';
 import { useToast } from '../context/ToastContext';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowDownLeft, Plus, User, Calendar, FileText, Hash, Search } from 'lucide-react';
+import { ArrowDownLeft, Plus, User, Calendar, FileText, Hash, Search, ArrowUpRight, CheckCircle2 } from 'lucide-react';
 import { formatCurrency, formatDate } from '../lib/utils';
 import { ReceivedMoney } from '../types';
 import AnimatedInput from '../components/ui/AnimatedInput';
+import AnimatedButton from '../components/ui/AnimatedButton';
+import EnterpriseCard from '../components/ui/EnterpriseCard';
 import DataStateGuard from '../components/ui/DataStateGuard';
 
 export default function MoneyReceived() {
@@ -64,27 +66,29 @@ export default function MoneyReceived() {
     >
       <motion.div 
         layoutId="shared-received"
-        initial={{ opacity: 0, y: 8 }}
+        initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full space-y-6 sm:space-y-8"
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full space-y-8"
       >
-        <header className="mb-4 sm:mb-6">
-          <div className="text-xs font-bold text-[var(--md-sys-color-primary)] uppercase tracking-wider mb-1">
+        <header className="mb-6">
+          <div className="text-xs font-medium text-[#30d158] uppercase tracking-wider mb-1">
             Inflow Ledger
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--md-sys-color-on-surface)] flex items-center gap-3">
+          <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-3">
             Money Received
           </h1>
-          <p className="text-[var(--md-sys-color-on-surface-variant)] mt-1 text-sm font-medium">Record incoming client credits, salary, freelance milestones, and deposits.</p>
+          <p className="text-[#86868b] mt-1 text-sm font-medium">Record incoming client credits, salary, freelance milestones, and deposits.</p>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 sm:gap-8">
-          {/* Material 3 Form Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+          {/* Apple Style Form Section */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="m3-card rounded-[28px] p-5 sm:p-7 shadow-xs relative overflow-hidden bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)]/40">
-              <h2 className="text-base font-bold text-[var(--md-sys-color-on-surface)] mb-5 flex items-center gap-2">
-                <span className="p-2 rounded-xl bg-[var(--md-sys-color-success-container)] text-[var(--md-sys-color-on-success-container)]">
+            <div className="vision-glass rounded-[22px] sm:rounded-[24px] p-4 sm:p-6 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] relative overflow-hidden">
+              <div className="pointer-events-none absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/15 to-transparent" />
+              
+              <h2 className="text-base font-bold text-white mb-5 flex items-center gap-2">
+                <span className="p-1.5 rounded-xl bg-[#30d158]/15 text-[#30d158]">
                   <ArrowDownLeft size={16} />
                 </span>
                 Record Inflow
@@ -139,7 +143,7 @@ export default function MoneyReceived() {
                 <div className="pt-2">
                   <button
                     type="submit"
-                    className="m3-btn-filled w-full py-3.5 px-6 font-bold text-sm shadow-xs flex items-center justify-center gap-2 min-h-[48px] cursor-pointer"
+                    className="w-full py-3.5 px-6 rounded-full bg-[#30d158] hover:bg-[#30d158]/90 text-black font-bold text-sm transition-all shadow-lg shadow-[#30d158]/20 flex items-center justify-center gap-2 active:scale-[0.98] min-h-[48px]"
                   >
                     <Plus size={18} />
                     <span>Save Received Money</span>
@@ -152,25 +156,25 @@ export default function MoneyReceived() {
           {/* List Section */}
           <div className="lg:col-span-3 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
-              <h2 className="text-base font-bold text-[var(--md-sys-color-on-surface)]">
+              <h2 className="text-base font-bold text-white">
                 Inflow Feed ({filteredTransactions.length})
               </h2>
               <div className="relative w-full sm:w-60">
-                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--md-sys-color-outline)]" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#86868b]" />
                 <input
                   type="text"
                   placeholder="Search received..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3.5 py-2 sm:py-1.5 rounded-full bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)]/40 text-xs text-[var(--md-sys-color-on-surface)] placeholder-[var(--md-sys-color-outline)] outline-none focus:border-[var(--md-sys-color-primary)] focus:ring-2 focus:ring-[var(--md-sys-color-primary)]/20 transition-all min-h-[40px] sm:min-h-[36px]"
+                  className="w-full pl-8 pr-3 py-2 sm:py-1.5 rounded-full bg-[#171717] border border-white/[0.08] text-xs text-white placeholder-[#86868b] outline-none focus:border-[#0a84ff] focus:ring-2 focus:ring-[#0a84ff]/25 transition-all min-h-[40px] sm:min-h-[32px]"
                 />
               </div>
             </div>
             
             <div className="space-y-2.5">
               {filteredTransactions.length === 0 ? (
-                <div className="text-center py-16 border border-dashed border-[var(--md-sys-color-outline-variant)]/60 rounded-[28px] flex flex-col items-center justify-center text-[var(--md-sys-color-on-surface-variant)] text-sm bg-[var(--md-sys-color-surface-container-low)]">
-                  <ArrowDownLeft size={32} className="text-[var(--md-sys-color-outline)] mb-2" />
+                <div className="text-center py-16 border border-dashed border-white/[0.08] rounded-[22px] flex flex-col items-center justify-center text-[#86868b] text-sm bg-[#171717]/40">
+                  <ArrowDownLeft size={32} className="text-[#86868b]/50 mb-2" />
                   <p>No received money records found.</p>
                 </div>
               ) : (
@@ -179,24 +183,24 @@ export default function MoneyReceived() {
                     <motion.div
                       key={tx.id}
                       layout
-                      initial={{ opacity: 0, y: 8 }}
+                      initial={{ opacity: 0, y: 12 }}
                       animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.96 }}
-                      transition={{ duration: 0.2, delay: idx * 0.02 }}
-                      className="m3-card bg-[var(--md-sys-color-surface-container)] hover:bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)]/40 p-3.5 sm:p-4 rounded-2xl flex items-center gap-3 sm:gap-4 transition-all duration-150 shadow-xs group"
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ duration: 0.25, delay: idx * 0.02 }}
+                      className="bg-[#171717] hover:bg-[#1c1c1c] border border-white/[0.08] p-3 sm:p-4 rounded-2xl flex items-center gap-3 sm:gap-4 transition-all duration-200 shadow-sm group"
                     >
-                      <div className="w-10 h-10 bg-[var(--md-sys-color-success-container)] text-[var(--md-sys-color-on-success-container)] rounded-xl flex items-center justify-center flex-shrink-0 shadow-xs">
+                      <div className="w-10 h-10 bg-[#30d158]/15 text-[#30d158] rounded-xl flex items-center justify-center flex-shrink-0">
                         <ArrowDownLeft size={18} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold truncate text-[var(--md-sys-color-on-surface)]">{tx.personName}</p>
-                        <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] mt-0.5 truncate">
+                        <p className="text-sm font-bold truncate text-white">{tx.personName}</p>
+                        <p className="text-xs text-[#86868b] mt-0.5 truncate">
                           {tx.purpose} {tx.invoiceNumber && `• #${tx.invoiceNumber}`} • {formatDate(tx.date, generalSettings?.timezone)}
                         </p>
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-sm sm:text-base font-extrabold text-[var(--md-sys-color-success)] font-mono tabular-nums whitespace-nowrap">+ {formatCurrency(tx.amount)}</p>
-                        <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] uppercase font-bold">Cleared</p>
+                        <p className="text-sm sm:text-base font-extrabold text-[#30d158] font-tabular whitespace-nowrap">+ {formatCurrency(tx.amount)}</p>
+                        <p className="text-[10px] text-[#86868b] uppercase font-semibold">Cleared</p>
                       </div>
                     </motion.div>
                   ))}
@@ -209,3 +213,4 @@ export default function MoneyReceived() {
     </DataStateGuard>
   );
 }
+

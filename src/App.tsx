@@ -25,7 +25,6 @@ const ImportExport = lazy(() => import('./pages/ImportExport'));
 const Calculator = lazy(() => import('./pages/Calculator'));
 const TimelineReplay = lazy(() => import('./pages/TimelineReplay'));
 const SecurityCenter = lazy(() => import('./pages/SecurityCenter'));
-const FaceUnlockPage = lazy(() => import('./pages/FaceUnlockPage'));
 const BackupDashboard = lazy(() => import('./pages/BackupDashboard'));
 const SmartGuardDashboard = lazy(() => import('./components/smartguard/SmartGuardDashboard'));
 const Notifications = lazy(() => import('./pages/Notifications'));
@@ -195,8 +194,6 @@ function AppRoutes() {
           <Route path="reports" element={<MonthlyReports />} />
           <Route path="settings" element={<Settings />} />
           <Route path="security" element={<SecurityCenter />} />
-          <Route path="face-unlock" element={<FaceUnlockPage />} />
-          <Route path="biometrics" element={<Navigate to="/face-unlock" replace />} />
           <Route path="smartguard" element={<SmartGuardDashboard />} />
           <Route path="profile" element={<Profile />} />
           <Route path="notifications" element={<Notifications />} />

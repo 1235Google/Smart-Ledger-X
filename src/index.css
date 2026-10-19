@@ -1,135 +1,132 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import "./styles/m3-tokens.css";
 @import "tailwindcss";
 
 @layer utilities {
-  /* Fast, lightweight M3 surfaces (no GPU heavy blurs) */
-  .m3-surface-base {
-    background-color: var(--md-sys-color-surface);
-    color: var(--md-sys-color-on-surface);
+  .border-sweep {
+    position: relative;
+    background: #111113;
+  }
+  .border-sweep::before {
+    content: "";
+    position: absolute;
+    inset: -1.5px;
+    border-radius: 16px;
+    padding: 1.5px;
+    background: linear-gradient(90deg, #635BFF, #3B82F6, #635BFF);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: border-sweep 4s linear infinite;
   }
 
-  .m3-surface-container {
-    background-color: var(--md-sys-color-surface-container);
-    color: var(--md-sys-color-on-surface);
-  }
-
-  .m3-surface-low {
-    background-color: var(--md-sys-color-surface-container-low);
-    color: var(--md-sys-color-on-surface);
-  }
-
-  .m3-surface-high {
-    background-color: var(--md-sys-color-surface-container-high);
-    color: var(--md-sys-color-on-surface);
-  }
-
-  /* Theme-aware card styles */
   .glass-card-dark {
-    background: #171a1f;
+    background: rgba(17, 17, 19, 0.7);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: var(--md-sys-elevation-1);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   }
 
   .glass-card-light {
-    background: #ffffff;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    box-shadow: var(--md-sys-elevation-1);
-  }
-
-  .vision-glass {
-    background-color: var(--md-sys-color-surface-container-low);
-    border: 1px solid var(--md-sys-color-outline-variant);
-    border-radius: var(--md-shape-corner-2xl);
-    color: var(--md-sys-color-on-surface);
-    box-shadow: var(--md-sys-elevation-1);
-    transition: transform 150ms var(--md-sys-motion-easing-emphasized), box-shadow 150ms var(--md-sys-motion-easing-emphasized);
-  }
-
-  .vision-glass:hover {
-    box-shadow: var(--md-sys-elevation-2);
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
   }
 
   .glass-surface {
-    background: var(--md-sys-color-surface-container-low);
-    border: 1px solid var(--md-sys-color-outline-variant);
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
   }
+}
+
+@keyframes border-sweep {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes orb-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(25px, 15px) scale(1.05); }
+}
+
+@keyframes orb-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-20px, -25px) scale(0.96); }
+}
+
+@keyframes aurora-1 {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  50% { transform: translate(15px, -15px) rotate(8deg); }
+}
+
+.animate-orb-1 {
+  animation: orb-1 18s ease-in-out infinite;
+}
+
+.animate-orb-2 {
+  animation: orb-2 22s ease-in-out infinite;
+}
+
+.animate-aurora-1 {
+  animation: aurora-1 25s ease-in-out infinite;
+}
+
+.shimmer-text {
+  background: linear-gradient(90deg, #FAFAFA 0%, #635BFF 50%, #FAFAFA 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 3s linear infinite;
 }
 
 @plugin "@tailwindcss/typography";
 
 @theme {
-  --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Roboto", "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
 }
 
 @layer base {
   body {
-    background-color: var(--md-sys-color-surface);
-    color: var(--md-sys-color-on-surface);
+    background-color: #0A0A0B;
+    color: #FAFAFA;
     font-family: var(--font-sans);
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'tnum' 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    transition: background-color 200ms ease, color 200ms ease;
   }
 
   ::selection {
-    background-color: var(--md-sys-color-primary-container);
-    color: var(--md-sys-color-on-primary-container);
+    background-color: rgba(99, 91, 255, 0.35);
+    color: #ffffff;
   }
 }
 
 @layer utilities {
   .enterprise-card {
-    background-color: var(--md-sys-color-surface-container-low);
-    border: 1px solid var(--md-sys-color-outline-variant);
-    border-radius: var(--md-shape-corner-xl);
-    color: var(--md-sys-color-on-surface);
-    box-shadow: var(--md-sys-elevation-1);
-    transition: all 150ms var(--md-sys-motion-easing-emphasized);
-  }
-
-  .enterprise-card:hover {
-    box-shadow: var(--md-sys-elevation-2);
+    @apply bg-[#111113] border border-white/[0.06] rounded-[12px] transition-all;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.25);
   }
 
   .enterprise-button-primary {
-    background-color: var(--md-sys-color-primary);
-    color: var(--md-sys-color-on-primary);
-    padding: 0.5rem 1.25rem;
-    border-radius: var(--md-shape-corner-full);
-    font-weight: 600;
-    font-size: 0.875rem;
-    transition: all 150ms var(--md-sys-motion-easing-emphasized);
-    border: 1px solid transparent;
-  }
-
-  .enterprise-button-primary:hover {
-    filter: brightness(1.08);
-  }
-
-  .enterprise-button-primary:active {
-    transform: scale(0.98);
+    @apply bg-[#635BFF] text-white px-4 py-2 rounded-[8px] font-medium 
+           hover:bg-[#524ccf] active:scale-[0.98] transition-all border border-white/10
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#635BFF]/50;
   }
 
   .enterprise-button-secondary {
-    border: 1px solid var(--md-sys-color-outline);
-    color: var(--md-sys-color-on-surface);
-    background-color: transparent;
-    padding: 0.5rem 1.25rem;
-    border-radius: var(--md-shape-corner-full);
-    font-weight: 600;
-    font-size: 0.875rem;
-    transition: all 150ms var(--md-sys-motion-easing-emphasized);
-  }
-
-  .enterprise-button-secondary:hover {
-    background-color: var(--md-sys-color-surface-container-high);
-  }
-
-  .enterprise-button-secondary:active {
-    transform: scale(0.98);
+    @apply border border-white/[0.08] hover:bg-white/[0.04] active:scale-[0.98] px-4 py-2 
+           rounded-[8px] font-medium transition-all
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20;
   }
 
   /* Clean, subtle scrollbar across browsers */
@@ -144,11 +141,11 @@
   }
   .custom-sidebar-scrollbar::-webkit-scrollbar-thumb,
   ::-webkit-scrollbar-thumb {
-    background: var(--md-sys-color-outline-variant);
+    background: rgba(255, 255, 255, 0.12);
     border-radius: 9999px;
   }
   .custom-sidebar-scrollbar::-webkit-scrollbar-thumb:hover,
   ::-webkit-scrollbar-thumb:hover {
-    background: var(--md-sys-color-outline);
+    background: rgba(255, 255, 255, 0.22);
   }
 }

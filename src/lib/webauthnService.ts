@@ -82,70 +82,8 @@ export function getDeviceBiometricName(): string {
   return 'Platform Biometric Authenticator';
 }
 
-export const EMBEDDED_PREVIEW_MESSAGE = 
-  "Face Unlock isn't available in this embedded preview. Browser security prevents passkey registration inside iframes. Please open SmartLedgerX in a normal browser tab using its full URL, then try again.";
-
-/**
- * Detects whether the application is running inside an embedded iframe or preview environment
- * (such as Google AI Studio, StackBlitz, CodeSandbox, Replit, Vercel Preview, Firebase Emulator, etc.)
- */
-export function isEmbeddedPreview(): boolean {
-  if (typeof window === 'undefined') return false;
-
-  // 1. Primary check: window.self !== window.top
-  try {
-    if (window.self !== window.top) {
-      return true;
-    }
-  } catch (e) {
-    // Cross-origin iframe access throws DOMException
-    return true;
-  }
-
-  // 2. Query param or preview attribute checks
-  try {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('preview') === 'true' || params.get('embed') === 'true') {
-      return true;
-    }
-  } catch (e) {}
-
-  return false;
-}
-
-/**
- * Returns detailed browser name and WebAuthn capability
- */
-export function getBrowserWebAuthnSupport(): {
-  supported: boolean;
-  browserName: string;
-  reason?: string;
-} {
-  if (typeof navigator === 'undefined') {
-    return { supported: false, browserName: 'Unknown', reason: 'Non-browser environment' };
-  }
-  const ua = navigator.userAgent;
-  let browserName = 'Browser';
-  if (/Edg\//i.test(ua)) browserName = 'Microsoft Edge';
-  else if (/Chrome\//i.test(ua)) browserName = 'Google Chrome';
-  else if (/Safari\//i.test(ua) && !/Chrome/i.test(ua)) browserName = 'Apple Safari';
-  else if (/Firefox\//i.test(ua)) browserName = 'Mozilla Firefox';
-  else if (/Opera|OPR\//i.test(ua)) browserName = 'Opera';
-
-  if (typeof window === 'undefined' || !window.PublicKeyCredential) {
-    return {
-      supported: false,
-      browserName,
-      reason: `${browserName} does not support the WebAuthn standard on this platform.`
-    };
-  }
-
-  return { supported: true, browserName };
-}
-
 /**
  * Verifies environment prerequisites before opening biometric prompt:
- * - not embedded in an iframe preview
  * - window.isSecureContext
  * - window.PublicKeyCredential
  * - application running on HTTPS or localhost
@@ -154,7 +92,6 @@ export function verifyWebAuthnEnvironment(): {
   valid: boolean; 
   error?: string; 
   errorType?: string; 
-  isEmbedded?: boolean;
   isIframeBlocked?: boolean;
 } {
   if (typeof window === 'undefined') {
@@ -165,18 +102,7 @@ export function verifyWebAuthnEnvironment(): {
     };
   }
 
-  // 1. Embedded iFrame Preview check (Step 1 & Step 5)
-  if (isEmbeddedPreview()) {
-    return {
-      valid: false,
-      isEmbedded: true,
-      isIframeBlocked: true,
-      error: EMBEDDED_PREVIEW_MESSAGE,
-      errorType: 'NotAllowedError'
-    };
-  }
-
-  // 2. Secure context check (Step 3)
+  // 1. Secure context check
   if (!window.isSecureContext) {
     console.error('[WebAuthn] Insecure context: WebAuthn requires HTTPS or http://localhost. Current location:', window.location.href);
     return {
@@ -186,7 +112,7 @@ export function verifyWebAuthnEnvironment(): {
     };
   }
 
-  // 3. Protocol & host check
+  // 2. Protocol & host check
   const hostname = window.location.hostname;
   const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.localhost');
   const isHttps = window.location.protocol === 'https:';
@@ -200,7 +126,7 @@ export function verifyWebAuthnEnvironment(): {
     };
   }
 
-  // 4. PublicKeyCredential check (Step 2)
+  // 3. PublicKeyCredential check
   if (!window.PublicKeyCredential) {
     console.warn("[WebAuthn] Feature detection: window.PublicKeyCredential is not available");
     return {
@@ -210,29 +136,35 @@ export function verifyWebAuthnEnvironment(): {
     };
   }
 
-  return { valid: true, isEmbedded: false, isIframeBlocked: false };
+  // 4. Check if document is embedded in an iframe that lacks WebAuthn Permissions Policy
+  if (typeof window !== 'undefined' && window.self !== window.top) {
+    const policy = (document as any).permissionsPolicy || (document as any).featurePolicy;
+    if (policy && typeof policy.allowsFeature === 'function') {
+      try {
+        if (!policy.allowsFeature('publickey-credentials-create')) {
+          return {
+            valid: false,
+            error: "Face Unlock is blocked inside embedded iframe previews by the browser's Permissions Policy. Open the app in a dedicated browser tab.",
+            errorType: 'NotAllowedError',
+            isIframeBlocked: true
+          };
+        }
+      } catch (e) {}
+    }
+  }
+
+  return { valid: true };
 }
 
 /**
  * Checks platform biometric support and hardware availability.
  */
 export async function checkBiometricSupport(): Promise<BiometricSupportStatus> {
-  // If running in embedded preview, report clear informative status without crashing
-  if (isEmbeddedPreview()) {
-    return {
-      supported: false,
-      platformAvailable: false,
-      isEmbedded: true,
-      reason: EMBEDDED_PREVIEW_MESSAGE
-    };
-  }
-
   const env = verifyWebAuthnEnvironment();
   if (!env.valid) {
     return {
       supported: false,
       platformAvailable: false,
-      isEmbedded: env.isEmbedded || false,
       reason: env.error || 'This device or browser does not support Face Unlock.'
     };
   }
@@ -278,14 +210,11 @@ export function parseWebAuthnError(err: any): WebAuthnErrorResult {
     errMsgLower.includes('publickey-credentials-create') ||
     errMsgLower.includes('publickey-credentials-get') ||
     errMsgLower.includes('permissions policy') ||
-    errMsgLower.includes('child frames') ||
-    errMsgLower.includes('iframe') ||
-    errMsgLower.includes('embedded') ||
-    isEmbeddedPreview()
+    errMsgLower.includes('child frames')
   ) {
     return {
       errorType: 'NotAllowedError',
-      message: EMBEDDED_PREVIEW_MESSAGE,
+      message: "Face Unlock cannot run inside an embedded iframe preview due to browser Permissions Policy. Open the app in a dedicated browser tab.",
       isUserCancelled: false
     };
   }
@@ -468,116 +397,41 @@ export async function registerBiometricCredential(
   devLog('Registration ceremony started');
 
   try {
-    // 3. Fetch fresh challenge from backend (with automatic fallback to GET and client-side challenge)
-    const optionsPayload = {
+    // 3. Fetch fresh challenge from backend (never hardcoded)
+    console.log('[WebAuthn Debug] Fetching fresh challenge from /api/auth/face-unlock/register-options', {
       userId: cleanUserId,
       userName: cleanEmail,
       userDisplayName: cleanName,
-      rpId: rpId,
+      rpId,
       origin: window.location.origin
-    };
+    });
 
-    const registrationOptionEndpoints = [
-      '/api/auth/face-unlock/register-options',
-      '/api/webauthn/register/options',
-      '/api/webauthn/generate-registration-options'
-    ];
+    const optionsResp = await fetch('/api/auth/face-unlock/register-options', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: cleanUserId,
+        userName: cleanEmail,
+        userDisplayName: cleanName,
+        rpId: rpId,
+        origin: window.location.origin
+      }),
+      signal
+    });
 
-    let optionsResp: Response | null = null;
-    let lastErrorMsg = '';
-
-    for (const endpoint of registrationOptionEndpoints) {
-      try {
-        console.log(`[WebAuthn Debug] Requesting registration options from ${endpoint}...`, optionsPayload);
-        const resp = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(optionsPayload),
-          signal
-        });
-
-        if (resp.ok) {
-          optionsResp = resp;
-          break;
-        } else if (resp.status === 405) {
-          // If server rejects POST with 405 Method Not Allowed, immediately retry with GET
-          console.warn(`[WebAuthn Debug] Endpoint ${endpoint} returned 405, retrying with GET...`);
-          const queryParams = new URLSearchParams({
-            userId: cleanUserId,
-            userName: cleanEmail,
-            userDisplayName: cleanName,
-            rpId: rpId,
-            origin: window.location.origin
-          });
-          const getResp = await fetch(`${endpoint}?${queryParams.toString()}`, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' },
-            credentials: 'include',
-            signal
-          });
-          if (getResp.ok) {
-            optionsResp = getResp;
-            break;
-          } else {
-            const errData = await getResp.json().catch(() => ({}));
-            lastErrorMsg = errData.error || `Server GET returned status ${getResp.status}`;
-          }
-        } else {
-          const errData = await resp.json().catch(() => ({}));
-          lastErrorMsg = errData.error || `Server returned status ${resp.status}`;
-          console.warn(`[WebAuthn Debug] Endpoint ${endpoint} returned ${resp.status}:`, lastErrorMsg);
-          if (resp.status !== 404 && resp.status !== 405) {
-            optionsResp = resp;
-            break;
-          }
-        }
-      } catch (err: any) {
-        if (err.name === 'AbortError') throw err;
-        console.warn(`[WebAuthn Debug] Network error on ${endpoint}:`, err);
-        lastErrorMsg = err.message || 'Network request failed';
-      }
+    if (!optionsResp.ok) {
+      const errData = await optionsResp.json().catch(() => ({}));
+      const errMsg = errData.error || `Server error initializing registration options (status ${optionsResp.status}).`;
+      console.error('[WebAuthn Debug] register-options failed:', optionsResp.status, errMsg);
+      throw new Error(errMsg);
     }
 
-    let optionsJSON: any = null;
-    if (optionsResp && optionsResp.ok) {
-      optionsJSON = await optionsResp.json().catch(() => null);
-    }
-
-    // Fallback: If server endpoints are offline, misconfigured, or returning 405,
-    // generate cryptographically standard WebAuthn challenge client-side so user is never blocked!
+    const optionsJSON = await optionsResp.json();
     if (!optionsJSON || !optionsJSON.challenge) {
-      console.warn('[WebAuthn] Backend options endpoint unavailable or returned 405/404. Generating standard WebAuthn challenge client-side.');
-      const randomChallenge = new Uint8Array(32);
-      window.crypto.getRandomValues(randomChallenge);
-      optionsJSON = {
-        challenge: arrayBufferToBase64Url(randomChallenge.buffer),
-        rp: {
-          name: 'SmartLedgerX',
-          id: rpId
-        },
-        user: {
-          id: arrayBufferToBase64Url(new TextEncoder().encode(cleanUserId).buffer),
-          name: cleanEmail,
-          displayName: cleanName
-        },
-        pubKeyCredParams: [
-          { alg: -7, type: 'public-key' },
-          { alg: -257, type: 'public-key' },
-          { alg: -8, type: 'public-key' }
-        ],
-        timeout: 60000,
-        attestation: 'none',
-        excludeCredentials: [],
-        authenticatorSelection: {
-          authenticatorAttachment: 'platform',
-          residentKey: 'preferred',
-          userVerification: 'required'
-        }
-      };
+      throw new Error('Server returned an invalid or missing challenge.');
     }
 
-    console.log('[WebAuthn Debug] Options prepared for biometric registration:', optionsJSON);
+    console.log('[WebAuthn Debug] Options received from server:', optionsJSON);
 
     // 4. Decode challenge into ArrayBuffer
     const challengeBuffer = base64UrlToArrayBuffer(optionsJSON.challenge);
@@ -679,68 +533,31 @@ export async function registerBiometricCredential(
 
     console.log('[WebAuthn Debug] Sending credential to /api/auth/face-unlock/register-verify...');
 
-    // 8. Backend verification - with automatic fallback
-    const verifyEndpoints = [
-      '/api/auth/face-unlock/register-verify',
-      '/api/webauthn/verify-registration',
-      '/api/webauthn/register/verify'
-    ];
+    // 8. Backend verification - do not report success until server verifies
+    const verifyResp = await fetch('/api/auth/face-unlock/register-verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: cleanUserId,
+        rpId: rpId,
+        origin: window.location.origin,
+        response: registrationResponseJSON
+      }),
+      signal
+    });
 
-    let verifyResp: Response | null = null;
-    let verifyData: any = {};
+    const verifyData = await verifyResp.json().catch(() => ({}));
+    console.log('[WebAuthn Debug] Server verification response status:', verifyResp.status, verifyData);
 
-    const verifyPayload = {
-      userId: cleanUserId,
-      rpId: rpId,
-      origin: window.location.origin,
-      response: registrationResponseJSON
-    };
-
-    for (const vEndpoint of verifyEndpoints) {
-      try {
-        console.log(`[WebAuthn Debug] Verifying registration with ${vEndpoint}...`);
-        const resp = await fetch(vEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(verifyPayload),
-          signal
-        });
-
-        if (resp.ok) {
-          verifyResp = resp;
-          verifyData = await resp.json().catch(() => ({}));
-          break;
-        } else {
-          verifyResp = resp;
-          verifyData = await resp.json().catch(() => ({}));
-          if (resp.status !== 404 && resp.status !== 405) {
-            break;
-          }
-        }
-      } catch (err: any) {
-        if (err.name === 'AbortError') throw err;
-      }
+    if (!verifyResp.ok) {
+      throw new Error(verifyData.error || `Server registration verification failed (status ${verifyResp.status}).`);
     }
 
-    console.log('[WebAuthn Debug] Server verification response status:', verifyResp?.status, verifyData);
-
-    // If server endpoints return 405/404 or network is unavailable,
-    // gracefully complete registration with the native hardware credential
-    if (!verifyResp || !verifyResp.ok || !verifyData?.verified) {
-      console.warn('[WebAuthn] Server verification returned', verifyResp?.status, '- completing local verified registration');
-      verifyData = {
-        verified: true,
-        credential: {
-          id: credential.id,
-          publicKey: clientDataJSON,
-          counter: 0,
-          transports
-        }
-      };
+    if (!verifyData.verified) {
+      throw new Error('Server could not verify the authenticator registration.');
     }
 
-    devLog('Registration verified successfully');
+    devLog('Registration verified successfully by server');
 
     const publicKeyStr = verifyData.credential?.publicKey || '';
 
@@ -822,7 +639,7 @@ export async function authenticateWithBiometrics(
   if (!env.valid) {
     return {
       success: false,
-      error: env.error || 'Face Unlock isn\'t available on this device.',
+      error: 'Face Unlock isn\'t available on this device.',
       errorType: env.errorType,
       isUserCancelled: false
     };
@@ -864,80 +681,27 @@ export async function authenticateWithBiometrics(
   devLog('Authentication ceremony started');
 
   try {
-    // 2. Fetch fresh challenge from backend (with automatic fallback to aliases)
-    const authOptionsEndpoints = [
-      '/api/auth/face-unlock/auth-options',
-      '/api/webauthn/generate-authentication-options',
-      '/api/webauthn/authenticate/options'
-    ];
-
-    let optionsResp: Response | null = null;
-    let authErrData: any = {};
-
-    const authPayload = {
-      userId: cleanUserId,
-      rpId: rpId,
-      origin: window.location.origin,
-      allowCredentials: allowList
-    };
-
-    for (const aEndpoint of authOptionsEndpoints) {
-      try {
-        const resp = await fetch(aEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(authPayload),
-          signal
-        });
-
-        if (resp.ok) {
-          optionsResp = resp;
-          break;
-        } else if (resp.status === 405) {
-          // If server rejects POST with 405, immediately retry with GET
-          const queryParams = new URLSearchParams({
-            userId: cleanUserId,
-            rpId: rpId,
-            origin: window.location.origin
-          });
-          const getResp = await fetch(`${aEndpoint}?${queryParams.toString()}`, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' },
-            credentials: 'include',
-            signal
-          });
-          if (getResp.ok) {
-            optionsResp = getResp;
-            break;
-          }
-        } else {
-          optionsResp = resp;
-          authErrData = await resp.json().catch(() => ({}));
-          if (resp.status !== 404 && resp.status !== 405) {
-            break;
-          }
-        }
-      } catch (err: any) {
-        if (err.name === 'AbortError') throw err;
-      }
-    }
-
-    let optionsJSON: any = null;
-    if (optionsResp && optionsResp.ok) {
-      optionsJSON = await optionsResp.json().catch(() => null);
-    }
-
-    if (!optionsJSON || !optionsJSON.challenge) {
-      console.warn('[WebAuthn] Backend auth options unavailable. Using client standard challenge.');
-      const randomChallenge = new Uint8Array(32);
-      window.crypto.getRandomValues(randomChallenge);
-      optionsJSON = {
-        challenge: arrayBufferToBase64Url(randomChallenge.buffer),
+    // 2. Fetch fresh challenge from backend
+    const optionsResp = await fetch('/api/auth/face-unlock/auth-options', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: cleanUserId,
         rpId: rpId,
-        timeout: 60000,
+        origin: window.location.origin,
         allowCredentials: allowList
-      };
+      }),
+      signal
+    });
+
+    if (!optionsResp.ok) {
+      const errData = await optionsResp.json().catch(() => ({}));
+      throw new Error(errData.error || 'Server error initializing authentication options.');
+    }
+
+    const optionsJSON = await optionsResp.json();
+    if (!optionsJSON || !optionsJSON.challenge) {
+      throw new Error('Server returned an invalid challenge.');
     }
 
     // 3. Decode every Base64URL field into ArrayBuffer

@@ -19,16 +19,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     localStorage.setItem('smart_ledger_theme', theme);
-    const root = document.documentElement;
-    root.setAttribute('data-theme', theme);
     if (theme === 'dark') {
-      root.classList.add('dark');
-      root.classList.remove('light');
-      root.style.colorScheme = 'dark';
+      document.documentElement.classList.add('dark');
+      document.documentElement.style.colorScheme = 'dark';
     } else {
-      root.classList.remove('dark');
-      root.classList.add('light');
-      root.style.colorScheme = 'light';
+      document.documentElement.classList.remove('dark');
+      document.documentElement.style.colorScheme = 'light';
     }
   }, [theme]);
 

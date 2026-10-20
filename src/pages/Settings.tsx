@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
 import { useToast } from '../context/ToastContext';
-import { Download, Upload, Wallet, Trash2, Lock, Shield, Mail, Smartphone, Globe, User, Search, CheckCircle, Send, Loader2, Cloud, Database, ArrowUpRight, Bell, Receipt, ScanFace, X, Info, AlertCircle, Clock } from 'lucide-react';
+import { Download, Upload, Wallet, Trash2, Lock, Shield, Mail, Smartphone, Globe, User, Search, CheckCircle, Send, Loader2, Cloud, Database, ArrowUpRight, Bell, Receipt, ScanFace, X, Info, AlertCircle, Clock, Sun, Moon } from 'lucide-react';
 import { ReceivedMoney } from '../types';
 import { motion } from 'motion/react';
 import { cn, formatDate } from '../lib/utils';
@@ -16,11 +16,13 @@ import SettingsSection from '../components/settings/SettingsSection';
 import SettingsItem from '../components/settings/SettingsItem';
 import Switch from '../components/settings/Switch';
 import NotificationSettingsModal from '../components/notifications/NotificationSettingsModal';
+import { useTheme } from '../components/ui/ThemeProvider';
 
 import IdentityCard from '../components/IdentityCard';
 
 export default function Settings() {
   const store = useStore();
+  const { theme, toggleTheme } = useTheme();
   const { showSuccess, showError, showInfo } = useToast();
   const navigate = useNavigate();
   const { 
@@ -281,19 +283,39 @@ export default function Settings() {
     <div className="w-full max-w-3xl mx-auto space-y-8">
             
             {/* Header */}
-            <div className="flex items-center justify-between mb-6 sm:mb-10">
-                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Settings</h1>
+            <div className="flex items-center justify-between mb-4 sm:mb-8">
+                <div>
+                  <div className="text-xs font-bold text-[var(--md-sys-color-primary)] uppercase tracking-wider mb-1">
+                    System & Preferences
+                  </div>
+                  <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--md-sys-color-on-surface)]">Settings</h1>
+                </div>
             </div>
 
-            <div className="sticky top-4 z-10 mb-8">
-                <div className="flex items-center gap-3 px-4 py-3 bg-neutral-900/80 backdrop-blur-xl border border-white/5 rounded-[18px] focus-within:border-indigo-500/50 transition-all">
-                    <Search className="text-slate-500" size={20}/>
-                    <input type="text" placeholder="Search settings..." className="w-full bg-transparent text-slate-100 placeholder:text-slate-500 focus:outline-none"/>
+            <div className="sticky top-4 z-10 mb-6">
+                <div className="flex items-center gap-3 px-4 py-2.5 bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)]/40 rounded-full focus-within:border-[var(--md-sys-color-primary)] transition-all shadow-xs">
+                    <Search className="text-[var(--md-sys-color-outline)]" size={18}/>
+                    <input type="text" placeholder="Search settings..." className="w-full bg-transparent text-[var(--md-sys-color-on-surface)] placeholder-[var(--md-sys-color-outline)] text-sm focus:outline-none"/>
                 </div>
             </div>
 
             {/* Sections */}
             <div className="space-y-6">
+                {/* Appearance / Theme */}
+                <SettingsSection title="Appearance" delay={0.05}>
+                    <SettingsItem 
+                      icon={theme === 'dark' ? Moon : Sun} 
+                      title="Dark Mode" 
+                      description={theme === 'dark' ? "Material 3 Dark Theme active" : "Material 3 Light Theme active"} 
+                      action={
+                        <Switch 
+                          checked={theme === 'dark'} 
+                          onChange={() => toggleTheme()} 
+                        />
+                      } 
+                    />
+                </SettingsSection>
+
                 <SettingsSection title="General" delay={0.1}>
                     <SettingsItem icon={Wallet} title="Starting Balance" description={`Current: ₹${startingBalance}`} onClick={() => { const val = prompt("Enter new starting balance:", startingBalance.toString()); if (val) setStartingBalance(Number(val)); }} />
                     <SettingsItem icon={Globe} title="Timezone" description={generalSettings?.timezone || 'Asia/Kolkata'} />
@@ -375,13 +397,13 @@ export default function Settings() {
                         <input 
                           type="email" 
                           placeholder="example@gmail.com" 
-                          className="flex-1 bg-neutral-800 border border-white/5 rounded-[12px] px-4 py-2 text-sm focus:outline-none focus:border-indigo-500/50"
+                          className="flex-1 bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)]/40 rounded-full px-4 py-2 text-sm text-[var(--md-sys-color-on-surface)] placeholder-[var(--md-sys-color-outline)] focus:outline-none focus:border-[var(--md-sys-color-primary)] transition-all"
                           value={emailInput}
                           onChange={(e) => setEmailInput(e.target.value)}
                         />
                         <button 
                           onClick={handleSaveEmail}
-                          className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-[12px] transition-colors"
+                          className="m3-btn-filled text-xs font-semibold px-4 py-2 rounded-full cursor-pointer shadow-xs"
                         >
                           Save
                         </button>
@@ -389,7 +411,7 @@ export default function Settings() {
                           onClick={handleSendManualReport}
                           disabled={isSending}
                           title="Send Monthly Report Now"
-                          className="bg-neutral-800 hover:bg-neutral-700 text-white p-2 rounded-[12px] transition-colors border border-white/5 disabled:opacity-50"
+                          className="bg-[var(--md-sys-color-surface-container-high)] hover:bg-[var(--md-sys-color-surface-container-highest)] text-[var(--md-sys-color-on-surface)] p-2.5 rounded-full transition-colors border border-[var(--md-sys-color-outline-variant)]/40 disabled:opacity-50 cursor-pointer shadow-xs"
                         >
                           {isSending ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
                         </button>

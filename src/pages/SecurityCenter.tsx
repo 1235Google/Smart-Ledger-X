@@ -47,6 +47,7 @@ import { LoginHistoryEntry, UserDevice } from '../types';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { LocationVerificationCard } from '../components/LocationVerificationCard';
+import { SecurityScanWidget } from '../components/SecurityScanWidget';
 
 type TabType = 'overview' | 'session' | 'devices' | 'history' | 'autologout' | 'pin';
 
@@ -746,6 +747,8 @@ export default function SecurityCenter() {
               transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
               className="space-y-6"
             >
+              <SecurityScanWidget />
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white/[0.03] border border-white/10 rounded-3xl p-6 shadow-xl backdrop-blur-md">
                   <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">

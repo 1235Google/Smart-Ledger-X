@@ -338,17 +338,16 @@ export default function Settings() {
                       icon={ScanFace} 
                       title="Face Unlock & Biometrics" 
                       description={securitySettings.faceUnlockEnabled ? "Face Unlock is Active (Native Face ID / Windows Hello)" : "Configure Face ID, Windows Hello, or Passkeys"} 
-                      onClick={() => setShowBiometricModal(true)}
+                      onClick={() => navigate('/face-unlock')}
                       action={
-                        securitySettings.faceUnlockEnabled ? (
-                          <span className="px-2.5 py-1 text-xs font-semibold rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
-                            Active
-                          </span>
-                        ) : (
-                          <span className="px-2.5 py-1 text-xs font-semibold rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                            Configure
-                          </span>
-                        )
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); navigate('/face-unlock'); }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)] hover:opacity-90 transition-opacity"
+                        >
+                          {securitySettings.faceUnlockEnabled ? "Manage" : "Set Up"}
+                          <ArrowUpRight size={14} />
+                        </button>
                       }
                     />
                 </SettingsSection>

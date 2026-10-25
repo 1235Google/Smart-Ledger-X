@@ -23,6 +23,7 @@ import {
   ArrowDownLeft,
   Target,
   Lock,
+  ScanFace,
   FileSpreadsheet,
   History,
   FolderSync,
@@ -88,6 +89,7 @@ const navCategories = [
     items: [
       { icon: Bell, label: 'Alerts', path: '/notifications', isDueTab: false },
       { icon: ShieldCheck, label: 'Security', path: '/security', isDueTab: false },
+      { icon: ScanFace, label: 'Face Unlock', path: '/face-unlock', isDueTab: false },
       { icon: Cloud, label: 'Cloud Sync', path: '/backup', isDueTab: false },
       { icon: User, label: 'Profile', path: '/profile', isDueTab: false },
       { icon: Settings, label: 'Settings', path: '/settings', isDueTab: false },

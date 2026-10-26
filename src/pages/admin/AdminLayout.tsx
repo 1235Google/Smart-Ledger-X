@@ -117,6 +117,7 @@ function AdminLayoutInner() {
 
   const navItems = [
     { label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
+    { label: 'Security & MFA', path: '/admin/security', icon: Shield },
     { label: 'User Management', path: '/admin/users', icon: Users },
     { label: 'Transactions', path: '/admin/ledger', icon: Wallet },
     { label: 'Gullak Savings', path: '/admin/gullak', icon: PiggyBank },

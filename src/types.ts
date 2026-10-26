@@ -589,7 +589,14 @@ export interface NotificationSettings {
   updatedAt?: string;
 }
 
-export type AdminRole = 'Owner' | 'Super Admin' | 'Admin' | 'Manager';
+export type AdminRole = 
+  | 'Owner' 
+  | 'Super Admin' 
+  | 'Security Admin' 
+  | 'Support Admin' 
+  | 'Analytics Admin' 
+  | 'Admin' 
+  | 'Manager';
 export type AdminStatus = 'Active' | 'Disabled';
 
 export interface AdminUser {

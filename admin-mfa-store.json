@@ -1,0 +1,106 @@
+{
+  "admins": {
+    "admin@smartledgerx.io": {
+      "uid": "admin_master_001",
+      "email": "admin@smartledgerx.io",
+      "role": "Super Admin",
+      "mfaEnabled": true,
+      "createdAt": "2026-10-26T01:59:10.392Z",
+      "lastLogin": "2026-10-26T01:59:10.392Z",
+      "displayName": "SmartLedgerX Master Admin",
+      "department": "Global Security & Operations"
+    },
+    "souvikbbsr811@gmail.com": {
+      "uid": "admin_souvik_001",
+      "email": "souvikbbsr811@gmail.com",
+      "role": "Super Admin",
+      "mfaEnabled": true,
+      "createdAt": "2026-10-26T01:59:10.392Z",
+      "lastLogin": "2026-10-26T01:59:10.392Z",
+      "displayName": "Souvik Dash (Lead)",
+      "department": "Executive Administration"
+    },
+    "souvikdashbbsr@gmail.com": {
+      "uid": "admin_souvik_002",
+      "email": "souvikdashbbsr@gmail.com",
+      "role": "Security Admin",
+      "mfaEnabled": true,
+      "createdAt": "2026-10-26T01:59:10.392Z",
+      "lastLogin": "2026-10-26T01:59:10.392Z",
+      "displayName": "Souvik Security",
+      "department": "Security & Compliance"
+    }
+  },
+  "mfaSessions": {
+    "mfa_sess_1792979967717_36f8621153dae3786b3961a6dbc2e3f9": {
+      "tempSessionId": "mfa_sess_1792979967717_36f8621153dae3786b3961a6dbc2e3f9",
+      "uid": "admin_master_001",
+      "email": "admin@smartledgerx.io",
+      "codeHash": "7dfb2f45b7f4684e0f91ec7049a4c91c696bb06b1501f81161222e0c8c929af0",
+      "expiresAt": 1792980267717,
+      "attempts": 1,
+      "maxAttempts": 5,
+      "verified": false,
+      "createdAt": "2026-10-26T01:59:27.717Z",
+      "lastSentAt": 1792979967717,
+      "ip": "127.0.0.1",
+      "deviceFingerprint": "test_fp_1",
+      "device": "Unknown (Unknown OS)",
+      "browser": "Web Browser Unavailable",
+      "location": "Secure Location"
+    }
+  },
+  "sessions": {},
+  "trustedDevices": {},
+  "auditLogs": [
+    {
+      "id": "audit_1792979973214_7b8a9dde",
+      "event": "ADMIN_MFA_FAILED",
+      "uid": "admin_master_001",
+      "email": "admin@smartledgerx.io",
+      "ip": "127.0.0.1",
+      "userAgent": "curl/7.88.1",
+      "timestamp": "2026-10-26T01:59:33.214Z",
+      "metadata": {
+        "attemptNumber": 1,
+        "remainingAttempts": 4,
+        "tempSessionId": "mfa_sess_1792979967717_36f8621153dae3786b3961a6dbc2e3f9"
+      }
+    },
+    {
+      "id": "audit_1792979967728_0b6963a7",
+      "event": "ADMIN_MFA_CHALLENGE_ISSUED",
+      "uid": "admin_master_001",
+      "email": "admin@smartledgerx.io",
+      "ip": "127.0.0.1",
+      "userAgent": "curl/7.88.1",
+      "timestamp": "2026-10-26T01:59:27.728Z",
+      "metadata": {
+        "tempSessionId": "mfa_sess_1792979967717_36f8621153dae3786b3961a6dbc2e3f9",
+        "expiresInMinutes": 5,
+        "device": "Unknown (Unknown OS)"
+      }
+    },
+    {
+      "id": "audit_1792979962676_8c4edc2c",
+      "event": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "uid": "hacker_123",
+      "email": "unauthorized_hacker@gmail.com",
+      "ip": "127.0.0.1",
+      "userAgent": "curl/7.88.1",
+      "timestamp": "2026-10-26T01:59:22.677Z",
+      "metadata": {
+        "reason": "Email not present in admin allowlist",
+        "device": "Web Browser on Unknown OS",
+        "location": "Unknown"
+      }
+    }
+  ],
+  "securityState": {
+    "portalLocked": false,
+    "lockedAt": null,
+    "lockedBy": null,
+    "reason": null,
+    "unlockMfaRequired": true
+  }
+}

@@ -19,6 +19,20 @@ import {
   verifySessionToken, 
   invalidateSessionToken 
 } from "./src/server/admin-auth";
+import {
+  initiateAdminLogin,
+  verifyMfaCode,
+  resendMfaCode,
+  extractSessionTokenFromRequest,
+  verifyAdminSessionToken,
+  authenticateAdminRequest,
+  revokeSession,
+  revokeTrustedDevice,
+  triggerEmergencyLockdown,
+  liftEmergencyLockdown,
+  getSecurityOverviewData,
+  requireAdminRole
+} from "./src/server/admin-mfa-service";
 import { generateRegistrationOptions, verifyRegistrationResponse, generateAuthenticationOptions, verifyAuthenticationResponse } from '@simplewebauthn/server';
 import * as crypto from "crypto";
 import * as fs from "fs";
@@ -43,7 +57,9 @@ import {
   sendPasswordChangeEmail,
   sendNewDeviceEmail,
   sendFailedAttemptsEmail,
-  sendTestSecurityEmail
+  sendTestSecurityEmail,
+  initializeEmailService,
+  getEmailServiceStatus
 } from "./src/server/resend-service";
 import {
   initJobsStorage,
@@ -80,6 +96,9 @@ import { generateScanPdf } from "./src/server/security-report-generator";
 
 // Load environment variables from .env file with override enabled
 dotenv.config({ override: true });
+
+// Check and log email service initialization status
+initializeEmailService();
 
 console.log('[Time] Server UTC time:', new Date().toISOString());
 console.log('[Time] Server timezone: UTC');
@@ -1211,8 +1230,22 @@ app.get("/api/admin/check", async (req, res) => {
     }
   });
 
-  // --- Authoritative Scheduled Background Jobs API Endpoints ---
-  async function verifyAdminAuth(req: express.Request): Promise<{ authorized: boolean; email: string; uid: string }> {
+  // --- Authoritative Admin Authentication Verification ---
+  async function verifyAdminAuth(req: express.Request): Promise<{ authorized: boolean; email: string; uid: string; role?: string }> {
+    // 1. Check Bank-Grade Admin Session Token (via HttpOnly Cookie or Bearer Header)
+    const sessionToken = extractSessionTokenFromRequest(req);
+    if (sessionToken) {
+      const verify = verifyAdminSessionToken(sessionToken);
+      if (verify.valid && verify.session) {
+        return {
+          authorized: true,
+          email: verify.session.email,
+          uid: verify.session.uid,
+          role: verify.session.role
+        };
+      }
+    }
+
     const authHeader = req.headers.authorization;
     const idToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : "";
     let isAuthorized = false;
@@ -2515,8 +2548,8 @@ app.get("/api/admin/check", async (req, res) => {
 
       // 5. Audit System Health & Scheduler
       const safety = inspectSystemSafety();
-      const healthScore = safety.safe ? 99 : 92;
-      const healthDetail = safety.safe 
+      const healthScore = safety.safeToProceed ? 99 : 92;
+      const healthDetail = safety.safeToProceed 
         ? 'Scheduler daemons operational, memory clean' 
         : 'Minor operational warning detected in scheduler';
 
@@ -2852,6 +2885,249 @@ app.get("/api/admin/check", async (req, res) => {
       const { userId, sessionId } = req.body;
       io.to(`user_${userId}`).emit('session_activity', { sessionId, lastActive: Date.now() });
       res.json({ success: true });
+  });
+
+  // =========================================================================
+  // BANK-GRADE MULTI-FACTOR AUTHENTICATION (MFA) & ADMIN SECURITY ENDPOINTS
+  // =========================================================================
+
+  // 1. Google OAuth Allowlist & MFA Challenge Initiation
+  app.post("/api/admin/auth/google-init", async (req, res) => {
+    try {
+      const { email, uid, idToken, deviceFingerprint, trustedDeviceToken, deviceName } = req.body;
+      if (!email) {
+        return res.status(400).json({ success: false, error: "Missing administrator email address.", code: "MISSING_EMAIL" });
+      }
+
+      // If idToken is provided, verify it with Firebase Identity Toolkit
+      if (idToken) {
+        const verify = await verifyFirebaseIdToken(idToken, firebaseApiKey);
+        if (!verify.valid) {
+          return res.status(401).json({ success: false, error: "Firebase token verification rejected.", code: "INVALID_FIREBASE_TOKEN" });
+        }
+      }
+
+      const result = await initiateAdminLogin(req, email, uid || 'admin', {
+        deviceFingerprint: deviceFingerprint || 'standard_browser_fp',
+        trustedDeviceToken,
+        deviceName
+      });
+
+      if (!result.success) {
+        const statusCode = result.code === 'PORTAL_LOCKED' ? 403 : result.code === 'EMAIL_DELIVERY_FAILED' ? 422 : 400;
+        return res.status(statusCode).json(result);
+      }
+
+      // If trusted device bypassed MFA, issue session cookie directly
+      if (!result.mfaRequired && result.sessionToken) {
+        res.cookie('admin_session', result.sessionToken, {
+          httpOnly: true,
+          secure: true,
+          sameSite: 'lax',
+          maxAge: 12 * 60 * 60 * 1000,
+          path: '/'
+        });
+      }
+
+      return res.json(result);
+    } catch (err: any) {
+      console.error("[AdminMFA API] Error in /google-init:", err);
+      return res.status(500).json({ success: false, error: err.message || "Failed to initiate admin login" });
+    }
+  });
+
+  // Diagnostic Endpoint: Check Live Email Provider Status & Verified Domains
+  app.get("/api/admin/auth/email-service-status", async (req, res) => {
+    try {
+      const status = await getEmailServiceStatus();
+      return res.json({ success: true, ...status });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || 'Failed to check email service status' });
+    }
+  });
+
+  // 2. Verify 6-digit MFA Code
+  app.post("/api/admin/auth/verify-mfa", async (req, res) => {
+    try {
+      const { tempSessionId, code, rememberDevice, deviceFingerprint, deviceName } = req.body;
+      if (!tempSessionId || !code) {
+        return res.status(400).json({ success: false, error: "Missing verification session or 6-digit code." });
+      }
+
+      const result = await verifyMfaCode(tempSessionId, code, req, {
+        rememberDevice: Boolean(rememberDevice),
+        deviceFingerprint: deviceFingerprint || 'device_fp',
+        deviceName
+      });
+
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      // Set HttpOnly admin session cookie
+      res.cookie('admin_session', result.sessionToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'lax',
+        maxAge: 12 * 60 * 60 * 1000,
+        path: '/'
+      });
+
+      if (result.trustedDeviceToken) {
+        res.cookie('admin_trusted_device', result.trustedDeviceToken, {
+          httpOnly: true,
+          secure: true,
+          sameSite: 'lax',
+          maxAge: 30 * 24 * 60 * 60 * 1000,
+          path: '/'
+        });
+      }
+
+      return res.json(result);
+    } catch (err: any) {
+      console.error("[AdminMFA API] Error in /verify-mfa:", err);
+      return res.status(500).json({ success: false, error: err.message || "MFA verification failed" });
+    }
+  });
+
+  // 3. Resend 6-digit MFA Code (Rate limited to 60s cooldown)
+  app.post("/api/admin/auth/resend-mfa", async (req, res) => {
+    try {
+      const { tempSessionId } = req.body;
+      if (!tempSessionId) {
+        return res.status(400).json({ success: false, error: "Missing temporary session identifier." });
+      }
+
+      const result = await resendMfaCode(tempSessionId, req);
+      if (!result.success) {
+        return res.status(429).json(result);
+      }
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message || "Failed to resend MFA code" });
+    }
+  });
+
+  // 4. Validate Current Admin Session
+  app.get("/api/admin/auth/session", async (req, res) => {
+    const result = await authenticateAdminRequest(req);
+    if (result.valid && result.session) {
+      res.cookie('admin_session', result.session.sessionToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'lax',
+        maxAge: 12 * 60 * 60 * 1000,
+        path: '/'
+      });
+    }
+    return res.json({
+      valid: result.valid,
+      admin: result.admin,
+      session: result.session ? {
+        sessionId: result.session.sessionId,
+        email: result.session.email,
+        role: result.session.role,
+        createdAt: result.session.createdAt,
+        expiresAt: result.session.expiresAt
+      } : null,
+      error: result.error,
+      code: result.code
+    });
+  });
+
+  // 5. Admin Sign Out
+  app.post("/api/admin/auth/logout", async (req, res) => {
+    const verified = await authenticateAdminRequest(req);
+    if (verified.valid && verified.session) {
+      await revokeSession(verified.session.sessionId, verified.session.email);
+    }
+    res.clearCookie('admin_session', { path: '/' });
+    res.clearCookie('admin_token', { path: '/' });
+    return res.json({ success: true, message: "Logged out of admin session." });
+  });
+
+  // 6. Security Center Overview
+  app.get("/api/admin/security/overview", async (req, res) => {
+    const verified = await authenticateAdminRequest(req);
+    if (!verified.valid || !verified.session) {
+      return res.status(401).json({ 
+        success: false, 
+        error: verified.error || "Authentication required. No session token provided.", 
+        code: verified.code || "NO_TOKEN" 
+      });
+    }
+
+    // Refresh / set cookie on successful authentication
+    res.cookie('admin_session', verified.session.sessionToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      maxAge: 12 * 60 * 60 * 1000,
+      path: '/'
+    });
+
+    const overview = getSecurityOverviewData(verified.session.sessionToken);
+    return res.json({ success: true, overview, currentAdmin: verified.admin });
+  });
+
+  // 7. Revoke Session
+  app.post("/api/admin/security/revoke-session", async (req, res) => {
+    const verified = await authenticateAdminRequest(req);
+    if (!verified.valid || !verified.session) {
+      return res.status(401).json({ success: false, error: "Unauthorized: Invalid administrator session" });
+    }
+
+    const { sessionId } = req.body;
+    if (!sessionId) return res.status(400).json({ success: false, error: "Missing sessionId parameter" });
+
+    const success = await revokeSession(sessionId, verified.session.email);
+    return res.json({ success });
+  });
+
+  // 8. Revoke Trusted Device
+  app.post("/api/admin/security/revoke-trusted-device", async (req, res) => {
+    const verified = await authenticateAdminRequest(req);
+    if (!verified.valid || !verified.session) {
+      return res.status(401).json({ success: false, error: "Unauthorized: Invalid administrator session" });
+    }
+
+    const { deviceId } = req.body;
+    if (!deviceId) return res.status(400).json({ success: false, error: "Missing deviceId parameter" });
+
+    const success = await revokeTrustedDevice(deviceId, verified.session.email);
+    return res.json({ success });
+  });
+
+  // 9. Emergency Security Lockdown (Requires Super Admin or Security Admin)
+  app.post("/api/admin/security/lockdown", async (req, res) => {
+    const verified = await authenticateAdminRequest(req);
+    if (!verified.valid || !verified.session) {
+      return res.status(401).json({ success: false, error: "Unauthorized: Invalid administrator session" });
+    }
+
+    if (!['Super Admin', 'Security Admin', 'Owner'].includes(verified.session.role)) {
+      return res.status(403).json({ success: false, error: "Emergency Lockdown requires Super Admin or Security Admin privileges" });
+    }
+
+    const { reason } = req.body;
+    const result = await triggerEmergencyLockdown(verified.session.email, reason || 'Manual Emergency Lockdown triggered from Security Console');
+    return res.json({ success: true, ...result });
+  });
+
+  // 10. Lift Emergency Lockdown (Super Admin Only)
+  app.post("/api/admin/security/unlock", async (req, res) => {
+    const verified = await authenticateAdminRequest(req);
+    if (!verified.valid || !verified.session) {
+      return res.status(401).json({ success: false, error: "Unauthorized: Invalid administrator session" });
+    }
+
+    if (!['Super Admin', 'Owner'].includes(verified.session.role)) {
+      return res.status(403).json({ success: false, error: "Unlocking portal requires Super Admin privileges" });
+    }
+
+    const { reason } = req.body;
+    const result = await liftEmergencyLockdown(verified.session.email, reason || 'Emergency Lockdown lifted by Super Admin');
+    return res.json({ success: true, ...result });
   });
 
 if (!process.env.VERCEL) {

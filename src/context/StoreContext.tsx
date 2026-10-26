@@ -945,19 +945,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    const token = sessionStorage.getItem('smartledger-admin-session');
+    const token = 
+      sessionStorage.getItem('smartledger-admin-session') || 
+      localStorage.getItem('smartledger-admin-session');
+
     if (token) {
-      fetch('/api/admin/verify-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token })
+      fetch('/api/admin/auth/session', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-admin-session': token
+        },
+        credentials: 'include'
       })
       .then(res => res.json())
       .then(data => {
-        if (!data.valid) {
-          setIsAdminAuthenticated(false);
-          sessionStorage.removeItem('smartledger-admin-auth');
-          sessionStorage.removeItem('smartledger-admin-session');
+        if (data.valid && data.admin) {
+          setAdminUser(data.admin);
+          setIsAdminAuthenticated(true);
         }
       })
       .catch(() => {});

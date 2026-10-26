@@ -4,6 +4,7 @@ export interface BiometricSupportStatus {
   supported: boolean;
   platformAvailable: boolean;
   reason?: string;
+  isEmbedded?: boolean;
 }
 
 export interface WebAuthnErrorResult {

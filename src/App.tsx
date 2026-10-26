@@ -52,6 +52,8 @@ const AdminAlerts = lazy(() => import('./pages/admin/AdminAlerts'));
 const AdminRecycleBin = lazy(() => import('./pages/admin/AdminRecycleBin'));
 const AdminTrustedDevices = lazy(() => import('./pages/admin/AdminTrustedDevices'));
 const AdminUserProfile = lazy(() => import('./pages/admin/AdminUserProfile'));
+const AdminVerifyMfa = lazy(() => import('./pages/admin/AdminVerifyMfa'));
+const AdminSecurityDashboard = lazy(() => import('./pages/admin/AdminSecurityDashboard'));
 
 const Login = lazy(() => import('./pages/Login'));
 
@@ -147,8 +149,19 @@ function AppRoutes() {
             <AdminLogin />
           </PageTransitionWrapper>
         } />
+        <Route path="/admin/login" element={
+          <PageTransitionWrapper routeKey="/admin/login">
+            <AdminLogin />
+          </PageTransitionWrapper>
+        } />
+        <Route path="/admin/verify" element={
+          <PageTransitionWrapper routeKey="/admin/verify">
+            <AdminVerifyMfa />
+          </PageTransitionWrapper>
+        } />
         <Route path="/admin/*" element={<AdminLayout />}>
           <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="security" element={<AdminSecurityDashboard />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="users/:uid" element={<AdminUserProfile />} />
           <Route path="ledger" element={<AdminLedger />} />

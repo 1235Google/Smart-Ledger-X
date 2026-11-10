@@ -17,8 +17,11 @@ import {
   Sparkles,
   Cloud,
   Layers,
-  Key
+  Key,
+  Smartphone,
+  ExternalLink
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../context/StoreContext';
 import { useToast } from '../../context/ToastContext';
 import { cn } from '../../lib/utils';
@@ -27,9 +30,11 @@ import { M3Button } from '../../components/admin/material3/M3Button';
 import { M3TextField } from '../../components/admin/material3/M3TextField';
 import { useM3Theme, M3ThemeMode } from '../../components/admin/material3/M3ThemeContext';
 import { BackupService } from '../../lib/backupService';
+import LinkedDevicesModal from '../../components/LinkedDevicesModal';
 
 export default function AdminSettings() {
   const store = useStore();
+  const navigate = useNavigate();
   const { importData, updateAdminPassword, isAdminAuthenticated, adminUser } = store;
   const { showSuccess, showError, showInfo } = useToast();
   const { mode, setMode, resolvedTheme } = useM3Theme();
@@ -42,6 +47,7 @@ export default function AdminSettings() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showLinkedDevices, setShowLinkedDevices] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -237,6 +243,60 @@ export default function AdminSettings() {
         </form>
       </M3Card>
 
+      {/* Linked Devices & Active Sessions Card */}
+      <M3Card variant="elevated" padding="lg">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-3.5">
+            <div className={cn(
+              'w-10 h-10 rounded-2xl flex items-center justify-center',
+              isDark ? 'bg-[#004a77] text-[#c2e7ff]' : 'bg-[#c2e7ff] text-[#001d35]'
+            )}>
+              <Smartphone size={20} />
+            </div>
+            <div>
+              <h2 className={cn('text-lg font-bold tracking-tight', isDark ? 'text-white' : 'text-[#1f1f1f]')}>
+                Linked Devices & Trusted Sessions
+              </h2>
+              <p className={cn('text-xs', isDark ? 'text-[#8e918f]' : 'text-[#5f6368]')}>
+                Inspect authenticated devices, 30-day remembered sessions, and revoke remote access.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <M3Button
+              variant="tonal"
+              icon={Smartphone}
+              onClick={() => setShowLinkedDevices(true)}
+            >
+              View Linked Devices
+            </M3Button>
+            <M3Button
+              variant="outlined"
+              icon={ExternalLink}
+              onClick={() => navigate('/admin/trusted-devices')}
+            >
+              Manager Page
+            </M3Button>
+          </div>
+        </div>
+
+        <div className={cn(
+          'p-4 rounded-2xl border text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3',
+          isDark ? 'bg-[#1e1f20] border-[#3c4043] text-slate-300' : 'bg-[#f0f4f9] border-[#e1e3e1] text-slate-700'
+        )}>
+          <div className="flex items-center gap-2.5">
+            <ShieldCheck size={18} className="text-emerald-400 shrink-0" />
+            <span>
+              Manage enrolled biometrics, mobile workstations, and automated 30-day MFA bypass tokens.
+            </span>
+          </div>
+          <span className="text-[11px] font-semibold text-emerald-400 shrink-0 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+            Hardware Enforced
+          </span>
+        </div>
+      </M3Card>
+
       {/* Manual File Import Card */}
       <M3Card variant="elevated" padding="lg">
         <div className="flex items-center gap-3.5 mb-5">
@@ -274,6 +334,13 @@ export default function AdminSettings() {
           </M3Button>
         </div>
       </M3Card>
+
+      {/* Linked Devices Modal */}
+      <LinkedDevicesModal
+        isOpen={showLinkedDevices}
+        onClose={() => setShowLinkedDevices(false)}
+        isAdminView={true}
+      />
     </div>
   );
 }

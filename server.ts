@@ -103,6 +103,13 @@ import {
   modifyLinkedDevice,
   getPairingAuditLogs
 } from "./src/server/qr-pairing-service";
+import {
+  createQrLoginSession,
+  verifyAndScanQrToken,
+  authorizeQrLoginSession,
+  completeDesktopSession,
+  getQrLoginSessionStatus
+} from "./src/server/qr-login-service";
 
 // Load environment variables from .env file with override enabled
 dotenv.config({ override: true });
@@ -2728,6 +2735,145 @@ app.get("/api/admin/check", async (req, res) => {
         console.log(`[Socket.IO] Client joined QR pairing room: qr_${sessionId}`);
       }
     });
+    socket.on('join_qr_login', (sessionId) => {
+      if (sessionId) {
+        socket.join(`qr_login_${sessionId}`);
+        console.log(`[Socket.IO] Client joined QR login room: qr_login_${sessionId}`);
+      }
+    });
+  });
+
+  // =========================================================================
+  // PRODUCTION QR CODE LOGIN SYSTEM (SmartLedgerX)
+  // =========================================================================
+
+  // 1. Create a secure QR Login Session
+  app.post('/api/auth/qr-login/create', async (req, res) => {
+    try {
+      const clientOrigin = req.body?.origin;
+      const sessionData = await createQrLoginSession(req, clientOrigin);
+      return res.json(sessionData);
+    } catch (err: any) {
+      console.error('[QRLogin] Error creating login session:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Failed to create QR login session' });
+    }
+  });
+
+  // 2. Validate token when Phone Camera scans and opens URL (WAITING -> SCANNED)
+  app.post('/api/auth/qr-login/verify', async (req, res) => {
+    try {
+      const { token, sessionId } = req.body || {};
+      if (!token) {
+        return res.status(400).json({ success: false, error: 'Missing security token' });
+      }
+
+      const result = await verifyAndScanQrToken(token, sessionId, req);
+      if (result.success && result.session) {
+        io.to(`qr_login_${result.session.sessionId}`).emit('qr_login_status', {
+          status: 'SCANNED',
+          sessionId: result.session.sessionId,
+          mobileMetadata: result.session.mobileMetadata
+        });
+      }
+
+      return res.json(result);
+    } catch (err: any) {
+      console.error('[QRLogin] Error validating QR token:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Failed to verify QR token' });
+    }
+  });
+
+  // 3. Authorize QR Session after Phone finishes Google Authentication (SCANNED -> AUTHENTICATED)
+  app.post('/api/auth/qr-login/authorize', async (req, res) => {
+    try {
+      const { sessionId, secureToken, idToken, user } = req.body || {};
+      if (!sessionId || !secureToken || !idToken || !user?.uid) {
+        return res.status(400).json({ success: false, error: 'Missing authorization payload' });
+      }
+
+      const result = await authorizeQrLoginSession({
+        sessionId,
+        secureToken,
+        idToken,
+        user,
+        req
+      });
+
+      if (result.success) {
+        io.to(`qr_login_${sessionId}`).emit('qr_login_status', {
+          status: 'AUTHENTICATED',
+          sessionId,
+          user: {
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            photoURL: user.photoURL
+          },
+          authGrant: result.authGrant
+        });
+      }
+
+      return res.json(result);
+    } catch (err: any) {
+      console.error('[QRLogin] Error authorizing QR session:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Failed to authorize QR login' });
+    }
+  });
+
+  // 4. Desktop burns grant & completes authentication (AUTHENTICATED -> COMPLETED)
+  app.post('/api/auth/qr-login/exchange', async (req, res) => {
+    try {
+      const { sessionId, secureToken, authGrant } = req.body || {};
+      if (!sessionId || !secureToken || !authGrant) {
+        return res.status(400).json({ success: false, error: 'Missing session exchange credentials' });
+      }
+
+      const result = await completeDesktopSession({
+        sessionId,
+        secureToken,
+        authGrant
+      });
+
+      if (result.success) {
+        io.to(`qr_login_${sessionId}`).emit('qr_login_status', {
+          status: 'COMPLETED',
+          sessionId
+        });
+      }
+
+      return res.json(result);
+    } catch (err: any) {
+      console.error('[QRLogin] Error exchanging QR grant:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Failed to complete login exchange' });
+    }
+  });
+
+  // 5. Polling endpoint for session status
+  app.get('/api/auth/qr-login/status/:sessionId', async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      const session = await getQrLoginSessionStatus(sessionId);
+      if (!session) {
+        return res.status(404).json({ success: false, error: 'Session not found' });
+      }
+
+      // Do NOT expose tokenHash or authGrant to unauthenticated polling
+      return res.json({
+        success: true,
+        session: {
+          sessionId: session.sessionId,
+          status: session.status,
+          createdAt: session.createdAt,
+          expiresAt: session.expiresAt,
+          desktopMetadata: session.desktopMetadata,
+          mobileMetadata: session.mobileMetadata,
+          mobileAuthenticatedUser: session.mobileAuthenticatedUser,
+          authGrant: session.status === 'AUTHENTICATED' ? session.authGrant : undefined
+        }
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message || 'Error fetching status' });
+    }
   });
 
   // =========================================================================

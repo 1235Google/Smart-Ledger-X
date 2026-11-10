@@ -57,6 +57,7 @@ const AdminVerifyMfa = lazy(() => import('./pages/admin/AdminVerifyMfa'));
 const AdminSecurityDashboard = lazy(() => import('./pages/admin/AdminSecurityDashboard'));
 
 const Login = lazy(() => import('./pages/Login'));
+const MobileQrLogin = lazy(() => import('./pages/MobileQrLogin'));
 
 import { getDeviceSession } from './lib/deviceAuthSession';
 
@@ -188,6 +189,11 @@ function AppRoutes() {
               <Login />
             </PageTransitionWrapper>
           </LoginRoute>
+        } />
+        <Route path="/auth/mobile-login" element={
+          <PageTransitionWrapper routeKey="/auth/mobile-login">
+            <MobileQrLogin />
+          </PageTransitionWrapper>
         } />
         <Route path="/" element={
           <ProtectedRoute>

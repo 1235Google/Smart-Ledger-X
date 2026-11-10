@@ -1,5 +1,35 @@
 [
   {
+    "id": "auth_qr_1794284147928_d98293",
+    "uid": "usr_enterprise_001",
+    "email": "souvikbbsr811@gmail.com",
+    "eventType": "LOGIN_SUCCESS",
+    "authProvider": "other",
+    "timestamp": "2026-11-10T04:15:47.928Z",
+    "serverTimestampMs": 1794284147927,
+    "ip": "2405:201:a001:c83e:c9f5:9080:b678:b95f",
+    "location": {
+      "city": "Bhubaneswar",
+      "country": "India",
+      "region": null,
+      "source": "approximate_ip",
+      "status": "success"
+    },
+    "device": {
+      "category": "Desktop",
+      "model": "Windows 11 PC",
+      "os": "Windows 11 19.0.0",
+      "osVersion": "",
+      "browser": "Google Chrome 156 156.0.0.0",
+      "browserVersion": "",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
+    },
+    "sessionId": "6a8cd717-63ef-42bd-a222-2e162278552d",
+    "newDevice": true,
+    "authorizationResult": "user",
+    "details": "Authenticated via Secure QR Mobile Device Pairing (Face Unlock)"
+  },
+  {
     "id": "audit_job_toggle_1788620306020_d09e8e",
     "uid": "admin",
     "email": "admin@smartledgerx.io",

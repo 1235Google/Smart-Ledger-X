@@ -18,7 +18,7 @@ import { isSupabaseConfigured } from '../lib/supabase';
 import { recordLoginActivity } from '../lib/securityService';
 import { saveDeviceSession, getDeviceSession } from '../lib/deviceAuthSession';
 import { authenticateWithBiometrics } from '../lib/webauthnService';
-import SecureQrCard from '../components/auth/SecureQrCard';
+import QrLoginCard from '../components/auth/QrLoginCard';
 import MobileQrScannerModal from '../components/auth/MobileQrScannerModal';
 
 export default function Login() {
@@ -355,15 +355,11 @@ export default function Login() {
             </div>
           </div>
 
-          {/* BELOW OPTION TWO: LARGE PREMIUM QR CARD */}
+          {/* BELOW OPTION TWO: LARGE PREMIUM QR CODE LOGIN CARD */}
           {loginTab === 'qr' && (
             <div className="relative z-10 mb-6">
-              <SecureQrCard
+              <QrLoginCard
                 onSuccess={(usr) => navigate('/', { replace: true })}
-                onOpenMobileScanner={(sessId) => {
-                  setScannerPresetSessionId(sessId);
-                  setScannerModalOpen(true);
-                }}
               />
             </div>
           )}

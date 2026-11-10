@@ -461,6 +461,46 @@ service cloud.firestore {
         isAdmin() ||
         request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io']
       );
+    // =========================================================================
+    // QR CODE LOGIN SESSIONS (SECURE TEMPORARY SESSIONS)
+    // =========================================================================
+    match /qr_login_sessions/{sessionId} {
+      // Disallow bulk collection enumeration to eliminate token harvesting
+      allow list: if false;
+
+      // Allow targeted read of a specific session by ID during active lifecycle
+      allow get: if resource == null || (
+        resource.data.status in ['WAITING', 'SCANNED', 'AUTHENTICATED', 'COMPLETED'] &&
+        (
+          // Allow desktop listener while active
+          request.time.toMillis() < resource.data.expiresAt + 60000 ||
+          // Allow authenticated owner
+          (isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.mobileAuthenticatedUser.uid == request.auth.uid)) ||
+          isAdmin()
+        )
+      );
+
+      // Session creation: requires valid initial state & timestamp boundaries
+      allow create: if incoming().sessionId == sessionId &&
+        incoming().status == 'WAITING' &&
+        incoming().expiresAt > request.time.toMillis() &&
+        incoming().createdAt <= request.time.toMillis() + 5000 &&
+        incoming().tokenHash is string &&
+        incoming().desktopSessionId is string;
+
+      // Session update: enforces valid lifecycle transitions only
+      allow update: if 
+        // 1. WAITING -> SCANNED
+        (existing().status == 'WAITING' && incoming().status == 'SCANNED' && incoming().tokenHash == existing().tokenHash) ||
+        // 2. SCANNED -> AUTHENTICATED (Mobile user authenticates via Google)
+        (existing().status in ['WAITING', 'SCANNED'] && incoming().status == 'AUTHENTICATED' &&
+         isSignedIn() && incoming().userId == request.auth.uid) ||
+        // 3. AUTHENTICATED -> COMPLETED (Desktop burns session after login)
+        (existing().status == 'AUTHENTICATED' && incoming().status == 'COMPLETED') ||
+        isAdmin();
+
+      // Deletion restricted to administrative cleanups
+      allow delete: if isAdmin();
     }
   }
 }

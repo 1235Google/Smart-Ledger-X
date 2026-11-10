@@ -93,6 +93,16 @@ import {
 import { db } from "./src/server/db";
 import { createScanJob, getScanRecord, getScanFindings, getScanHistoryList, cancelScanJob, getSmartGuardLogsList } from "./src/server/smartguard-scanner";
 import { generateScanPdf } from "./src/server/security-report-generator";
+import {
+  createQrPairingSession,
+  getQrSessionStatus,
+  recordQrScanned,
+  approveQrSession,
+  rejectQrSession,
+  getUserLinkedDevices,
+  modifyLinkedDevice,
+  getPairingAuditLogs
+} from "./src/server/qr-pairing-service";
 
 // Load environment variables from .env file with override enabled
 dotenv.config({ override: true });
@@ -2712,6 +2722,196 @@ app.get("/api/admin/check", async (req, res) => {
     socket.on('join_user_room', (userId) => {
       if (userId) socket.join(`user_${userId}`);
     });
+    socket.on('join_qr_session', (sessionId) => {
+      if (sessionId) {
+        socket.join(`qr_${sessionId}`);
+        console.log(`[Socket.IO] Client joined QR pairing room: qr_${sessionId}`);
+      }
+    });
+  });
+
+  // =========================================================================
+  // ENTERPRISE SECURE QR DEVICE PAIRING API
+  // =========================================================================
+
+  // 1. Create a cryptographically signed QR pairing session
+  app.post('/api/auth/qr-pair/session', async (req, res) => {
+    try {
+      const sessionData = await createQrPairingSession(req);
+      return res.json({
+        success: true,
+        ...sessionData
+      });
+    } catch (err: any) {
+      console.error('[QrPairing] Error creating session:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Failed to initialize QR session' });
+    }
+  });
+
+  // 2. Query QR session status (for polling fallback & heartbeat)
+  app.get('/api/auth/qr-pair/session/:sessionId', (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      const status = getQrSessionStatus(sessionId);
+      return res.json({
+        success: true,
+        ...status
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 3. Mobile scanner scanned the QR code
+  app.post('/api/auth/qr-pair/scan', (req, res) => {
+    try {
+      const { sessionId, mobileInfo } = req.body;
+      if (!sessionId) {
+        return res.status(400).json({ success: false, error: 'Missing sessionId' });
+      }
+
+      const result = recordQrScanned(sessionId, mobileInfo);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      // Notify desktop over real-time WebSocket channel
+      io.to(`qr_${sessionId}`).emit('qr_scanned', {
+        status: 'scanned',
+        mobileInfo,
+        timestamp: Date.now()
+      });
+
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 4. Mobile approves login with biometric authorization
+  app.post('/api/auth/qr-pair/approve', async (req, res) => {
+    try {
+      const { sessionId, userData, approvalDetails } = req.body;
+      if (!sessionId || !userData?.uid || !userData?.email) {
+        return res.status(400).json({ success: false, error: 'Missing required session or user authentication payload' });
+      }
+
+      if (!approvalDetails?.biometricVerified) {
+        return res.status(403).json({ success: false, error: 'Biometric authorization required to approve desktop login.' });
+      }
+
+      const result = await approveQrSession(sessionId, userData, approvalDetails);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      // Real-time broadcast to Desktop client to trigger instant sign-in
+      io.to(`qr_${sessionId}`).emit('qr_approved', {
+        status: 'approved',
+        sessionToken: result.sessionToken,
+        user: result.user,
+        desktopRedirectUrl: '/',
+        timestamp: Date.now()
+      });
+
+      return res.json(result);
+    } catch (err: any) {
+      console.error('[QrPairing] Error during approval:', err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 5. Mobile rejects login request
+  app.post('/api/auth/qr-pair/reject', (req, res) => {
+    try {
+      const { sessionId, reason } = req.body;
+      if (!sessionId) {
+        return res.status(400).json({ success: false, error: 'Missing sessionId' });
+      }
+
+      const result = rejectQrSession(sessionId, reason || 'User rejected authorization');
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      io.to(`qr_${sessionId}`).emit('qr_rejected', {
+        status: 'rejected',
+        reason: reason || 'Login request was rejected by your mobile device',
+        timestamp: Date.now()
+      });
+
+      return res.json({ success: true });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 6. User Linked Devices list
+  app.get('/api/auth/qr-pair/devices', (req, res) => {
+    try {
+      const uid = (req.query.uid as string) || 'default_user';
+      const devices = getUserLinkedDevices(uid);
+      return res.json({ success: true, devices });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 7. Manage Linked Device (Rename, Revoke, Trust)
+  app.post('/api/auth/qr-pair/devices/manage', (req, res) => {
+    try {
+      const { uid, deviceId, action, value } = req.body;
+      if (!uid || !deviceId || !action) {
+        return res.status(400).json({ success: false, error: 'Missing uid, deviceId or action parameter' });
+      }
+
+      const success = modifyLinkedDevice(uid, deviceId, action, value);
+      return res.json({ success });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 8. Pairing Audit & Login History
+  app.get('/api/auth/qr-pair/logs', (req, res) => {
+    try {
+      const status = req.query.status as string;
+      const uid = req.query.uid as string;
+      const limit = Math.min(Number(req.query.limit) || 100, 200);
+      const logs = getPairingAuditLogs({ status, uid, limit });
+      return res.json({ success: true, logs });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 9. Export Pairing Audit History (CSV format)
+  app.get('/api/auth/qr-pair/logs/export', (req, res) => {
+    try {
+      const logs = getPairingAuditLogs({ limit: 500 });
+      const headers = ['Session ID', 'Timestamp', 'Status', 'Desktop Name', 'OS', 'Browser', 'IP Address', 'Country', 'Location', 'User Email', 'Biometric Used', 'Reason'];
+      const rows = logs.map(l => [
+        `"${l.sessionId}"`,
+        `"${l.timestamp}"`,
+        `"${l.status}"`,
+        `"${(l.desktopName || '').replace(/"/g, '""')}"`,
+        `"${(l.desktopOs || '').replace(/"/g, '""')}"`,
+        `"${(l.desktopBrowser || '').replace(/"/g, '""')}"`,
+        `"${l.ip || ''}"`,
+        `"${l.country || ''}"`,
+        `"${(l.location || '').replace(/"/g, '""')}"`,
+        `"${l.userEmail || ''}"`,
+        `"${l.biometricUsed ? 'Yes' : 'No'}"`,
+        `"${(l.reason || '').replace(/"/g, '""')}"`
+      ]);
+
+      const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="smartledgerx_device_pairing_logs_${Date.now()}.csv"`);
+      return res.send(csv);
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
   });
 
   // Detection Endpoint for Real-Time Client Synchronization

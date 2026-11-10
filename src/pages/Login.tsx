@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
-import { Loader2, Mail, Lock, ArrowRight, CheckCircle2, AlertCircle, ShieldCheck, Wallet, Eye, EyeOff, Sparkles, ScanFace } from 'lucide-react';
+import { Loader2, Mail, Lock, ArrowRight, CheckCircle2, AlertCircle, ShieldCheck, Wallet, Eye, EyeOff, Sparkles, ScanFace, Smartphone } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { 
   loginWithGoogle, 
@@ -18,6 +18,8 @@ import { isSupabaseConfigured } from '../lib/supabase';
 import { recordLoginActivity } from '../lib/securityService';
 import { saveDeviceSession, getDeviceSession } from '../lib/deviceAuthSession';
 import { authenticateWithBiometrics } from '../lib/webauthnService';
+import SecureQrCard from '../components/auth/SecureQrCard';
+import MobileQrScannerModal from '../components/auth/MobileQrScannerModal';
 
 export default function Login() {
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -35,6 +37,9 @@ export default function Login() {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [resetSent, setResetSent] = useState(false);
+  const [loginTab, setLoginTab] = useState<'qr' | 'standard'>('qr');
+  const [scannerModalOpen, setScannerModalOpen] = useState(false);
+  const [scannerPresetSessionId, setScannerPresetSessionId] = useState('');
   const navigate = useNavigate();
 
   // Detect whether Face Unlock is registered on this device
@@ -270,171 +275,242 @@ export default function Login() {
         initial={{ opacity: 0, y: 30, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
-        className="w-full max-w-[420px] relative z-10"
+        className="w-full max-w-[480px] relative z-10 my-8"
       >
-        {/* Polished Card Container */}
-        <div className="relative rounded-[24px] border border-white/10 bg-[#121319]/90 backdrop-blur-2xl shadow-[0_24px_64px_rgba(0,0,0,0.7)] p-8 sm:p-10 overflow-hidden">
-            
-            {/* Card Header */}
-            <div className="mb-8 text-center relative z-10">
-              <h2 className="text-[32px] font-bold tracking-tight text-white mb-2 font-sans">
-                Welcome Back
-              </h2>
-              <p className="text-[13px] text-white/60 font-medium">
-                Sign in to access your encrypted ledger.
-              </p>
+        {/* Error Banner */}
+        <AnimatePresence>
+          {error && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0, y: -10 }}
+              animate={{ opacity: 1, height: 'auto', y: 0 }}
+              exit={{ opacity: 0, height: 0, y: -10 }}
+              className="mb-5 p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-start gap-3 text-rose-300 text-xs backdrop-blur-md relative shadow-lg"
+            >
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+              <span className="leading-relaxed font-medium">{error}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Polished Glassmorphic Container */}
+        <div className="relative rounded-[32px] border border-white/15 bg-[#0e1220]/90 backdrop-blur-2xl shadow-[0_24px_70px_rgba(0,0,0,0.85)] p-6 sm:p-8 overflow-hidden">
+          
+          {/* Card Header & Brand */}
+          <div className="mb-6 text-center relative z-10">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs font-bold tracking-wider uppercase mb-3">
+              <Sparkles size={13} className="text-cyan-400" />
+              <span>SmartLedgerX &bull; Secure Access</span>
             </div>
+            <h2 className="text-[28px] sm:text-[32px] font-extrabold tracking-tight text-white mb-1.5 font-sans">
+              Welcome Back
+            </h2>
+            <p className="text-[13px] text-slate-400 font-medium max-w-xs mx-auto">
+              Choose your preferred method to access your encrypted financial ledger.
+            </p>
+          </div>
 
-            {/* Error Banner */}
-            <AnimatePresence>
-              {error && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0, y: -10 }}
-                  animate={{ opacity: 1, height: 'auto', y: 0 }}
-                  exit={{ opacity: 0, height: 0, y: -10 }}
-                  className="mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-start gap-3 text-rose-300 text-xs backdrop-blur-md z-10 relative shadow-sm"
-                >
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
-                  <span className="leading-relaxed font-medium">{error}</span>
-                </motion.div>
+          {/* TWO PRIMARY OPTIONS AS REQUIRED */}
+          <div className="space-y-3 mb-6 relative z-10">
+            {/* OPTION 1: Continue with Google */}
+            <motion.button
+              whileHover={{ scale: 1.015, y: -1 }}
+              whileTap={{ scale: 0.985 }}
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={googleLoading || loading}
+              className="w-full flex items-center justify-center gap-3 py-3.5 px-4 rounded-2xl text-sm font-bold text-white bg-white/10 hover:bg-white/15 border border-white/15 transition-all duration-300 disabled:opacity-50 shadow-sm"
+            >
+              {googleLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin text-white" />
+              ) : (
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                  <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.9C6.2 7.4 8.9 5 12 5z" />
+                  <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.7-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5.1 3.7-8.9z" />
+                  <path fill="#FBBC05" d="M5.3 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.6 7.4C.6 9.4 0 11.6 0 14s.6 4.6 1.6 6.6l3.7-3.1-.4-2.7z" />
+                  <path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.1 0-5.8-2.4-6.7-5.3L1.6 16C3.5 19.8 7.4 23 12 23z" />
+                </svg>
               )}
-            </AnimatePresence>
+              <span>Continue with Google</span>
+            </motion.button>
 
-            <div className="relative z-10 space-y-5">
-              {/* Face Unlock Biometric Button */}
-              {hasFaceUnlock && (
-                <motion.button
-                  whileHover={{ scale: 1.015, y: -1 }}
-                  whileTap={{ scale: 0.985 }}
-                  type="button"
-                  onClick={handleFaceUnlockLogin}
-                  disabled={biometricLoading || googleLoading || loading}
-                  className="w-full flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 border border-blue-400/30 shadow-[0_4px_20px_rgba(59,130,246,0.3)] transition-all duration-300 disabled:opacity-50"
-                >
-                  {biometricLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-white" />
-                  ) : (
-                    <ScanFace className="w-4 h-4 text-blue-100" />
-                  )}
-                  <span>Sign in with Face Unlock</span>
-                </motion.button>
-              )}
-
-              {/* Google OAuth Button */}
-              <motion.button
-                whileHover={{ scale: 1.015, y: -1 }}
-                whileTap={{ scale: 0.985 }}
+            {/* OPTION 2: Continue using Mobile Device (Recommended) */}
+            <div className="relative">
+              <button
                 type="button"
-                onClick={handleGoogleSignIn}
-                disabled={googleLoading || loading}
-                className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl text-sm font-bold text-white/90 bg-[#1e2029] hover:bg-[#252836] border border-white/5 transition-all duration-300 disabled:opacity-50"
+                onClick={() => setLoginTab('qr')}
+                className={`w-full flex items-center justify-between py-3.5 px-4 rounded-2xl text-sm font-bold transition-all duration-300 border ${
+                  loginTab === 'qr'
+                    ? 'bg-gradient-to-r from-blue-600/30 via-cyan-500/20 to-teal-500/20 border-cyan-400/50 text-white shadow-[0_0_20px_rgba(0,240,255,0.2)]'
+                    : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-300'
+                }`}
               >
-                {googleLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-white/70" />
-                ) : (
-                  <svg className="w-4 h-4" viewBox="0 0 24 24">
-                    <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.9C6.2 7.4 8.9 5 12 5z" />
-                    <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.7-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5.1 3.7-8.9z" />
-                    <path fill="#FBBC05" d="M5.3 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.6 7.4C.6 9.4 0 11.6 0 14s.6 4.6 1.6 6.6l3.7-3.1-.4-2.7z" />
-                    <path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.1 0-5.8-2.4-6.7-5.3L1.6 16C3.5 19.8 7.4 23 12 23z" />
-                  </svg>
-                )}
-                <span>Continue with Google</span>
-              </motion.button>
-
-              {/* Form */}
-              <form onSubmit={handleEmailAuth} className="space-y-4 pt-2">
-                <div>
-                  <label className="block text-xs font-semibold text-white/90 mb-2">Email Address</label>
-                  <div className="relative group">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-white transition-colors">
-                      <Mail className="w-4 h-4" />
-                    </div>
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="name@example.com"
-                      className="w-full pl-11 pr-4 py-3 bg-[#1e2029] border border-white/5 focus:border-white/20 focus:bg-[#252836] rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none transition-all duration-300"
-                    />
-                  </div>
+                <div className="flex items-center gap-2.5">
+                  <Smartphone className="w-4 h-4 text-cyan-400" />
+                  <span>Continue using Mobile Device</span>
                 </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-xs font-semibold text-white/90">Password</label>
-                    <span className="text-xs font-semibold text-[#00f0ff]">Enterprise Vault</span>
-                  </div>
-                  <div className="relative group">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-white transition-colors">
-                      <Lock className="w-4 h-4" />
-                    </div>
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      required
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••••••"
-                      className="w-full pl-11 pr-11 py-3 bg-[#1e2029] border border-white/5 focus:border-white/20 focus:bg-[#252836] rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none transition-all duration-300"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-white transition-colors focus:outline-none"
-                      tabIndex={-1}
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Remember Device & Forgot Password */}
-                <div className="flex items-center justify-between text-xs pt-1 select-none">
-                  <label className="flex items-center gap-2 cursor-pointer text-white/80 hover:text-white transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={rememberDevice}
-                      onChange={(e) => setRememberDevice(e.target.checked)}
-                      className="w-4 h-4 rounded border-white/20 bg-[#1e2029] text-[#00f0ff] focus:ring-0 focus:ring-offset-0 cursor-pointer accent-[#00f0ff]"
-                    />
-                    <span className="text-[12px] font-medium">Keep me signed in on this device</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowForgotModal(true)}
-                    className="text-[12px] font-medium text-[#00f0ff] hover:underline"
-                  >
-                    Forgot?
-                  </button>
-                </div>
-
-                {/* Primary Submit Button */}
-                <div className="pt-4">
-                  <motion.button
-                    whileHover={{ scale: 1.015, y: -1 }}
-                    whileTap={{ scale: 0.985 }}
-                    type="submit"
-                    disabled={loading || googleLoading}
-                    className="w-full relative py-3.5 px-4 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-[#2f5af4] to-[#00f0ff] shadow-[0_10px_30px_-10px_rgba(0,240,255,0.8)] hover:shadow-[0_15px_40px_-10px_rgba(0,240,255,1)] transition-all duration-300 flex items-center justify-center disabled:opacity-50 border border-white/20"
-                  >
-                    {loading ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <span>Sign in &rarr;</span>
-                    )}
-                  </motion.button>
-                </div>
-              </form>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-400 text-slate-950 shadow-sm">
+                  Recommended
+                </span>
+              </button>
             </div>
           </div>
+
+          {/* BELOW OPTION TWO: LARGE PREMIUM QR CARD */}
+          {loginTab === 'qr' && (
+            <div className="relative z-10 mb-6">
+              <SecureQrCard
+                onSuccess={(usr) => navigate('/', { replace: true })}
+                onOpenMobileScanner={(sessId) => {
+                  setScannerPresetSessionId(sessId);
+                  setScannerModalOpen(true);
+                }}
+              />
+            </div>
+          )}
+
+          {/* Alternate Face Unlock / Password Access Accordion */}
+          <div className="relative z-10 pt-2 border-t border-white/10">
+            <div className="flex items-center justify-between text-xs text-slate-400 py-1">
+              <span>Need traditional password access?</span>
+              <button
+                type="button"
+                onClick={() => setLoginTab(loginTab === 'standard' ? 'qr' : 'standard')}
+                className="text-cyan-400 hover:text-cyan-300 font-bold transition-colors underline underline-offset-4"
+              >
+                {loginTab === 'standard' ? 'Back to QR Login' : 'Enter Password'}
+              </button>
+            </div>
+
+            {loginTab === 'standard' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="space-y-4 pt-4"
+              >
+                {/* Face Unlock Biometric Button */}
+                {hasFaceUnlock && (
+                  <button
+                    type="button"
+                    onClick={handleFaceUnlockLogin}
+                    disabled={biometricLoading || googleLoading || loading}
+                    className="w-full flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 border border-blue-400/30 shadow-lg transition-all disabled:opacity-50"
+                  >
+                    {biometricLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    ) : (
+                      <ScanFace className="w-4 h-4 text-blue-100" />
+                    )}
+                    <span>Sign in with Face Unlock</span>
+                  </button>
+                )}
+
+                {/* Form */}
+                <form onSubmit={handleEmailAuth} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-white/90 mb-2">Email Address</label>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-white transition-colors">
+                        <Mail className="w-4 h-4" />
+                      </div>
+                      <input
+                        type="email"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="name@example.com"
+                        className="w-full pl-11 pr-4 py-3 bg-[#1e2029] border border-white/10 focus:border-cyan-400 focus:bg-[#252836] rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none transition-all duration-300"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs font-semibold text-white/90">Password</label>
+                      <span className="text-xs font-semibold text-[#00f0ff]">Enterprise Vault</span>
+                    </div>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-white transition-colors">
+                        <Lock className="w-4 h-4" />
+                      </div>
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••••••"
+                        className="w-full pl-11 pr-11 py-3 bg-[#1e2029] border border-white/10 focus:border-cyan-400 focus:bg-[#252836] rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none transition-all duration-300"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-white transition-colors focus:outline-none"
+                        tabIndex={-1}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Remember Device & Forgot Password */}
+                  <div className="flex items-center justify-between text-xs pt-1 select-none">
+                    <label className="flex items-center gap-2 cursor-pointer text-white/80 hover:text-white transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={rememberDevice}
+                        onChange={(e) => setRememberDevice(e.target.checked)}
+                        className="w-4 h-4 rounded border-white/20 bg-[#1e2029] text-[#00f0ff] focus:ring-0 focus:ring-offset-0 cursor-pointer accent-[#00f0ff]"
+                      />
+                      <span className="text-[12px] font-medium">Keep me signed in on this device</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotModal(true)}
+                      className="text-[12px] font-medium text-[#00f0ff] hover:underline"
+                    >
+                      Forgot?
+                    </button>
+                  </div>
+
+                  {/* Primary Submit Button */}
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={loading || googleLoading}
+                      className="w-full py-3.5 px-4 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-[#2f5af4] to-[#00f0ff] shadow-lg transition-all flex items-center justify-center disabled:opacity-50"
+                    >
+                      {loading ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <span>Sign in &rarr;</span>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            )}
+          </div>
+        </div>
 
         {/* Footer Trust Indicator */}
         <div className="mt-6 flex items-center justify-center gap-2 text-[10px] font-bold text-white/80 tracking-widest uppercase">
           <ShieldCheck className="w-4 h-4 text-[#00f0ff] shrink-0" />
-          <span>End To End Encrypted Cloud Sync</span>
+          <span>End To End Encrypted Cloud Sync &bull; ISO 27001 Grade</span>
         </div>
       </motion.div>
+
+      {/* Mobile QR Camera Scanner / Tester Modal */}
+      <MobileQrScannerModal
+        isOpen={scannerModalOpen}
+        presetSessionId={scannerPresetSessionId}
+        onClose={() => {
+          setScannerModalOpen(false);
+          setScannerPresetSessionId('');
+        }}
+        onLoginApproved={() => {
+          navigate('/', { replace: true });
+        }}
+      />
 
       {/* Forgot Password Modal */}
       <AnimatePresence>

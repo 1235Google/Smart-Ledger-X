@@ -29,6 +29,7 @@ const FaceUnlockPage = lazy(() => import('./pages/FaceUnlockPage'));
 const BackupDashboard = lazy(() => import('./pages/BackupDashboard'));
 const SmartGuardDashboard = lazy(() => import('./components/smartguard/SmartGuardDashboard'));
 const Notifications = lazy(() => import('./pages/Notifications'));
+const LinkedDevices = lazy(() => import('./pages/LinkedDevices'));
 const Help = lazy(() => import('./pages/Help'));
 const About = lazy(() => import('./pages/About'));
 
@@ -177,6 +178,7 @@ function AppRoutes() {
           <Route path="gullak" element={<AdminGullak />} />
           <Route path="recycle-bin" element={<AdminRecycleBin />} />
           <Route path="trusted-devices" element={<AdminTrustedDevices />} />
+          <Route path="linked-devices" element={<LinkedDevices />} />
           <Route path="logs" element={<AdminLogs />} />
           <Route path="settings" element={<AdminSettings />} />
         </Route>
@@ -213,6 +215,7 @@ function AppRoutes() {
           <Route path="smartguard" element={<SmartGuardDashboard />} />
           <Route path="profile" element={<Profile />} />
           <Route path="notifications" element={<Notifications />} />
+          <Route path="linked-devices" element={<LinkedDevices />} />
           <Route path="backup" element={<BackupDashboard />} />
           <Route path="backups" element={<BackupDashboard />} />
           <Route path="help" element={<Help />} />

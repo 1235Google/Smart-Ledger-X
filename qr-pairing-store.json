@@ -1,0 +1,24 @@
+{
+  "activeSessions": {
+    "26d7b75e-2723-42cf-9e81-3710af459b5c": {
+      "sessionId": "26d7b75e-2723-42cf-9e81-3710af459b5c",
+      "desktopName": "Unknown OS Unknown",
+      "deviceType": "laptop",
+      "os": "Unknown OS Unavailable",
+      "browser": "Web Browser Unavailable",
+      "ip": "127.0.0.1",
+      "location": "Local Secured Network",
+      "flagEmoji": "🌐",
+      "userAgent": "curl/7.88.1",
+      "createdAt": 1794282350555,
+      "expiresAt": 1794282470555,
+      "status": "waiting",
+      "nonce": "35f2bd31ad8e04236a32d178adfa7807",
+      "signature": "6ea800c7797e9e91163affb155a6483af56e1617295dcf13ae283fd63241b345",
+      "consumed": false
+    }
+  },
+  "usedNonces": {},
+  "linkedDevices": {},
+  "auditLogs": []
+}

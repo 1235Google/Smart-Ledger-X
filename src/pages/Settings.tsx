@@ -350,6 +350,22 @@ export default function Settings() {
                         </button>
                       }
                     />
+                    <SettingsItem 
+                      icon={Smartphone} 
+                      title="Linked Devices & QR Login" 
+                      description="Manage authorized desktop sessions & scan QR login codes" 
+                      onClick={() => navigate('/linked-devices')}
+                      action={
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); navigate('/linked-devices'); }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 transition-colors"
+                        >
+                          <span>Manage</span>
+                          <ArrowUpRight size={14} />
+                        </button>
+                      }
+                    />
                 </SettingsSection>
                 
                 <SettingsSection title="Notifications & Alerts" delay={0.25}>

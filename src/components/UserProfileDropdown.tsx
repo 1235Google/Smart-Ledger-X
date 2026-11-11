@@ -18,7 +18,7 @@ import {
 import { useStore } from '../context/StoreContext';
 import { useTheme } from './ui/ThemeProvider';
 import { auth } from '../lib/firebase';
-import { cn } from '../lib/utils';
+import { getDeviceSession } from '../lib/deviceAuthSession';
 
 interface UserProfileDropdownProps {
   onOpenNotifications?: () => void;
@@ -61,22 +61,69 @@ function formatLastSignIn(dateInput?: string | number | null): string {
 }
 
 export default function UserProfileDropdown({ onOpenNotifications }: UserProfileDropdownProps) {
-  const { userProfile, logout, isAdminAuthenticated } = useStore();
+  const { user, currentUser, userProfile, logout, isAdminAuthenticated } = useStore();
   const { theme, toggleTheme } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   const firebaseUser = auth.currentUser;
+  const activeStoreUser = currentUser || user;
+  const qrSession = getDeviceSession();
 
-  const photoUrl = firebaseUser?.photoURL || userProfile?.profilePhoto || '';
-  const fullName = userProfile?.fullName || firebaseUser?.displayName || 'SmartLedger User';
-  const email = userProfile?.email || firebaseUser?.email || 'user@smartledger.app';
-  const creationDate = firebaseUser?.metadata?.creationTime || userProfile?.memberSince;
-  const lastSignIn = firebaseUser?.metadata?.lastSignInTime || userProfile?.lastLogin;
+  const email =
+    firebaseUser?.email ||
+    activeStoreUser?.email ||
+    qrSession?.email ||
+    userProfile?.email ||
+    '';
 
-  const getInitials = (name: string) => {
-    return name?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'SL';
+  const rawDisplayName =
+    firebaseUser?.displayName ||
+    activeStoreUser?.displayName ||
+    qrSession?.displayName ||
+    userProfile?.fullName ||
+    '';
+
+  const fullName =
+    rawDisplayName && rawDisplayName !== 'SmartLedger User' && rawDisplayName !== 'Ledger User'
+      ? rawDisplayName
+      : email
+      ? email.split('@')[0]
+      : 'Account';
+
+  const photoUrl =
+    firebaseUser?.photoURL ||
+    activeStoreUser?.photoURL ||
+    qrSession?.photoURL ||
+    userProfile?.profilePhoto ||
+    '';
+
+  const creationDate =
+    firebaseUser?.metadata?.creationTime ||
+    activeStoreUser?.metadata?.creationTime ||
+    (qrSession?.rememberedAt ? new Date(qrSession.rememberedAt).toISOString() : undefined) ||
+    userProfile?.memberSince;
+
+  const lastSignIn =
+    firebaseUser?.metadata?.lastSignInTime ||
+    activeStoreUser?.metadata?.lastSignInTime ||
+    (qrSession?.lastActiveAt ? new Date(qrSession.lastActiveAt).toISOString() : undefined) ||
+    userProfile?.lastLogin;
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [photoUrl]);
+
+  const getInitials = (name: string, userEmail: string) => {
+    const clean = (name || userEmail || '').trim();
+    if (!clean) return 'U';
+    const parts = clean.split(/[\s._-]+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return clean.substring(0, 2).toUpperCase();
   };
 
   // Close on outside click and Escape key
@@ -115,6 +162,9 @@ export default function UserProfileDropdown({ onOpenNotifications }: UserProfile
     navigate('/login', { replace: true });
   };
 
+  const showAvatarImage = Boolean(photoUrl && !avatarError);
+  const initials = getInitials(fullName, email);
+
   return (
     <div className="relative" ref={dropdownRef}>
       {/* Profile Button */}
@@ -126,15 +176,23 @@ export default function UserProfileDropdown({ onOpenNotifications }: UserProfile
         className="flex items-center gap-2 sm:gap-3 pl-1.5 pr-3 py-1.5 rounded-full bg-[var(--md-sys-color-surface-container)] hover:bg-[var(--md-sys-color-surface-container-high)] border border-[var(--md-sys-color-outline-variant)]/40 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--md-sys-color-primary)] cursor-pointer m3-state-layer"
       >
         <div className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-[var(--md-sys-color-primary)] to-[var(--md-sys-color-secondary)] flex items-center justify-center border border-[var(--md-sys-color-outline-variant)]/40 shadow-xs flex-shrink-0">
-          {photoUrl ? (
-            <img src={photoUrl} alt={fullName} className="w-full h-full object-cover" />
+          {showAvatarImage ? (
+            <img
+              src={photoUrl}
+              alt={fullName}
+              referrerPolicy="no-referrer"
+              onError={() => setAvatarError(true)}
+              className="w-full h-full object-cover"
+            />
           ) : (
-            <span className="text-xs font-bold text-white tracking-wider">{getInitials(fullName)}</span>
+            <span className="text-xs font-bold text-white tracking-wider">{initials}</span>
           )}
         </div>
-        <div className="hidden sm:flex flex-col items-start max-w-[130px]">
+        <div className="hidden sm:flex flex-col items-start max-w-[140px]">
           <span className="text-xs font-semibold text-[var(--md-sys-color-on-surface)] truncate w-full text-left">{fullName}</span>
-          <span className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] truncate w-full text-left font-mono">{email}</span>
+          {email && (
+            <span className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] truncate w-full text-left font-mono">{email}</span>
+          )}
         </div>
       </button>
 
@@ -153,15 +211,23 @@ export default function UserProfileDropdown({ onOpenNotifications }: UserProfile
             <div className="p-4 bg-[var(--md-sys-color-surface-container-high)]/40">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-2xl overflow-hidden bg-gradient-to-br from-[var(--md-sys-color-primary)] to-[var(--md-sys-color-secondary)] flex items-center justify-center border border-[var(--md-sys-color-outline-variant)]/40 shadow-xs flex-shrink-0">
-                  {photoUrl ? (
-                    <img src={photoUrl} alt={fullName} className="w-full h-full object-cover" />
+                  {showAvatarImage ? (
+                    <img
+                      src={photoUrl}
+                      alt={fullName}
+                      referrerPolicy="no-referrer"
+                      onError={() => setAvatarError(true)}
+                      className="w-full h-full object-cover"
+                    />
                   ) : (
-                    <span className="text-base font-bold text-white tracking-wider">{getInitials(fullName)}</span>
+                    <span className="text-base font-bold text-white tracking-wider">{initials}</span>
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <h4 className="font-bold text-[var(--md-sys-color-on-surface)] text-sm truncate">{fullName}</h4>
-                  <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] truncate">{email}</p>
+                  {email && (
+                    <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] truncate">{email}</p>
+                  )}
                 </div>
               </div>
 

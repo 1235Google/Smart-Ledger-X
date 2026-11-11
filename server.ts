@@ -3496,11 +3496,9 @@ if (!process.env.VERCEL) {
       });
     }
 
-    if (process.env.NODE_ENV !== 'production') {
-      httpServer.listen(PORT, "0.0.0.0", () => {
-        console.log(`Server running on http://localhost:${PORT}`);
-      });
-    }
+    httpServer.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
   })();
 }
 

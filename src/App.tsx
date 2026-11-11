@@ -195,6 +195,16 @@ function AppRoutes() {
             <MobileQrLogin />
           </PageTransitionWrapper>
         } />
+        <Route path="/auth/approve-device" element={
+          <PageTransitionWrapper routeKey="/auth/approve-device">
+            <MobileQrLogin />
+          </PageTransitionWrapper>
+        } />
+        <Route path="/qr-login/session/:token" element={
+          <PageTransitionWrapper routeKey="/qr-login/session">
+            <MobileQrLogin />
+          </PageTransitionWrapper>
+        } />
         <Route path="/" element={
           <ProtectedRoute>
             <Layout />

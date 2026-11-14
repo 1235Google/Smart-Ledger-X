@@ -25,7 +25,6 @@ import {
   resendMfaCode,
   extractSessionTokenFromRequest,
   verifyAdminSessionToken,
-  authenticateAdminRequest,
   revokeSession,
   revokeTrustedDevice,
   triggerEmergencyLockdown,
@@ -57,9 +56,7 @@ import {
   sendPasswordChangeEmail,
   sendNewDeviceEmail,
   sendFailedAttemptsEmail,
-  sendTestSecurityEmail,
-  initializeEmailService,
-  getEmailServiceStatus
+  sendTestSecurityEmail
 } from "./src/server/resend-service";
 import {
   initJobsStorage,
@@ -93,29 +90,9 @@ import {
 import { db } from "./src/server/db";
 import { createScanJob, getScanRecord, getScanFindings, getScanHistoryList, cancelScanJob, getSmartGuardLogsList } from "./src/server/smartguard-scanner";
 import { generateScanPdf } from "./src/server/security-report-generator";
-import {
-  createQrPairingSession,
-  getQrSessionStatus,
-  recordQrScanned,
-  approveQrSession,
-  rejectQrSession,
-  getUserLinkedDevices,
-  modifyLinkedDevice,
-  getPairingAuditLogs
-} from "./src/server/qr-pairing-service";
-import {
-  createQrLoginSession,
-  verifyAndScanQrToken,
-  authorizeQrLoginSession,
-  completeDesktopSession,
-  getQrLoginSessionStatus
-} from "./src/server/qr-login-service";
 
 // Load environment variables from .env file with override enabled
 dotenv.config({ override: true });
-
-// Check and log email service initialization status
-initializeEmailService();
 
 console.log('[Time] Server UTC time:', new Date().toISOString());
 console.log('[Time] Server timezone: UTC');
@@ -2729,335 +2706,6 @@ app.get("/api/admin/check", async (req, res) => {
     socket.on('join_user_room', (userId) => {
       if (userId) socket.join(`user_${userId}`);
     });
-    socket.on('join_qr_session', (sessionId) => {
-      if (sessionId) {
-        socket.join(`qr_${sessionId}`);
-        console.log(`[Socket.IO] Client joined QR pairing room: qr_${sessionId}`);
-      }
-    });
-    socket.on('join_qr_login', (sessionId) => {
-      if (sessionId) {
-        socket.join(`qr_login_${sessionId}`);
-        console.log(`[Socket.IO] Client joined QR login room: qr_login_${sessionId}`);
-      }
-    });
-  });
-
-  // =========================================================================
-  // PRODUCTION QR CODE LOGIN SYSTEM (SmartLedgerX)
-  // =========================================================================
-
-  // 1. Create a secure QR Login Session
-  app.post('/api/auth/qr-login/create', async (req, res) => {
-    try {
-      const clientOrigin = req.body?.origin;
-      const sessionData = await createQrLoginSession(req, clientOrigin);
-      return res.json(sessionData);
-    } catch (err: any) {
-      console.error('[QRLogin] Error creating login session:', err);
-      return res.status(500).json({ success: false, error: err.message || 'Failed to create QR login session' });
-    }
-  });
-
-  // 2. Validate token when Phone Camera scans and opens URL (WAITING -> SCANNED)
-  app.post('/api/auth/qr-login/verify', async (req, res) => {
-    try {
-      const { token, sessionId } = req.body || {};
-      if (!token) {
-        return res.status(400).json({ success: false, error: 'Missing security token' });
-      }
-
-      const result = await verifyAndScanQrToken(token, sessionId, req);
-      if (result.success && result.session) {
-        io.to(`qr_login_${result.session.sessionId}`).emit('qr_login_status', {
-          status: 'SCANNED',
-          sessionId: result.session.sessionId,
-          mobileMetadata: result.session.mobileMetadata
-        });
-      }
-
-      return res.json(result);
-    } catch (err: any) {
-      console.error('[QRLogin] Error validating QR token:', err);
-      return res.status(500).json({ success: false, error: err.message || 'Failed to verify QR token' });
-    }
-  });
-
-  // 3. Authorize QR Session after Phone finishes Google Authentication (SCANNED -> AUTHENTICATED)
-  app.post('/api/auth/qr-login/authorize', async (req, res) => {
-    try {
-      const { sessionId, secureToken, idToken, user } = req.body || {};
-      if (!sessionId || !secureToken || !idToken || !user?.uid) {
-        return res.status(400).json({ success: false, error: 'Missing authorization payload' });
-      }
-
-      const result = await authorizeQrLoginSession({
-        sessionId,
-        secureToken,
-        idToken,
-        user,
-        req
-      });
-
-      if (result.success) {
-        io.to(`qr_login_${sessionId}`).emit('qr_login_status', {
-          status: 'AUTHENTICATED',
-          sessionId,
-          user: {
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName,
-            photoURL: user.photoURL
-          },
-          authGrant: result.authGrant
-        });
-      }
-
-      return res.json(result);
-    } catch (err: any) {
-      console.error('[QRLogin] Error authorizing QR session:', err);
-      return res.status(500).json({ success: false, error: err.message || 'Failed to authorize QR login' });
-    }
-  });
-
-  // 4. Desktop burns grant & completes authentication (AUTHENTICATED -> COMPLETED)
-  app.post('/api/auth/qr-login/exchange', async (req, res) => {
-    try {
-      const { sessionId, secureToken, authGrant } = req.body || {};
-      if (!sessionId || !secureToken || !authGrant) {
-        return res.status(400).json({ success: false, error: 'Missing session exchange credentials' });
-      }
-
-      const result = await completeDesktopSession({
-        sessionId,
-        secureToken,
-        authGrant
-      });
-
-      if (result.success) {
-        io.to(`qr_login_${sessionId}`).emit('qr_login_status', {
-          status: 'COMPLETED',
-          sessionId
-        });
-      }
-
-      return res.json(result);
-    } catch (err: any) {
-      console.error('[QRLogin] Error exchanging QR grant:', err);
-      return res.status(500).json({ success: false, error: err.message || 'Failed to complete login exchange' });
-    }
-  });
-
-  // 5. Polling endpoint for session status
-  app.get('/api/auth/qr-login/status/:sessionId', async (req, res) => {
-    try {
-      const { sessionId } = req.params;
-      const session = await getQrLoginSessionStatus(sessionId);
-      if (!session) {
-        return res.status(404).json({ success: false, error: 'Session not found' });
-      }
-
-      // Do NOT expose tokenHash or authGrant to unauthenticated polling
-      return res.json({
-        success: true,
-        session: {
-          sessionId: session.sessionId,
-          status: session.status,
-          createdAt: session.createdAt,
-          expiresAt: session.expiresAt,
-          desktopMetadata: session.desktopMetadata,
-          mobileMetadata: session.mobileMetadata,
-          mobileAuthenticatedUser: session.mobileAuthenticatedUser,
-          authGrant: session.status === 'AUTHENTICATED' ? session.authGrant : undefined
-        }
-      });
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err.message || 'Error fetching status' });
-    }
-  });
-
-  // =========================================================================
-  // ENTERPRISE SECURE QR DEVICE PAIRING API
-  // =========================================================================
-
-  // 1. Create a cryptographically signed QR pairing session
-  app.post('/api/auth/qr-pair/session', async (req, res) => {
-    try {
-      const sessionData = await createQrPairingSession(req);
-      return res.json({
-        success: true,
-        ...sessionData
-      });
-    } catch (err: any) {
-      console.error('[QrPairing] Error creating session:', err);
-      return res.status(500).json({ success: false, error: err.message || 'Failed to initialize QR session' });
-    }
-  });
-
-  // 2. Query QR session status (for polling fallback & heartbeat)
-  app.get('/api/auth/qr-pair/session/:sessionId', (req, res) => {
-    try {
-      const { sessionId } = req.params;
-      const status = getQrSessionStatus(sessionId);
-      return res.json({
-        success: true,
-        ...status
-      });
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
-  });
-
-  // 3. Mobile scanner scanned the QR code
-  app.post('/api/auth/qr-pair/scan', (req, res) => {
-    try {
-      const { sessionId, mobileInfo } = req.body;
-      if (!sessionId) {
-        return res.status(400).json({ success: false, error: 'Missing sessionId' });
-      }
-
-      const result = recordQrScanned(sessionId, mobileInfo);
-      if (!result.success) {
-        return res.status(400).json(result);
-      }
-
-      // Notify desktop over real-time WebSocket channel
-      io.to(`qr_${sessionId}`).emit('qr_scanned', {
-        status: 'scanned',
-        mobileInfo,
-        timestamp: Date.now()
-      });
-
-      return res.json(result);
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
-  });
-
-  // 4. Mobile approves login with biometric authorization
-  app.post('/api/auth/qr-pair/approve', async (req, res) => {
-    try {
-      const { sessionId, userData, approvalDetails } = req.body;
-      if (!sessionId || !userData?.uid || !userData?.email) {
-        return res.status(400).json({ success: false, error: 'Missing required session or user authentication payload' });
-      }
-
-      if (!approvalDetails?.biometricVerified) {
-        return res.status(403).json({ success: false, error: 'Biometric authorization required to approve desktop login.' });
-      }
-
-      const result = await approveQrSession(sessionId, userData, approvalDetails);
-      if (!result.success) {
-        return res.status(400).json(result);
-      }
-
-      // Real-time broadcast to Desktop client to trigger instant sign-in
-      io.to(`qr_${sessionId}`).emit('qr_approved', {
-        status: 'approved',
-        sessionToken: result.sessionToken,
-        user: result.user,
-        desktopRedirectUrl: '/',
-        timestamp: Date.now()
-      });
-
-      return res.json(result);
-    } catch (err: any) {
-      console.error('[QrPairing] Error during approval:', err);
-      return res.status(500).json({ success: false, error: err.message });
-    }
-  });
-
-  // 5. Mobile rejects login request
-  app.post('/api/auth/qr-pair/reject', (req, res) => {
-    try {
-      const { sessionId, reason } = req.body;
-      if (!sessionId) {
-        return res.status(400).json({ success: false, error: 'Missing sessionId' });
-      }
-
-      const result = rejectQrSession(sessionId, reason || 'User rejected authorization');
-      if (!result.success) {
-        return res.status(400).json(result);
-      }
-
-      io.to(`qr_${sessionId}`).emit('qr_rejected', {
-        status: 'rejected',
-        reason: reason || 'Login request was rejected by your mobile device',
-        timestamp: Date.now()
-      });
-
-      return res.json({ success: true });
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
-  });
-
-  // 6. User Linked Devices list
-  app.get('/api/auth/qr-pair/devices', (req, res) => {
-    try {
-      const uid = (req.query.uid as string) || 'default_user';
-      const devices = getUserLinkedDevices(uid);
-      return res.json({ success: true, devices });
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
-  });
-
-  // 7. Manage Linked Device (Rename, Revoke, Trust)
-  app.post('/api/auth/qr-pair/devices/manage', (req, res) => {
-    try {
-      const { uid, deviceId, action, value } = req.body;
-      if (!uid || !deviceId || !action) {
-        return res.status(400).json({ success: false, error: 'Missing uid, deviceId or action parameter' });
-      }
-
-      const success = modifyLinkedDevice(uid, deviceId, action, value);
-      return res.json({ success });
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
-  });
-
-  // 8. Pairing Audit & Login History
-  app.get('/api/auth/qr-pair/logs', (req, res) => {
-    try {
-      const status = req.query.status as string;
-      const uid = req.query.uid as string;
-      const limit = Math.min(Number(req.query.limit) || 100, 200);
-      const logs = getPairingAuditLogs({ status, uid, limit });
-      return res.json({ success: true, logs });
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
-  });
-
-  // 9. Export Pairing Audit History (CSV format)
-  app.get('/api/auth/qr-pair/logs/export', (req, res) => {
-    try {
-      const logs = getPairingAuditLogs({ limit: 500 });
-      const headers = ['Session ID', 'Timestamp', 'Status', 'Desktop Name', 'OS', 'Browser', 'IP Address', 'Country', 'Location', 'User Email', 'Biometric Used', 'Reason'];
-      const rows = logs.map(l => [
-        `"${l.sessionId}"`,
-        `"${l.timestamp}"`,
-        `"${l.status}"`,
-        `"${(l.desktopName || '').replace(/"/g, '""')}"`,
-        `"${(l.desktopOs || '').replace(/"/g, '""')}"`,
-        `"${(l.desktopBrowser || '').replace(/"/g, '""')}"`,
-        `"${l.ip || ''}"`,
-        `"${l.country || ''}"`,
-        `"${(l.location || '').replace(/"/g, '""')}"`,
-        `"${l.userEmail || ''}"`,
-        `"${l.biometricUsed ? 'Yes' : 'No'}"`,
-        `"${(l.reason || '').replace(/"/g, '""')}"`
-      ]);
-
-      const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename="smartledgerx_device_pairing_logs_${Date.now()}.csv"`);
-      return res.send(csv);
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err.message });
-    }
   });
 
   // Detection Endpoint for Real-Time Client Synchronization
@@ -3260,8 +2908,7 @@ app.get("/api/admin/check", async (req, res) => {
       });
 
       if (!result.success) {
-        const statusCode = result.code === 'PORTAL_LOCKED' ? 403 : result.code === 'EMAIL_DELIVERY_FAILED' ? 422 : 400;
-        return res.status(statusCode).json(result);
+        return res.status(result.code === 'PORTAL_LOCKED' ? 403 : 403).json(result);
       }
 
       // If trusted device bypassed MFA, issue session cookie directly
@@ -3279,16 +2926,6 @@ app.get("/api/admin/check", async (req, res) => {
     } catch (err: any) {
       console.error("[AdminMFA API] Error in /google-init:", err);
       return res.status(500).json({ success: false, error: err.message || "Failed to initiate admin login" });
-    }
-  });
-
-  // Diagnostic Endpoint: Check Live Email Provider Status & Verified Domains
-  app.get("/api/admin/auth/email-service-status", async (req, res) => {
-    try {
-      const status = await getEmailServiceStatus();
-      return res.json({ success: true, ...status });
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err?.message || 'Failed to check email service status' });
     }
   });
 
@@ -3355,17 +2992,9 @@ app.get("/api/admin/check", async (req, res) => {
   });
 
   // 4. Validate Current Admin Session
-  app.get("/api/admin/auth/session", async (req, res) => {
-    const result = await authenticateAdminRequest(req);
-    if (result.valid && result.session) {
-      res.cookie('admin_session', result.session.sessionToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'lax',
-        maxAge: 12 * 60 * 60 * 1000,
-        path: '/'
-      });
-    }
+  app.get("/api/admin/auth/session", (req, res) => {
+    const token = extractSessionTokenFromRequest(req);
+    const result = verifyAdminSessionToken(token);
     return res.json({
       valid: result.valid,
       admin: result.admin,
@@ -3383,42 +3012,32 @@ app.get("/api/admin/check", async (req, res) => {
 
   // 5. Admin Sign Out
   app.post("/api/admin/auth/logout", async (req, res) => {
-    const verified = await authenticateAdminRequest(req);
-    if (verified.valid && verified.session) {
-      await revokeSession(verified.session.sessionId, verified.session.email);
+    const token = extractSessionTokenFromRequest(req);
+    if (token) {
+      const verified = verifyAdminSessionToken(token);
+      if (verified.session) {
+        await revokeSession(verified.session.sessionId, verified.session.email);
+      }
     }
     res.clearCookie('admin_session', { path: '/' });
-    res.clearCookie('admin_token', { path: '/' });
     return res.json({ success: true, message: "Logged out of admin session." });
   });
 
   // 6. Security Center Overview
-  app.get("/api/admin/security/overview", async (req, res) => {
-    const verified = await authenticateAdminRequest(req);
-    if (!verified.valid || !verified.session) {
-      return res.status(401).json({ 
-        success: false, 
-        error: verified.error || "Authentication required. No session token provided.", 
-        code: verified.code || "NO_TOKEN" 
-      });
+  app.get("/api/admin/security/overview", (req, res) => {
+    const token = extractSessionTokenFromRequest(req);
+    const verified = verifyAdminSessionToken(token);
+    if (!verified.valid) {
+      return res.status(401).json({ success: false, error: verified.error, code: verified.code });
     }
-
-    // Refresh / set cookie on successful authentication
-    res.cookie('admin_session', verified.session.sessionToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
-      maxAge: 12 * 60 * 60 * 1000,
-      path: '/'
-    });
-
-    const overview = getSecurityOverviewData(verified.session.sessionToken);
+    const overview = getSecurityOverviewData(token);
     return res.json({ success: true, overview, currentAdmin: verified.admin });
   });
 
   // 7. Revoke Session
   app.post("/api/admin/security/revoke-session", async (req, res) => {
-    const verified = await authenticateAdminRequest(req);
+    const token = extractSessionTokenFromRequest(req);
+    const verified = verifyAdminSessionToken(token);
     if (!verified.valid || !verified.session) {
       return res.status(401).json({ success: false, error: "Unauthorized: Invalid administrator session" });
     }
@@ -3432,7 +3051,8 @@ app.get("/api/admin/check", async (req, res) => {
 
   // 8. Revoke Trusted Device
   app.post("/api/admin/security/revoke-trusted-device", async (req, res) => {
-    const verified = await authenticateAdminRequest(req);
+    const token = extractSessionTokenFromRequest(req);
+    const verified = verifyAdminSessionToken(token);
     if (!verified.valid || !verified.session) {
       return res.status(401).json({ success: false, error: "Unauthorized: Invalid administrator session" });
     }
@@ -3446,7 +3066,8 @@ app.get("/api/admin/check", async (req, res) => {
 
   // 9. Emergency Security Lockdown (Requires Super Admin or Security Admin)
   app.post("/api/admin/security/lockdown", async (req, res) => {
-    const verified = await authenticateAdminRequest(req);
+    const token = extractSessionTokenFromRequest(req);
+    const verified = verifyAdminSessionToken(token);
     if (!verified.valid || !verified.session) {
       return res.status(401).json({ success: false, error: "Unauthorized: Invalid administrator session" });
     }
@@ -3462,7 +3083,8 @@ app.get("/api/admin/check", async (req, res) => {
 
   // 10. Lift Emergency Lockdown (Super Admin Only)
   app.post("/api/admin/security/unlock", async (req, res) => {
-    const verified = await authenticateAdminRequest(req);
+    const token = extractSessionTokenFromRequest(req);
+    const verified = verifyAdminSessionToken(token);
     if (!verified.valid || !verified.session) {
       return res.status(401).json({ success: false, error: "Unauthorized: Invalid administrator session" });
     }

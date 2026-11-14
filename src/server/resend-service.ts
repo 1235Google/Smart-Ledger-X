@@ -1,278 +1,26 @@
 import { Resend } from 'resend';
 
-// Cached verified domain to avoid spamming the domains API on every email
-let cachedVerifiedDomain: string | null = null;
-let lastDomainCheckTimestamp = 0;
-
-/**
- * Validates and logs email service configuration on server startup.
- * Masks sensitive keys so they are never leaked in logs.
- */
-export function initializeEmailService(): {
-  isConfigured: boolean;
-  provider: string;
-  senderAddress: string;
-  maskedKey: string | null;
-  status: string;
-} {
-  const apiKey = (process.env.RESEND_API_KEY || process.env.RESEND_KEY || '').trim();
-  const configuredFrom = (process.env.RESEND_FROM_EMAIL || '').trim();
-
-  if (!apiKey || apiKey === 're_...') {
-    console.warn('[EmailService] ⚠️ RESEND_API_KEY is not configured in environment variables.');
-    console.warn('[EmailService] ⚠️ Email delivery will simulate in test mode and log OTP codes directly to the server console.');
-    return {
-      isConfigured: false,
-      provider: 'Resend',
-      senderAddress: configuredFrom || 'onboarding@resend.dev',
-      maskedKey: null,
-      status: 'UNCONFIGURED'
-    };
-  }
-
-  const masked = apiKey.length > 8 
-    ? `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}` 
-    : 're_****';
-
-  const defaultSender = configuredFrom || 'SmartLedger Security <onboarding@resend.dev>';
-  console.log(`[EmailService] ✅ Email service initialized. Provider: Resend | API Key: ${masked} | Default From: ${defaultSender}`);
-
-  return {
-    isConfigured: true,
-    provider: 'Resend',
-    senderAddress: defaultSender,
-    maskedKey: masked,
-    status: 'INITIALIZED'
-  };
-}
-
-/**
- * Resolves the legitimate sending domain for Resend:
- * 1. Explicit RESEND_FROM_EMAIL environment variable
- * 2. Any verified domain on the user's Resend account
- * 3. Fallback to official sandbox sender: onboarding@resend.dev
- */
-export async function resolveSenderAddress(resendInstance?: Resend): Promise<{
-  from: string;
-  isCustomDomain: boolean;
-  verifiedDomain: string | null;
-}> {
-  // 1. Explicit user override from environment
-  const envFrom = (process.env.RESEND_FROM_EMAIL || '').trim();
-  if (envFrom) {
-    return {
-      from: envFrom.includes('<') ? envFrom : `SmartLedger Security <${envFrom}>`,
-      isCustomDomain: !envFrom.includes('resend.dev'),
-      verifiedDomain: null
-    };
-  }
-
-  // 2. Query Resend API for verified domains (cached for 10 minutes)
-  const now = Date.now();
-  if (cachedVerifiedDomain && (now - lastDomainCheckTimestamp < 10 * 60 * 1000)) {
-    return {
-      from: `SmartLedger Security <security@${cachedVerifiedDomain}>`,
-      isCustomDomain: true,
-      verifiedDomain: cachedVerifiedDomain
-    };
-  }
-
-  if (resendInstance) {
-    try {
-      const domainsResponse = await resendInstance.domains.list();
-      const domainList = Array.isArray(domainsResponse.data) 
-        ? domainsResponse.data 
-        : ((domainsResponse.data as any)?.data || []);
-      
-      const verified = domainList.find((d: any) => d.status === 'verified');
-      if (verified && verified.name) {
-        cachedVerifiedDomain = verified.name;
-        lastDomainCheckTimestamp = now;
-        console.log(`[ResendService] Detected verified domain in Resend account: "${cachedVerifiedDomain}"`);
-        return {
-          from: `SmartLedger Security <security@${cachedVerifiedDomain}>`,
-          isCustomDomain: true,
-          verifiedDomain: cachedVerifiedDomain
-        };
-      }
-    } catch (err: any) {
-      console.warn('[ResendService] Could not inspect Resend verified domains:', err?.message || err);
-    }
-  }
-
-  // 3. Fallback to Resend's free testing sandbox sender (never use unverified domains like smartledgerx.io)
-  return {
-    from: 'SmartLedger Security <onboarding@resend.dev>',
-    isCustomDomain: false,
-    verifiedDomain: null
-  };
-}
-
-/**
- * Diagnostic helper to check email provider status and verified domains
- */
-export async function getEmailServiceStatus(): Promise<{
-  configured: boolean;
-  provider: string;
-  maskedKey: string | null;
-  resolvedSender: string;
-  isCustomDomain: boolean;
-  domains: Array<{ name: string; status: string }>;
-}> {
-  const apiKey = (process.env.RESEND_API_KEY || process.env.RESEND_KEY || '').trim();
-  if (!apiKey || apiKey === 're_...') {
-    return {
-      configured: false,
-      provider: 'Resend',
-      maskedKey: null,
-      resolvedSender: 'onboarding@resend.dev',
-      isCustomDomain: false,
-      domains: []
-    };
-  }
-
-  const masked = apiKey.length > 8 ? `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}` : 're_****';
-  try {
-    const resend = new Resend(apiKey);
-    const sender = await resolveSenderAddress(resend);
-    const domainListRes = await resend.domains.list();
-    const rawList = Array.isArray(domainListRes.data) ? domainListRes.data : ((domainListRes.data as any)?.data || []);
-    const domains = rawList.map((d: any) => ({ name: d.name, status: d.status }));
-
-    return {
-      configured: true,
-      provider: 'Resend',
-      maskedKey: masked,
-      resolvedSender: sender.from,
-      isCustomDomain: sender.isCustomDomain,
-      domains
-    };
-  } catch (err: any) {
-    return {
-      configured: true,
-      provider: 'Resend',
-      maskedKey: masked,
-      resolvedSender: 'onboarding@resend.dev',
-      isCustomDomain: false,
-      domains: []
-    };
-  }
-}
-
-/**
- * Authoritative Resend email dispatch function with:
- * - Real email validation (prevents masked placeholders like so***r@gmail.com)
- * - Pre-dispatch payload logging
- * - Resend SDK error inspection (resend returns { data, error } instead of throwing)
- * - Detailed error messages for unverified domains and sandbox restrictions
- */
-export async function sendResendEmail(
-  to: string, 
-  subject: string, 
-  htmlContent: string
-): Promise<{
-  success: boolean;
-  messageId?: string;
-  error?: string;
-  code?: string;
-  response?: any;
-}> {
-  // 1. Recipient Validation
-  if (!to || typeof to !== 'string') {
-    console.error('[ResendService] ❌ Recipient email is empty or invalid.');
-    return { success: false, error: 'Recipient email address is missing' };
-  }
-
-  const cleanTo = to.trim().toLowerCase();
-
-  // Guard against masked display strings
-  if (cleanTo.includes('***') || cleanTo.includes('...')) {
-    console.error(`[ResendService] ❌ Masked email detected: "${cleanTo}". Cannot send email to a masked string.`);
-    return { 
-      success: false, 
-      error: `Invalid recipient address: "${cleanTo}" appears to be masked. A real, unmasked email is required.` 
-    };
-  }
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(cleanTo)) {
-    console.error(`[ResendService] ❌ Malformed email address: "${cleanTo}"`);
-    return { success: false, error: `Invalid recipient email format: "${cleanTo}"` };
-  }
-
-  // 2. API Key Resolution (support both RESEND_API_KEY and RESEND_KEY)
-  const apiKey = (process.env.RESEND_API_KEY || process.env.RESEND_KEY || '').trim();
-  if (!apiKey || apiKey === 're_...') {
-    console.warn('[ResendService] ⚠️ RESEND_API_KEY is not set in environment variables. Email dispatch cancelled.');
-    return { 
-      success: false, 
-      error: 'RESEND_API_KEY is not configured in .env. Please configure your Resend API key.',
-      code: 'API_KEY_MISSING'
-    };
+export async function sendResendEmail(to: string, subject: string, htmlContent: string) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.warn('[ResendService] RESEND_API_KEY is not set in environment variables. Email dispatch skipped.');
+    return { success: false, error: 'RESEND_API_KEY missing' };
   }
 
   try {
     const resend = new Resend(apiKey);
-    const sender = await resolveSenderAddress(resend);
-    const fromAddress = sender.from;
-
-    // 3. Log Full Outgoing Payload
-    console.log('[ResendService] 🚀 [OUTGOING EMAIL DISPATCH]');
-    console.log('[ResendService] ├─ To:', cleanTo);
-    console.log('[ResendService] ├─ From:', fromAddress);
-    console.log('[ResendService] ├─ Subject:', subject);
-    console.log('[ResendService] └─ Content Size:', `${htmlContent.length} bytes`);
-
-    // 4. Send email via Resend SDK
     const response = await resend.emails.send({
-      from: fromAddress,
-      to: [cleanTo],
+      from: process.env.RESEND_FROM_EMAIL || 'Smart Ledger Security <security@smartledgerx.io>',
+      to: [to],
       subject,
       html: htmlContent,
     });
-
-    // 5. Inspect Resend SDK response (Resend returns { data, error }, does NOT throw on API errors!)
-    if (response.error) {
-      console.error('[ResendService] ❌ Resend API returned error:', {
-        name: response.error.name,
-        message: response.error.message,
-        statusCode: (response.error as any).statusCode,
-        errorObject: response.error
-      });
-
-      let helpfulMsg = response.error.message;
-      if (helpfulMsg.toLowerCase().includes('domain') || helpfulMsg.toLowerCase().includes('verify')) {
-        helpfulMsg = `Sender domain unverified: "${fromAddress}". Please verify your domain in the Resend dashboard or use onboarding@resend.dev.`;
-      } else if (helpfulMsg.toLowerCase().includes('only send testing emails')) {
-        helpfulMsg = `Resend Sandbox constraint: onboarding@resend.dev can only send to your Resend account owner email. Verify a custom domain at resend.com/domains to send to any recipient.`;
-      }
-
-      return { 
-        success: false, 
-        error: helpfulMsg, 
-        code: (response.error as any).name || 'RESEND_API_ERROR',
-        response 
-      };
-    }
-
-    console.log(`[ResendService] ✅ Email successfully accepted by Resend! Message ID: ${response.data?.id} for ${cleanTo}`);
-    return { 
-      success: true, 
-      messageId: response.data?.id,
-      response 
-    };
+    console.log(`[ResendService] Email successfully sent to ${to} | Subject: "${subject}"`, response);
+    return { success: true, response };
   } catch (error: any) {
     const errorMsg = error?.message || error?.response?.message || JSON.stringify(error) || 'Unknown Resend error';
-    console.error(`[ResendService] 💥 Exception dispatching email to ${cleanTo} via Resend:`, {
-      message: errorMsg,
-      code: error?.code,
-      stack: error?.stack
-    });
-    return { 
-      success: false, 
-      error: errorMsg, 
-      code: 'NETWORK_EXCEPTION' 
-    };
+    console.error(`[ResendService] Failed to send email to ${to} via Resend:`, errorMsg);
+    return { success: false, error: errorMsg };
   }
 }
 
@@ -476,22 +224,10 @@ export async function sendAdminMfaEmail(
     browser?: string;
     location?: string;
   }
-): Promise<{
-  success: boolean;
-  messageId?: string;
-  error?: string;
-  code?: string;
-}> {
-  const cleanTo = (to || '').trim().toLowerCase();
-  const expires = details.expiresMinutes || 5;
+) {
   const subject = `🔐 ${details.code} is your SmartLedgerX Admin Verification Code`;
-
-  console.log(`[AdminMFA Email] =================================================`);
-  console.log(`[AdminMFA Email] Dispatching 2FA authorization challenge`);
-  console.log(`[AdminMFA Email] Recipient: ${cleanTo}`);
-  console.log(`[AdminMFA Email] Generated 6-Digit Code: [ ${details.code} ]`);
-  console.log(`[AdminMFA Email] Expiration: ${expires} minutes | Client IP: ${details.ip}`);
-  console.log(`[AdminMFA Email] =================================================`);
+  const codeFormatted = details.code.split('').join(' ');
+  const expires = details.expiresMinutes || 5;
 
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0b0f19; padding: 40px 20px; color: #f1f5f9;">
@@ -567,32 +303,6 @@ export async function sendAdminMfaEmail(
       </div>
     </div>
   `;
-
-  console.log(`[AdminMFA Email] Calling sendResendEmail for ${cleanTo}...`);
-  const result = await sendResendEmail(cleanTo, subject, html);
-
-  if (result.success) {
-    console.log(`[AdminMFA Email] ✅ 2FA email successfully accepted by Resend! Message ID: ${result.messageId}`);
-    return {
-      success: true,
-      messageId: result.messageId
-    };
-  }
-
-  // Log detailed emergency console fallback when email provider fails
-  console.error(`[AdminMFA Email] ❌ Email dispatch to ${cleanTo} failed:`, result.error);
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`[SECURITY CONSOLE NOTICE] 2FA Email Dispatch Failed`);
-  console.log(`Recipient:   ${cleanTo}`);
-  console.log(`Code:        [ ${details.code} ] (Valid for ${expires}m)`);
-  console.log(`Cause:       ${result.error}`);
-  console.log(`Diagnostics: Check Resend Dashboard (resend.com) -> Logs / Activity tab`);
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-  return {
-    success: false,
-    error: result.error || 'Failed to dispatch verification email',
-    code: result.code || 'EMAIL_FAILED'
-  };
+  return sendResendEmail(to, subject, html);
 }
 

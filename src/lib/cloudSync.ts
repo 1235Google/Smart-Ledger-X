@@ -148,16 +148,13 @@ export async function syncUserProfile(user: User, profileData?: Partial<UserProf
     return;
   }
 
-  const deviceSession = getDeviceSession();
-  const isQrOrDeviceAuthorized = Boolean(deviceSession && deviceSession.userId === user.uid);
-  const readyUser = auth.currentUser || (isQrOrDeviceAuthorized ? null : await waitForAuthReady(2500));
-  if ((!readyUser || readyUser.uid !== user.uid) && !isQrOrDeviceAuthorized) {
+  const readyUser = auth.currentUser || (await waitForAuthReady(4000));
+  if (!readyUser || readyUser.uid !== user.uid) {
+    // User is in local/remembered device session mode; skip remote Firestore profile write cleanly
     return;
   }
 
-  if (readyUser) {
-    await getValidIdToken(false);
-  }
+  await getValidIdToken(false);
 
   const profileRef = doc(db, 'users', user.uid, 'profile', 'info');
   const payload = sanitizeForFirestore({
@@ -350,12 +347,13 @@ class SyncQueueManager {
       return;
     }
 
-    const deviceSession = getDeviceSession();
-    const isQrOrDeviceAuthorized = Boolean(deviceSession && deviceSession.userId === this.pendingState.userId);
-    const readyUser = auth.currentUser || (isQrOrDeviceAuthorized ? null : await waitForAuthReady(2500));
+    // Wait for Firebase Auth to finish hydrating before checking currentUser
+    const readyUser = auth.currentUser || (await waitForAuthReady(4000));
 
-    if ((!readyUser || readyUser.uid !== this.pendingState.userId) && !isQrOrDeviceAuthorized) {
-      if (deviceSession) {
+    if (!readyUser || readyUser.uid !== this.pendingState.userId) {
+      // If user has a valid local device session, data is already persisted in localStorage;
+      // do not set false 'auth_error'!
+      if (getDeviceSession()) {
         setSyncStatus(navigator.onLine ? 'synced' : 'offline');
         return;
       }
@@ -371,10 +369,8 @@ class SyncQueueManager {
     console.log(`[Sync Queue] Processing batch for user ${userId}. Tx count: ${state.transactions?.length || 0}`);
 
     try {
-      // Ensure token is valid & refreshed prior to Firestore batch write when Firebase Auth user is present
-      if (readyUser) {
-        await getValidIdToken(false);
-      }
+      // Ensure token is valid & refreshed prior to Firestore batch write
+      await getValidIdToken(false);
 
       // 1. Prepare transactions & ledger batch
       const txs = state.transactions || [];
@@ -485,11 +481,9 @@ export const queueManager = new SyncQueueManager();
 export async function fetchUserState(userId: string): Promise<{ state: Partial<AppState>; transactions: Transaction[] } | null> {
   if (!userId) return null;
 
-  const deviceSession = getDeviceSession();
-  const isQrOrDeviceAuthorized = Boolean(deviceSession && deviceSession.userId === userId);
-  const readyUser = auth.currentUser || (isQrOrDeviceAuthorized ? null : await waitForAuthReady(2500));
-  if ((!readyUser || readyUser.uid !== userId) && !isQrOrDeviceAuthorized) {
-    // Fall back to local cache if neither Firebase user nor QR session is active
+  const readyUser = auth.currentUser || (await waitForAuthReady(4000));
+  if (!readyUser || readyUser.uid !== userId) {
+    // Fall back to local cache if Firebase user isn't active
     try {
       const cached = localStorage.getItem(`smart-ledger-cache-${userId}`);
       if (cached) {
@@ -718,9 +712,7 @@ export const subscribeToState = (
 
   // Ensure auth is ready and token is valid BEFORE attaching Firestore listeners
   (async () => {
-    const deviceSession = getDeviceSession();
-    const isQrOrDeviceAuthorized = Boolean(deviceSession && deviceSession.userId === userId);
-    const readyUser = auth.currentUser || (isQrOrDeviceAuthorized ? null : await waitForAuthReady(2000));
+    const readyUser = auth.currentUser || (await waitForAuthReady(4000));
     if (isDisposed) return;
     if (readyUser && readyUser.uid === userId) {
       await getValidIdToken(false);

@@ -29,7 +29,6 @@ const FaceUnlockPage = lazy(() => import('./pages/FaceUnlockPage'));
 const BackupDashboard = lazy(() => import('./pages/BackupDashboard'));
 const SmartGuardDashboard = lazy(() => import('./components/smartguard/SmartGuardDashboard'));
 const Notifications = lazy(() => import('./pages/Notifications'));
-const LinkedDevices = lazy(() => import('./pages/LinkedDevices'));
 const Help = lazy(() => import('./pages/Help'));
 const About = lazy(() => import('./pages/About'));
 
@@ -57,7 +56,6 @@ const AdminVerifyMfa = lazy(() => import('./pages/admin/AdminVerifyMfa'));
 const AdminSecurityDashboard = lazy(() => import('./pages/admin/AdminSecurityDashboard'));
 
 const Login = lazy(() => import('./pages/Login'));
-const MobileQrLogin = lazy(() => import('./pages/MobileQrLogin'));
 
 import { getDeviceSession } from './lib/deviceAuthSession';
 
@@ -179,7 +177,6 @@ function AppRoutes() {
           <Route path="gullak" element={<AdminGullak />} />
           <Route path="recycle-bin" element={<AdminRecycleBin />} />
           <Route path="trusted-devices" element={<AdminTrustedDevices />} />
-          <Route path="linked-devices" element={<LinkedDevices />} />
           <Route path="logs" element={<AdminLogs />} />
           <Route path="settings" element={<AdminSettings />} />
         </Route>
@@ -189,21 +186,6 @@ function AppRoutes() {
               <Login />
             </PageTransitionWrapper>
           </LoginRoute>
-        } />
-        <Route path="/auth/mobile-login" element={
-          <PageTransitionWrapper routeKey="/auth/mobile-login">
-            <MobileQrLogin />
-          </PageTransitionWrapper>
-        } />
-        <Route path="/auth/approve-device" element={
-          <PageTransitionWrapper routeKey="/auth/approve-device">
-            <MobileQrLogin />
-          </PageTransitionWrapper>
-        } />
-        <Route path="/qr-login/session/:token" element={
-          <PageTransitionWrapper routeKey="/qr-login/session">
-            <MobileQrLogin />
-          </PageTransitionWrapper>
         } />
         <Route path="/" element={
           <ProtectedRoute>
@@ -231,7 +213,6 @@ function AppRoutes() {
           <Route path="smartguard" element={<SmartGuardDashboard />} />
           <Route path="profile" element={<Profile />} />
           <Route path="notifications" element={<Notifications />} />
-          <Route path="linked-devices" element={<LinkedDevices />} />
           <Route path="backup" element={<BackupDashboard />} />
           <Route path="backups" element={<BackupDashboard />} />
           <Route path="help" element={<Help />} />

@@ -4,8 +4,7 @@ import path from 'path';
 import type { Request, Response, NextFunction } from 'express';
 import { db, isFirebaseAdminReady } from './db';
 import { sendAdminMfaEmail } from './resend-service';
-import { extractClientIp, getApproximateLocation, parseDeviceAndBrowser, verifyFirebaseIdToken } from './security-service';
-import { verifySessionToken } from './admin-auth';
+import { extractClientIp, getApproximateLocation, parseDeviceAndBrowser } from './security-service';
 
 const MFA_STORE_FILE = path.join(process.cwd(), 'admin-mfa-store.json');
 const SECRET_SALT = process.env.ADMIN_MFA_SALT || 'smartledgerx_bank_grade_mfa_salt_2026_secured';
@@ -356,9 +355,6 @@ export async function initiateAdminLogin(
   adminUser?: AdminRecord;
   error?: string;
   code?: string;
-  devBypassAllowed?: boolean;
-  deliveryDiagnostic?: any;
-  emailDelivery?: any;
 }> {
   const clientIp = extractClientIp(req);
   const userAgent = req.headers['user-agent'] || 'Unknown User-Agent';
@@ -460,57 +456,22 @@ export async function initiateAdminLogin(
     }
   }
 
-  // 5. Send Real Email via Resend - AWAITED with Error Handling & Diagnostics
-  console.log(`[AdminMFA] Initiating 2FA challenge dispatch to: ${admin.email}`);
-  const emailResult = await sendAdminMfaEmail(admin.email, {
+  // 5. Send Real Email via Resend
+  sendAdminMfaEmail(admin.email, {
     code,
     expiresMinutes: 5,
     ip: clientIp,
     device: `${parsedDevice.category} (${parsedDevice.os})`,
     browser: `${parsedDevice.browser} ${parsedDevice.browserVersion}`,
     location: location.city ? `${location.city}, ${location.country}` : undefined
+  }).catch((err) => {
+    console.error('[AdminMFA] Failed to dispatch MFA email via Resend:', err);
   });
-
-  if (!emailResult.success) {
-    console.error(`[AdminMFA] ❌ Email dispatch failed for ${admin.email}:`, emailResult.error);
-    await logAdminAudit('ADMIN_MFA_FAILED', admin.uid, admin.email, clientIp, userAgent, {
-      reason: 'Failed to send verification email via Resend',
-      error: emailResult.error,
-      tempSessionId
-    });
-
-    const isApiKeyMissing = !process.env.RESEND_API_KEY && !process.env.RESEND_KEY;
-    const isDomainIssue = emailResult.error?.toLowerCase().includes('domain') || emailResult.error?.toLowerCase().includes('verify');
-    const isSandboxIssue = emailResult.error?.toLowerCase().includes('sandbox') || emailResult.error?.toLowerCase().includes('only send');
-
-    return {
-      success: false,
-      mfaRequired: false,
-      error: `Email delivery failure: ${emailResult.error}`,
-      code: 'EMAIL_DELIVERY_FAILED',
-      tempSessionId,
-      devBypassAllowed: true,
-      deliveryDiagnostic: {
-        recipient: admin.email,
-        error: emailResult.error,
-        code: emailResult.code,
-        devOtpHint: code, // In dev/preview sandbox, expose code so testing is never blocked
-        suggestion: isApiKeyMissing
-          ? 'Add RESEND_API_KEY to your .env file or server environment.'
-          : isDomainIssue
-            ? 'Verify your domain in the Resend dashboard or ensure sender domain has valid MX/SPF records.'
-            : isSandboxIssue
-              ? 'Resend sandbox mode only delivers to the Resend account owner email. Verify a custom domain to send to any recipient.'
-              : 'Inspect Resend Dashboard -> Logs/Activity tab to check if the request reached their API.'
-      }
-    };
-  }
 
   await logAdminAudit('ADMIN_MFA_CHALLENGE_ISSUED', admin.uid, admin.email, clientIp, userAgent, {
     tempSessionId,
     expiresInMinutes: 5,
-    device: `${parsedDevice.category} (${parsedDevice.os})`,
-    messageId: emailResult.messageId
+    device: `${parsedDevice.category} (${parsedDevice.os})`
   });
 
   return {
@@ -518,12 +479,7 @@ export async function initiateAdminLogin(
     mfaRequired: true,
     tempSessionId,
     expiresInSeconds: 300,
-    adminUser: admin,
-    emailDelivery: {
-      status: 'delivered',
-      recipient: admin.email,
-      messageId: emailResult.messageId
-    }
+    adminUser: admin
   };
 }
 
@@ -698,8 +654,6 @@ export async function resendMfaCode(
   error?: string;
   expiresInSeconds?: number;
   cooldownRemaining?: number;
-  deliveryDiagnostic?: any;
-  messageId?: string;
 }> {
   const mfaSession = store.mfaSessions[tempSessionId];
   if (!mfaSession) {
@@ -729,33 +683,19 @@ export async function resendMfaCode(
   const location = await getApproximateLocation(clientIp);
   const parsedDevice = parseDeviceAndBrowser(req);
 
-  console.log(`[AdminMFA] Resending 2FA code to ${mfaSession.email}...`);
-  const emailResult = await sendAdminMfaEmail(mfaSession.email, {
+  sendAdminMfaEmail(mfaSession.email, {
     code: newCode,
     expiresMinutes: 5,
     ip: clientIp,
     device: `${parsedDevice.category} (${parsedDevice.os})`,
     browser: `${parsedDevice.browser} ${parsedDevice.browserVersion}`,
     location: location.city ? `${location.city}, ${location.country}` : undefined
+  }).catch((err) => {
+    console.error('[AdminMFA] Error resending code via Resend:', err);
   });
 
-  if (!emailResult.success) {
-    console.error(`[AdminMFA] ❌ Resend email dispatch failed:`, emailResult.error);
-    return {
-      success: false,
-      error: `Failed to deliver new code to ${mfaSession.email}: ${emailResult.error}`,
-      deliveryDiagnostic: {
-        recipient: mfaSession.email,
-        error: emailResult.error,
-        devOtpHint: newCode,
-        suggestion: 'Check your Resend API key and domain verification status in Resend dashboard.'
-      }
-    };
-  }
-
   await logAdminAudit('ADMIN_MFA_RESENT', mfaSession.uid, mfaSession.email, clientIp, req.headers['user-agent'] || '', {
-    tempSessionId,
-    messageId: emailResult.messageId
+    tempSessionId
   });
 
   return {
@@ -818,28 +758,15 @@ export function extractSessionTokenFromRequest(req: Request): string | null {
   if (authHeader && authHeader.startsWith('Bearer ')) {
     return authHeader.substring(7).trim();
   }
-
-  // 2. Custom header (x-admin-session)
+  // 2. Custom header
   const customHeader = req.headers['x-admin-session'] as string;
   if (customHeader) return customHeader.trim();
 
-  // 3. Admin token header (x-admin-token)
-  const adminTokenHeader = req.headers['x-admin-token'] as string;
-  if (adminTokenHeader) return adminTokenHeader.trim();
-
-  // 4. Cookie headers (admin_session or admin_token)
+  // 3. Cookie header
   const cookieHeader = req.headers.cookie;
   if (cookieHeader) {
     const match = cookieHeader.match(/(?:^|;\s*)admin_session=([^;]+)/);
     if (match) return decodeURIComponent(match[1]);
-
-    const matchAlt = cookieHeader.match(/(?:^|;\s*)admin_token=([^;]+)/);
-    if (matchAlt) return decodeURIComponent(matchAlt[1]);
-  }
-
-  // 5. Express parsed cookies object fallback
-  if ((req as any).cookies?.admin_session) {
-    return (req as any).cookies.admin_session;
   }
 
   return null;
@@ -856,127 +783,26 @@ export function verifyAdminSessionToken(token: string | null): {
     return { valid: false, error: 'Authentication required. No session token provided.', code: 'NO_TOKEN' };
   }
 
-  // Check store.sessions (MFA session)
   const session = store.sessions[token];
-  if (session) {
-    if (session.revoked) {
-      return { valid: false, error: 'Session has been revoked.', code: 'SESSION_REVOKED' };
-    }
-
-    if (new Date(session.expiresAt).getTime() < Date.now()) {
-      return { valid: false, error: 'Session expired. Please sign in again.', code: 'SESSION_EXPIRED' };
-    }
-
-    // Check portal lockdown
-    if (store.securityState.portalLocked && session.role !== 'Super Admin') {
-      return { valid: false, error: 'Portal is currently in Emergency Lockdown.', code: 'PORTAL_LOCKED' };
-    }
-
-    const admin = store.admins[session.email.toLowerCase()] || {
-      uid: session.uid,
-      email: session.email,
-      role: session.role as any,
-      mfaEnabled: true,
-      createdAt: session.createdAt,
-      lastLogin: new Date().toISOString()
-    };
-    return { valid: true, session, admin };
+  if (!session) {
+    return { valid: false, error: 'Session token invalid or expired.', code: 'INVALID_TOKEN' };
   }
 
-  // Check legacy password session token (verifySessionToken)
-  if (verifySessionToken(token)) {
-    const defaultAdmin = store.admins['admin@smartledgerx.io'] || INITIAL_ADMINS[0];
-    const legacySession: AdminSession = {
-      sessionId: `asess_legacy_${token.substring(0, 10)}`,
-      sessionToken: token,
-      uid: defaultAdmin.uid,
-      email: defaultAdmin.email,
-      role: defaultAdmin.role,
-      ip: '127.0.0.1',
-      userAgent: 'Admin Console',
-      deviceFingerprint: 'legacy_admin_auth',
-      device: 'Workstation',
-      browser: 'Browser',
-      createdAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
-      revoked: false
-    };
-    store.sessions[token] = legacySession;
-    return { valid: true, session: legacySession, admin: defaultAdmin };
+  if (session.revoked) {
+    return { valid: false, error: 'Session has been revoked.', code: 'SESSION_REVOKED' };
   }
 
-  return { valid: false, error: 'Session token invalid or expired.', code: 'INVALID_TOKEN' };
-}
-
-/**
- * Authoritative Request Authenticator
- * Reads token from Bearer header, x-admin-session, x-admin-token, or cookies,
- * supports Firebase ID tokens and legacy tokens, minting an AdminSession on the fly if needed.
- */
-export async function authenticateAdminRequest(req: Request): Promise<{
-  valid: boolean;
-  session?: AdminSession;
-  admin?: AdminRecord;
-  error?: string;
-  code?: string;
-}> {
-  const token = extractSessionTokenFromRequest(req);
-
-  // 1. Check synchronous session store
-  if (token) {
-    const syncCheck = verifyAdminSessionToken(token);
-    if (syncCheck.valid && syncCheck.session) {
-      return syncCheck;
-    }
+  if (new Date(session.expiresAt).getTime() < Date.now()) {
+    return { valid: false, error: 'Session expired. Please sign in again.', code: 'SESSION_EXPIRED' };
   }
 
-  // 2. Check if token or Authorization header is a Firebase ID Token (JWT format)
-  const candidateToken = token || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.substring(7).trim() : null);
-  if (candidateToken && (candidateToken.startsWith('eyJ') || candidateToken.split('.').length === 3)) {
-    try {
-      const firebaseApiKey = process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || '';
-      const verified = await verifyFirebaseIdToken(candidateToken, firebaseApiKey);
-
-      if (verified && verified.valid && verified.email) {
-        const { isAllowed, admin } = await checkAdminAllowlist(verified.email, verified.uid);
-        if (isAllowed && admin) {
-          if (store.securityState.portalLocked && admin.role !== 'Super Admin') {
-            return { valid: false, error: 'Portal is currently in Emergency Lockdown.', code: 'PORTAL_LOCKED' };
-          }
-
-          const clientIp = extractClientIp(req);
-          const parsedDevice = parseDeviceAndBrowser(req);
-          const location = await getApproximateLocation(clientIp);
-
-          // Create active session in store
-          const newSession = createAdminSessionRecord(admin, req, 'firebase_auth_bridge', parsedDevice, location);
-          return { valid: true, session: newSession, admin };
-        } else {
-          return {
-            valid: false,
-            error: 'Unauthorized access: This account is not in the admin allowlist.',
-            code: 'UNAUTHORIZED_ADMIN'
-          };
-        }
-      }
-    } catch (e) {
-      console.warn('[AdminMFA] Error validating Firebase ID token candidate:', e);
-    }
+  // Check portal lockdown
+  if (store.securityState.portalLocked && session.role !== 'Super Admin') {
+    return { valid: false, error: 'Portal is currently in Emergency Lockdown.', code: 'PORTAL_LOCKED' };
   }
 
-  if (!token && !candidateToken) {
-    return {
-      valid: false,
-      error: 'Authentication required. No session token provided.',
-      code: 'NO_TOKEN'
-    };
-  }
-
-  return {
-    valid: false,
-    error: 'Session token invalid or expired. Please sign in again.',
-    code: 'INVALID_TOKEN'
-  };
+  const admin = store.admins[session.email.toLowerCase()];
+  return { valid: true, session, admin };
 }
 
 // --- Session & Device Revocation ---
@@ -1180,7 +1006,8 @@ export function getSecurityOverviewData(currentSessionToken: string | null) {
 
 export function requireAdminRole(allowedRoles: string[]) {
   return async (req: Request, res: Response, next: NextFunction) => {
-    const verification = await authenticateAdminRequest(req);
+    const token = extractSessionTokenFromRequest(req);
+    const verification = verifyAdminSessionToken(token);
 
     if (!verification.valid || !verification.session) {
       return res.status(401).json({

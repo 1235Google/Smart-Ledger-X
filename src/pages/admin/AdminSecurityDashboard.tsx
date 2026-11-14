@@ -25,7 +25,6 @@ import {
   Zap,
   Info
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../context/StoreContext';
 import { useToast } from '../../context/ToastContext';
 import { 
@@ -33,8 +32,7 @@ import {
   revokeAdminSession, 
   revokeAdminTrustedDevice, 
   triggerEmergencyLockdown, 
-  liftEmergencyLockdown,
-  getStoredAdminSessionToken
+  liftEmergencyLockdown 
 } from '../../lib/adminMfaClient';
 import { M3Button } from '../../components/admin/material3/M3Button';
 import { M3Dialog } from '../../components/admin/material3/M3Dialog';
@@ -42,8 +40,7 @@ import { useM3Theme } from '../../components/admin/material3/M3ThemeContext';
 import { cn } from '../../lib/utils';
 
 export default function AdminSecurityDashboard() {
-  const navigate = useNavigate();
-  const { adminUser, isAdminLoading, isAdminAuthenticated } = useStore();
+  const { adminUser } = useStore();
   const { showSuccess, showError, showInfo } = useToast();
   const { resolvedTheme } = useM3Theme();
   const isDark = resolvedTheme === 'dark';
@@ -51,7 +48,6 @@ export default function AdminSecurityDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [securityData, setSecurityData] = useState<any>(null);
-  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Lockdown modal state
   const [showLockdownModal, setShowLockdownModal] = useState(false);
@@ -75,16 +71,11 @@ export default function AdminSecurityDashboard() {
       const res = await fetchAdminSecurityOverview();
       if (res.success && res.overview) {
         setSecurityData(res.overview);
-        setFetchError(null);
       } else {
-        const errMsg = res.error || 'Failed to retrieve security center state.';
-        setFetchError(errMsg);
-        if (!silent) showError('Data Error', errMsg);
+        showError('Data Error', res.error || 'Failed to retrieve security center state.');
       }
-    } catch (err: any) {
-      const errMsg = err?.message || 'Could not communicate with security daemon.';
-      setFetchError(errMsg);
-      if (!silent) showError('Network Error', errMsg);
+    } catch {
+      showError('Network Error', 'Could not communicate with security daemon.');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -92,25 +83,10 @@ export default function AdminSecurityDashboard() {
   };
 
   useEffect(() => {
-    // AVOID RACE CONDITION:
-    // Only fire data-fetch AFTER the auth token/session has confirmed to initialize
-    if (isAdminLoading) {
-      return;
-    }
-
-    const hasLocalAuth = Boolean(getStoredAdminSessionToken()) || 
-      (typeof window !== 'undefined' && sessionStorage.getItem('smartledger-admin-auth') === 'true');
-
-    if (!isAdminAuthenticated && !adminUser && !hasLocalAuth) {
-      setIsLoading(false);
-      setFetchError('Administrator authentication required. Please sign in to access the Security Center.');
-      return;
-    }
-
     loadData();
     const interval = setInterval(() => loadData(true), 15000); // Poll every 15s
     return () => clearInterval(interval);
-  }, [isAdminLoading, isAdminAuthenticated, adminUser]);
+  }, []);
 
   const handleRevokeSession = async (sessionId: string) => {
     setRevokingSessionId(sessionId);
@@ -180,47 +156,6 @@ export default function AdminSecurityDashboard() {
   const isPortalLocked = Boolean(securityData?.securityState?.portalLocked);
   const isSuperAdmin = adminUser?.role === 'Super Admin' || adminUser?.role === 'Owner';
   const canLockdown = isSuperAdmin || adminUser?.role === 'Security Admin';
-
-  if (isAdminLoading) {
-    return (
-      <div className="p-8 flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <Loader2 size={36} className="animate-spin text-blue-500" />
-        <p className="text-sm font-medium text-slate-400">Verifying administrator authorization...</p>
-      </div>
-    );
-  }
-
-  if (fetchError && !securityData) {
-    return (
-      <div className="p-4 sm:p-8 max-w-xl mx-auto my-12">
-        <div className="bg-slate-900/80 border border-rose-500/30 rounded-3xl p-6 sm:p-8 text-center space-y-4 shadow-2xl backdrop-blur-xl">
-          <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
-            <ShieldAlert size={32} />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-white">Security Center Unavailable</h2>
-            <p className="text-sm text-slate-300 mt-2">{fetchError}</p>
-          </div>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
-            <M3Button
-              variant="filled"
-              icon={RefreshCw}
-              onClick={() => loadData()}
-              disabled={isLoading}
-            >
-              {isLoading ? 'Retrying...' : 'Retry Connection'}
-            </M3Button>
-            <M3Button
-              variant="outlined"
-              onClick={() => navigate('/admin/login')}
-            >
-              Sign In to Admin Portal
-            </M3Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   if (isLoading) {
     return (

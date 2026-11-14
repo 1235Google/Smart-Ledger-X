@@ -33,32 +33,14 @@ export default function AdminLogin() {
     }
   }, [isAdminAuthenticated, navigate]);
 
-  const [emailDeliveryFailure, setEmailDeliveryFailure] = useState<{
-    error: string;
-    diagnostic?: any;
-    tempSessionId?: string;
-    email?: string;
-  } | null>(null);
-
   const handleGoogleSignIn = async () => {
     setError('');
-    setEmailDeliveryFailure(null);
     setIsGoogleSigningIn(true);
 
     try {
       const res = await startAdminGoogleAuth();
       if (!res.success) {
-        if (res.code === 'EMAIL_DELIVERY_FAILED') {
-          setEmailDeliveryFailure({
-            error: res.error || 'Failed to dispatch verification email',
-            diagnostic: res.deliveryDiagnostic,
-            tempSessionId: res.tempSessionId,
-            email: res.email
-          });
-          setError(`Email Delivery Failed: ${res.deliveryDiagnostic?.error || res.error}`);
-        } else {
-          setError(res.error || 'Unauthorized access: This Google account is not on the admin allowlist.');
-        }
+        setError(res.error || 'Unauthorized access: This Google account is not on the admin allowlist.');
         return;
       }
 
@@ -72,8 +54,7 @@ export default function AdminLogin() {
           state: {
             tempSessionId: res.tempSessionId,
             email: res.email,
-            expiresInSeconds: res.expiresInSeconds,
-            emailDelivery: res.emailDelivery
+            expiresInSeconds: res.expiresInSeconds
           }
         });
       } else {
@@ -220,44 +201,10 @@ export default function AdminLogin() {
                 initial={{ opacity: 0, height: 0, marginBottom: 0 }} 
                 animate={{ opacity: 1, height: 'auto', marginBottom: 20 }}
                 exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-                className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs sm:text-sm flex flex-col gap-2 overflow-hidden"
+                className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs sm:text-sm flex items-start gap-2.5 overflow-hidden"
               >
-                <div className="flex items-start gap-2.5">
-                  <AlertCircle size={18} className="text-red-400 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <span className="font-semibold text-red-200 block mb-0.5">Authentication / Delivery Notice</span>
-                    <span className="font-normal text-red-300 leading-relaxed block">{error}</span>
-                  </div>
-                </div>
-
-                {emailDeliveryFailure?.diagnostic?.suggestion && (
-                  <div className="mt-1.5 p-2.5 rounded-lg bg-red-950/60 border border-red-500/20 text-xs text-red-200/90 leading-relaxed">
-                    <span className="font-bold text-red-300">💡 Resolution: </span>
-                    {emailDeliveryFailure.diagnostic.suggestion}
-                  </div>
-                )}
-
-                {emailDeliveryFailure?.tempSessionId && (
-                  <div className="mt-2 pt-2 border-t border-red-500/20 flex items-center justify-between">
-                    <span className="text-[11px] text-red-300/80">Dev Sandbox Session Generated</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigate('/admin/verify', {
-                          state: {
-                            tempSessionId: emailDeliveryFailure.tempSessionId,
-                            email: emailDeliveryFailure.email,
-                            expiresInSeconds: 300,
-                            deliveryDiagnostic: emailDeliveryFailure.diagnostic
-                          }
-                        });
-                      }}
-                      className="px-3 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs font-semibold border border-red-500/30 transition-colors"
-                    >
-                      Enter 2FA Code Screen &rarr;
-                    </button>
-                  </div>
-                )}
+                <AlertCircle size={18} className="text-red-400 shrink-0 mt-0.5" />
+                <span className="font-medium leading-relaxed">{error}</span>
               </motion.div>
             )}
           </AnimatePresence>

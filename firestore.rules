@@ -462,25 +462,6 @@ service cloud.firestore {
         request.auth.token.get('email', '') in ['souvikbbsr811@gmail.com', 'souvikdashbbsr@gmail.com', 'admin@smartledgerx.io']
       );
     }
-
-    // =========================================================================
-    // QR CODE LOGIN SESSIONS (SECURE TEMPORARY SESSIONS)
-    // =========================================================================
-    match /qr_login_sessions/{sessionId} {
-      allow read, create, update, delete: if true;
-    }
-
-    match /qr_sessions/{sessionId} {
-      allow read, create, update, delete: if true;
-    }
-
-    match /qrLoginSessions/{sessionId} {
-      allow read, create, update, delete: if true;
-    }
-
-    match /auth_sessions/{sessionId} {
-      allow read, create, update, delete: if true;
-    }
   }
 }
 

@@ -255,45 +255,17 @@ const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>(() => {
-    const remembered = getDeviceSession();
-    let initial = { ...defaultState };
     // Attempt instant hydration from local cache if present
     try {
-      const cacheKey = remembered?.userId ? `smart-ledger-cache-${remembered.userId}` : null;
-      const userCached = cacheKey ? localStorage.getItem(cacheKey) : null;
-      if (userCached) {
-        const parsedCache = JSON.parse(userCached);
-        if (parsedCache && typeof parsedCache === 'object') {
-          initial = {
-            ...defaultState,
-            ...(parsedCache.state || {}),
-            transactions: parsedCache.transactions || [],
-          };
-        }
-      } else {
-        const saved = localStorage.getItem('smart-ledger-data');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed && typeof parsed === 'object') {
-            initial = { ...defaultState, ...parsed };
-          }
+      const saved = localStorage.getItem('smart-ledger-data');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return { ...defaultState, ...parsed };
         }
       }
     } catch (e) {}
-
-    if (remembered && remembered.userId) {
-      initial = {
-        ...initial,
-        userProfile: {
-          ...defaultState.userProfile!,
-          ...(initial.userProfile || {}),
-          fullName: remembered.displayName || initial.userProfile?.fullName || '',
-          email: remembered.email || initial.userProfile?.email || '',
-          profilePhoto: remembered.photoURL || initial.userProfile?.profilePhoto || '',
-        },
-      };
-    }
-    return initial;
+    return defaultState;
   });
 
   const [isLoading, setIsLoading] = useState(true);
@@ -586,10 +558,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // Check if this device has a trusted remembered or QR-approved session.
+        // Check if this device has a trusted remembered session.
         const remembered = getDeviceSession();
-        if (remembered && remembered.userId) {
-          console.log('[Auth] Hydrating verified QR/device session for:', remembered.email, remembered.userId);
+        if (remembered) {
+          console.log('[Auth] Firebase reported null, but device session is active. Maintaining logged-in state for:', remembered.email);
           const syntheticUser = createSyntheticUser(remembered);
           setUser(syntheticUser);
           setCurrentUser(syntheticUser);
@@ -610,7 +582,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             setIsLocked(false);
           }
 
-          // Hydrate cached user ledger data + real Google profile immediately
+          // Restore local cached user ledger data without triggering a remote sync echo
           try {
             const userCache = localStorage.getItem(`smart-ledger-cache-${remembered.userId}`);
             if (userCache) {
@@ -622,68 +594,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
                   ...prev,
                   ...(parsedCache.state || {}),
                   transactions: parsedCache.transactions || prev.transactions || [],
-                  userProfile: {
-                    ...defaultState.userProfile!,
-                    ...(prev.userProfile || {}),
-                    ...(parsedCache.state?.userProfile || {}),
-                    fullName: remembered.displayName || parsedCache.state?.userProfile?.fullName || prev.userProfile?.fullName || '',
-                    email: remembered.email || parsedCache.state?.userProfile?.email || prev.userProfile?.email || '',
-                    profilePhoto: remembered.photoURL || parsedCache.state?.userProfile?.profilePhoto || prev.userProfile?.profilePhoto || '',
-                  },
                 }));
               }
             } else {
-              setState((prev) => ({
-                ...prev,
-                userProfile: {
-                  ...defaultState.userProfile!,
-                  ...(prev.userProfile || {}),
-                  fullName: remembered.displayName || prev.userProfile?.fullName || '',
-                  email: remembered.email || prev.userProfile?.email || '',
-                  profilePhoto: remembered.photoURL || prev.userProfile?.profilePhoto || '',
-                },
-              }));
-            }
-          } catch (e) {}
-
-          // Register device and subscribe to real-time Firestore state for this userId
-          try {
-            registerOrUpdateDevice(remembered.userId, {
-              email: remembered.email || '',
-              userName: remembered.displayName || '',
-              userAvatar: remembered.photoURL || ''
-            });
-
-            const unsub = subscribeToState(
-              remembered.userId,
-              (newState) => {
-                if (!isSubscribed) return;
+              const saved = localStorage.getItem('smart-ledger-data');
+              if (saved) {
+                const parsed = JSON.parse(saved);
                 isRemoteUpdateRef.current = true;
-                setState((prev) => {
-                  const base = { ...defaultState, ...prev, ...newState };
-                  const updatedProfile = {
-                    ...base.userProfile,
-                    email: remembered.email || newState.userProfile?.email || prev.userProfile?.email || '',
-                    fullName: remembered.displayName || newState.userProfile?.fullName || prev.userProfile?.fullName || '',
-                    profilePhoto: remembered.photoURL || newState.userProfile?.profilePhoto || prev.userProfile?.profilePhoto || '',
-                  };
-                  const merged: AppState = { ...base, userProfile: updatedProfile };
-                  prevStateRef.current = merged;
-                  return merged;
-                });
-                setDataStatus('success');
-                setIsDataLoaded(true);
-                setIsLoading(false);
-                setDataError(null);
-              },
-              () => {
-                if (!isSubscribed) return;
-                setDataStatus('success');
-                setIsDataLoaded(true);
-                setIsLoading(false);
+                setState((prev) => ({ ...defaultState, ...prev, ...parsed }));
               }
-            );
-            activeUnsubscribeRef.current = unsub;
+            }
           } catch (e) {}
 
           setDataStatus('success');
@@ -739,7 +659,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           setCurrentUser(null);
           setIsAuthenticated(false);
           setAuthLoading(false);
-          setAuthLoading(false);
           setIsAuthReady(true);
           setDataError(authError?.message || 'Authentication error');
           setDataStatus('error');
@@ -748,111 +667,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    // Listen for live QR login completion ('smartledger:auth_state_changed') without requiring page reload
-    const handleQrAuthStateChanged = (event: Event) => {
-      if (!isSubscribed) return;
-      const customEvent = event as CustomEvent;
-      const detail = customEvent?.detail;
-      const session = getDeviceSession() || (detail?.uid ? {
-        userId: detail.uid,
-        uid: detail.uid,
-        email: detail.email || '',
-        displayName: detail.displayName || (detail.email ? detail.email.split('@')[0] : 'User'),
-        photoURL: detail.photoURL || null,
-        provider: detail.provider || 'google.com',
-        providerId: detail.provider || 'google.com',
-        rememberedAt: Date.now(),
-        lastActiveAt: Date.now(),
-        deviceId: 'qr-desktop',
-        keepLoggedIn: true,
-      } : null);
-
-      if (!session || !session.userId) return;
-
-      console.log('[Auth] Live QR Login hydrated desktop user:', session.email, session.userId);
-      const syntheticUser = createSyntheticUser(session);
-      setUser(syntheticUser);
-      setCurrentUser(syntheticUser);
-      setIsAuthenticated(true);
-      setAuthLoading(false);
-      setIsAuthReady(true);
-      setIsLocked(false);
-
-      setState((prev) => ({
-        ...prev,
-        userProfile: {
-          ...defaultState.userProfile!,
-          ...(prev.userProfile || {}),
-          fullName: session.displayName || prev.userProfile?.fullName || '',
-          email: session.email || prev.userProfile?.email || '',
-          profilePhoto: session.photoURL || prev.userProfile?.profilePhoto || '',
-        },
-      }));
-
-      if (activeUnsubscribeRef.current) {
-        activeUnsubscribeRef.current();
-        activeUnsubscribeRef.current = null;
-      }
-
-      try {
-        registerOrUpdateDevice(session.userId, {
-          email: session.email || '',
-          userName: session.displayName || '',
-          userAvatar: session.photoURL || ''
-        });
-        recordLoginActivity(session.userId, {
-          method: 'Google',
-          status: 'Success',
-          email: session.email || '',
-          userName: session.displayName || '',
-          userAvatar: session.photoURL || ''
-        });
-
-        const unsub = subscribeToState(
-          session.userId,
-          (newState) => {
-            if (!isSubscribed) return;
-            isRemoteUpdateRef.current = true;
-            setState((prev) => {
-              const base = { ...defaultState, ...prev, ...newState };
-              const updatedProfile = {
-                ...base.userProfile,
-                email: session.email || newState.userProfile?.email || prev.userProfile?.email || '',
-                fullName: session.displayName || newState.userProfile?.fullName || prev.userProfile?.fullName || '',
-                profilePhoto: session.photoURL || newState.userProfile?.profilePhoto || prev.userProfile?.profilePhoto || '',
-              };
-              const merged: AppState = { ...base, userProfile: updatedProfile };
-              prevStateRef.current = merged;
-              return merged;
-            });
-            setDataStatus('success');
-            setIsDataLoaded(true);
-            setIsLoading(false);
-            setDataError(null);
-          },
-          () => {
-            if (!isSubscribed) return;
-            setDataStatus('success');
-            setIsDataLoaded(true);
-            setIsLoading(false);
-          }
-        );
-        activeUnsubscribeRef.current = unsub;
-      } catch (e) {}
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('smartledger:auth_state_changed', handleQrAuthStateChanged);
-    }
-
     return () => {
       console.log('[Auth] Cleaning up onAuthStateChanged and Firestore subscriptions');
       isSubscribed = false;
       unsubTokenRefresh();
       unsubscribe();
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('smartledger:auth_state_changed', handleQrAuthStateChanged);
-      }
       if (activeUnsubscribeRef.current) {
         activeUnsubscribeRef.current();
         activeUnsubscribeRef.current = null;
@@ -874,8 +693,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (isRemoteUpdateRef.current) {
         // Prevent echo cycle from remote Firestore update or local cache hydration
         isRemoteUpdateRef.current = false;
-      } else if (isAuthReady && isAuthenticated && currentUser?.uid) {
-        // Enqueue remote Firestore/Supabase sync for both direct Firebase Auth and QR-authenticated sessions
+      } else if (isAuthReady && isAuthenticated && currentUser && auth.currentUser) {
+        // Only enqueue remote Firestore sync when Firebase Auth user is ready
         queueStateSync(currentUser.uid, state);
       }
       prevStateRef.current = state;
@@ -920,12 +739,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    if (activeUnsubscribeRef.current) {
-      try {
-        activeUnsubscribeRef.current();
-      } catch (e) {}
-      activeUnsubscribeRef.current = null;
-    }
     try {
       await signOut(auth);
     } catch (err) {
@@ -938,7 +751,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
     try {
       clearDeviceSession();
-      localStorage.removeItem('smartledger_qr_user');
       localStorage.removeItem('smart-ledger-data');
     } catch (e) {}
     setState(defaultState);
@@ -1133,22 +945,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    const token = 
-      sessionStorage.getItem('smartledger-admin-session') || 
-      localStorage.getItem('smartledger-admin-session');
-
+    const token = sessionStorage.getItem('smartledger-admin-session');
     if (token) {
       fetch('/api/admin/auth/session', {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'x-admin-session': token
-        },
-        credentials: 'include'
+          'Authorization': `Bearer ${token}`
+        }
       })
       .then(res => res.json())
       .then(data => {
-        if (data.valid && data.admin) {
+        if (!data.valid) {
+          setIsAdminAuthenticated(false);
+          sessionStorage.removeItem('smartledger-admin-auth');
+          sessionStorage.removeItem('smartledger-admin-session');
+        } else if (data.admin) {
           setAdminUser(data.admin);
           setIsAdminAuthenticated(true);
         }

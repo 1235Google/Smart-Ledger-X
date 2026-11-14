@@ -16,7 +16,6 @@ import SettingsSection from '../components/settings/SettingsSection';
 import SettingsItem from '../components/settings/SettingsItem';
 import Switch from '../components/settings/Switch';
 import NotificationSettingsModal from '../components/notifications/NotificationSettingsModal';
-import LinkedDevicesModal from '../components/LinkedDevicesModal';
 import { useTheme } from '../components/ui/ThemeProvider';
 
 import IdentityCard from '../components/IdentityCard';
@@ -62,7 +61,6 @@ export default function Settings() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [showBiometricModal, setShowBiometricModal] = useState(false);
-  const [showLinkedDevices, setShowLinkedDevices] = useState(false);
   
   const configuredEmail = (reportSettings?.emailAddress || emailSettings?.emailAddress || '').trim();
   const [emailInput, setEmailInput] = useState(configuredEmail);
@@ -337,22 +335,6 @@ export default function Settings() {
                     />
                     <SettingsItem icon={Lock} title="Change PIN" description="Update your security PIN" onClick={() => setShowPinSetup(true)} />
                     <SettingsItem 
-                      icon={Smartphone} 
-                      title="Linked Devices & Sessions" 
-                      description="Review active mobile & desktop sessions, remote sign-out" 
-                      onClick={() => setShowLinkedDevices(true)}
-                      action={
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setShowLinkedDevices(true); }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-[var(--md-sys-color-surface-container-highest)] text-[var(--md-sys-color-on-surface)] hover:bg-[var(--md-sys-color-primary-container)] hover:text-[var(--md-sys-color-on-primary-container)] transition-colors border border-[var(--md-sys-color-outline-variant)]/40"
-                        >
-                          <span>Manage</span>
-                          <ArrowUpRight size={14} />
-                        </button>
-                      }
-                    />
-                    <SettingsItem 
                       icon={ScanFace} 
                       title="Face Unlock & Biometrics" 
                       description={securitySettings.faceUnlockEnabled ? "Face Unlock is Active (Native Face ID / Windows Hello)" : "Configure Face ID, Windows Hello, or Passkeys"} 
@@ -566,10 +548,6 @@ export default function Settings() {
         <NotificationSettingsModal 
           isOpen={showNotificationSettings} 
           onClose={() => setShowNotificationSettings(false)} 
-        />
-        <LinkedDevicesModal
-          isOpen={showLinkedDevices}
-          onClose={() => setShowLinkedDevices(false)}
         />
         {showBiometricModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md select-none overflow-x-hidden">

@@ -59,13 +59,7 @@ export function setStoredTrustedDeviceToken(token: string | null) {
 export function getStoredAdminSessionToken(): string | null {
   if (typeof window === 'undefined') return null;
   try {
-    return (
-      sessionStorage.getItem(STORAGE_ADMIN_SESSION_KEY) ||
-      localStorage.getItem(STORAGE_ADMIN_SESSION_KEY) ||
-      sessionStorage.getItem('smartledger_admin_token') ||
-      localStorage.getItem('smartledger_admin_token') ||
-      null
-    );
+    return sessionStorage.getItem(STORAGE_ADMIN_SESSION_KEY);
   } catch {
     return null;
   }
@@ -76,40 +70,14 @@ export function setStoredAdminSessionToken(token: string | null) {
   try {
     if (token) {
       sessionStorage.setItem(STORAGE_ADMIN_SESSION_KEY, token);
-      localStorage.setItem(STORAGE_ADMIN_SESSION_KEY, token);
       sessionStorage.setItem('smartledger-admin-auth', 'true');
     } else {
       sessionStorage.removeItem(STORAGE_ADMIN_SESSION_KEY);
-      localStorage.removeItem(STORAGE_ADMIN_SESSION_KEY);
-      sessionStorage.removeItem('smartledger_admin_token');
-      localStorage.removeItem('smartledger_admin_token');
       sessionStorage.removeItem('smartledger-admin-auth');
       sessionStorage.removeItem('smartledger-admin-email');
       sessionStorage.removeItem('smartledger-admin-role');
     }
   } catch {}
-}
-
-/**
- * Resolves authoritative admin token for API requests:
- * 1. Stored session token (sessionStorage/localStorage)
- * 2. Active Firebase Auth ID token (via getIdToken)
- */
-export async function resolveAdminAuthToken(): Promise<string | null> {
-  const local = getStoredAdminSessionToken();
-  if (local) return local;
-
-  // Fallback to Firebase current user token if signed in
-  if (auth.currentUser) {
-    try {
-      const idToken = await auth.currentUser.getIdToken();
-      if (idToken) return idToken;
-    } catch (e) {
-      console.warn('[AdminMFA] Could not obtain Firebase ID token:', e);
-    }
-  }
-
-  return null;
 }
 
 export function getFriendlyDeviceName(): string {
@@ -140,9 +108,6 @@ export interface AdminMfaInitResult {
   adminUser?: any;
   error?: string;
   code?: string;
-  deliveryDiagnostic?: any;
-  emailDelivery?: any;
-  devBypassAllowed?: boolean;
 }
 
 /**
@@ -207,19 +172,6 @@ export async function startAdminGoogleAuth(): Promise<AdminMfaInitResult> {
     const data = await res.json();
 
     if (!res.ok || !data.success) {
-      if (data.code === 'EMAIL_DELIVERY_FAILED') {
-        return {
-          success: false,
-          mfaRequired: false,
-          error: data.error || 'Failed to dispatch verification email.',
-          code: data.code,
-          deliveryDiagnostic: data.deliveryDiagnostic,
-          tempSessionId: data.tempSessionId,
-          devBypassAllowed: Boolean(data.devBypassAllowed),
-          email: user.email
-        };
-      }
-
       // User is authenticated with Google, but NOT an approved admin
       await signOut(auth);
       return {
@@ -246,8 +198,7 @@ export async function startAdminGoogleAuth(): Promise<AdminMfaInitResult> {
       email: user.email,
       expiresInSeconds: data.expiresInSeconds || 300,
       sessionToken: data.sessionToken,
-      adminUser: data.adminUser,
-      emailDelivery: data.emailDelivery
+      adminUser: data.adminUser
     };
   } catch (err: any) {
     return {
@@ -255,18 +206,6 @@ export async function startAdminGoogleAuth(): Promise<AdminMfaInitResult> {
       mfaRequired: false,
       error: err?.message || 'Network error verifying administrator privileges.'
     };
-  }
-}
-
-/**
- * Diagnostic helper to query live email service state
- */
-export async function checkEmailServiceStatus(): Promise<any> {
-  try {
-    const res = await fetch('/api/admin/auth/email-service-status');
-    return await res.json();
-  } catch (e: any) {
-    return { success: false, error: e?.message || 'Failed to reach diagnostic endpoint' };
   }
 }
 
@@ -342,7 +281,6 @@ export async function resendAdminMfaCode(tempSessionId: string): Promise<{
   message?: string;
   error?: string;
   cooldownRemaining?: number;
-  deliveryDiagnostic?: any;
 }> {
   try {
     const res = await fetch('/api/admin/auth/resend-mfa', {
@@ -356,8 +294,7 @@ export async function resendAdminMfaCode(tempSessionId: string): Promise<{
       return {
         success: false,
         error: data.error || 'Failed to resend code.',
-        cooldownRemaining: data.cooldownRemaining,
-        deliveryDiagnostic: data.deliveryDiagnostic
+        cooldownRemaining: data.cooldownRemaining
       };
     }
 
@@ -374,22 +311,6 @@ export async function resendAdminMfaCode(tempSessionId: string): Promise<{
 }
 
 /**
- * Helper to construct unified headers with token
- */
-async function buildAdminHeaders(): Promise<{ headers: Record<string, string>; token: string | null }> {
-  const token = await resolveAdminAuthToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json'
-  };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-    headers['x-admin-session'] = token;
-    headers['x-admin-token'] = token;
-  }
-  return { headers, token };
-}
-
-/**
  * Fetch Security Dashboard Overview Data
  */
 export async function fetchAdminSecurityOverview(): Promise<{
@@ -398,23 +319,17 @@ export async function fetchAdminSecurityOverview(): Promise<{
   currentAdmin?: any;
   error?: string;
 }> {
-  const { headers, token } = await buildAdminHeaders();
-  
+  const token = getStoredAdminSessionToken();
   try {
     const res = await fetch('/api/admin/security/overview', {
-      method: 'GET',
-      headers,
-      credentials: 'include' // Ensures httpOnly admin_session cookie is sent
+      headers: {
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      }
     });
 
     const data = await res.json();
     if (!res.ok || !data.success) {
       return { success: false, error: data.error || 'Failed to fetch security overview' };
-    }
-
-    // If backend authenticated via ID token or session and returned a currentAdmin, cache session state
-    if (data.currentAdmin && token && !sessionStorage.getItem(STORAGE_ADMIN_SESSION_KEY)) {
-      setStoredAdminSessionToken(token);
     }
 
     return { success: true, overview: data.overview, currentAdmin: data.currentAdmin };
@@ -427,12 +342,14 @@ export async function fetchAdminSecurityOverview(): Promise<{
  * Revoke Active Admin Session
  */
 export async function revokeAdminSession(sessionId: string): Promise<boolean> {
-  const { headers } = await buildAdminHeaders();
+  const token = getStoredAdminSessionToken();
   try {
     const res = await fetch('/api/admin/security/revoke-session', {
       method: 'POST',
-      headers,
-      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
       body: JSON.stringify({ sessionId })
     });
     const data = await res.json();
@@ -446,12 +363,14 @@ export async function revokeAdminSession(sessionId: string): Promise<boolean> {
  * Revoke Trusted Device
  */
 export async function revokeAdminTrustedDevice(deviceId: string): Promise<boolean> {
-  const { headers } = await buildAdminHeaders();
+  const token = getStoredAdminSessionToken();
   try {
     const res = await fetch('/api/admin/security/revoke-trusted-device', {
       method: 'POST',
-      headers,
-      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
       body: JSON.stringify({ deviceId })
     });
     const data = await res.json();
@@ -470,12 +389,14 @@ export async function triggerEmergencyLockdown(reason: string): Promise<{
   devicesRevoked?: number;
   error?: string;
 }> {
-  const { headers } = await buildAdminHeaders();
+  const token = getStoredAdminSessionToken();
   try {
     const res = await fetch('/api/admin/security/lockdown', {
       method: 'POST',
-      headers,
-      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
       body: JSON.stringify({ reason })
     });
     const data = await res.json();
@@ -499,12 +420,14 @@ export async function liftEmergencyLockdown(reason: string): Promise<{
   success: boolean;
   error?: string;
 }> {
-  const { headers } = await buildAdminHeaders();
+  const token = getStoredAdminSessionToken();
   try {
     const res = await fetch('/api/admin/security/unlock', {
       method: 'POST',
-      headers,
-      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
       body: JSON.stringify({ reason })
     });
     const data = await res.json();
